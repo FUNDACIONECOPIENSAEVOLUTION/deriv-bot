@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+<title id="title">Deriv IA Trader</title><desc id="desc">Vela ascendente y red neuronal de inversión</desc>
+<defs><linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#102944"/><stop offset="1" stop-color="#06131d"/></linearGradient><linearGradient id="g" x1="0" x2="1"><stop stop-color="#42e7bb"/><stop offset="1" stop-color="#14ac92"/></linearGradient></defs>
+<rect x="2" y="2" width="60" height="60" rx="16" fill="url(#b)" stroke="#20675e" stroke-width="2"/>
+<path d="M14 46h35M17 41l10-11 8 5 12-17" stroke="#54e3cd" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<path d="M40 18h7v7" fill="none" stroke="#54e3cd" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M22 39v15m12-21v21m11-30v30" stroke="#70dbdf" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+<rect x="18.8" y="42" width="6.4" height="8" rx="1.5" fill="#278f8d"/><rect x="30.8" y="37" width="6.4" height="12" rx="1.5" fill="url(#g)"/><rect x="41.8" y="29" width="6.4" height="15" rx="1.5" fill="url(#g)"/>
+<circle cx="17" cy="19" r="3" fill="#43e5d0"/><circle cx="26" cy="12" r="2.2" fill="#43e5d0"/><circle cx="13" cy="28" r="2.3" fill="#43e5d0"/><path d="M17 19l9-7M17 19l-4 9" stroke="#43e5d0" stroke-width="1.7" opacity=".75"/></svg>
