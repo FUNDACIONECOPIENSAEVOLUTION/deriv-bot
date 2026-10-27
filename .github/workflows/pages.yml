@@ -1,0 +1,37 @@
+name: Publicar Deriv IA Trader en GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obtener repositorio
+        uses: actions/checkout@v4
+      - name: Preparar GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Preparar archivos web
+        run: |
+          mkdir -p public
+          cp index.html favicon.svg public/
+          cp 'logo ecopiensa (1).png' public/
+          cp favicon3dAR.png public/
+          touch public/.nojekyll
+      - name: Empaquetar web
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v4
