@@ -15,7 +15,7 @@ Panel web independiente de Fundación Ecopiensa Evolution para visualizar cotiza
 
 ## Activación de GitHub Pages
 
-En GitHub: Settings → Pages → Build and deployment → Deploy from a branch → main → /(root) → Save.
+En GitHub: Settings → Pages → Build and deployment → Source: GitHub Actions → Save. Después entra a Actions → Publicar Deriv IA Trader en GitHub Pages → Run workflow si la publicación no se lanza automáticamente.
 
 URL prevista después de activarse:
 https://fundacionecopiensaevolution.github.io/deriv-bot/
