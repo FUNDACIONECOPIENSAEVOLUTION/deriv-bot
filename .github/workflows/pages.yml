@@ -24,7 +24,7 @@ jobs:
       - name: Preparar archivos web
         run: |
           mkdir -p public
-          cp index.html favicon.svg public/
+          cp index.html laboratorio.html favicon.svg public/
           cp 'logo ecopiensa (1).png' public/
           cp favicon3dAR.png public/
           touch public/.nojekyll
