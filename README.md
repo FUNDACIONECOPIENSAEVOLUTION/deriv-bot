@@ -99,3 +99,20 @@ Los proyectos se investigaron como patrones de diseño; no se clonaron ni se pud
 ## Meta financiera
 
 Convertir 77,92 USD en 1.077,92 USD dentro de 30 días supone una rentabilidad cercana a **1.283,4 % mensual**. Esa cifra es extremadamente improbable como objetivo consistente de bajo riesgo. El software no debe publicitar ni prometer beneficios seguros.
+
+
+## Novedades v1.1 · Laboratorio histórico y MCP de investigación (2026-10-27)
+
+- [Laboratorio histórico](laboratorio.html): descarga ticks reales **públicos** de Deriv (sin cuenta), compara cinco reglas fijas y reserva un tramo temporal final para evaluación. Incluye tasa de acierto, P&L **hipotético**, drawdown virtual e informe JSON reproducible. El porcentaje de pago se introduce como hipótesis, **no es un payout real de Deriv**. No se puede afirmar ventaja estadística a partir de una sola muestra.
+- [Servidor MCP local de investigación](mcp_research.py): expone get_project_status, get_market_snapshot y compare_research_strategies. Solo datos públicos e investigación, sin métodos de compra, venta, retiro ni acceso a saldo. Requiere despliegue y conexión separada; subir un archivo Python a GitHub **no conecta este ChatGPT**.
+- [Guía de MCP](docs/MCP_SETUP.md): requisitos, limitaciones y pasos seguros de instalación.
+- [Pruebas](tests/) y [CI](.github/workflows/checks.yml): análisis de sintaxis, verificación de ausencia de compras reales en el HTML y pruebas unitarias desconectadas del broker.
+
+Referencias adicionales de investigación (no son promesas de rendimiento):
+
+- [Esquemas oficiales actualizados de Deriv](https://github.com/deriv-com/deriv-api-schemas): evitar contratos obsoletos entre versiones.
+- [Freqtrade](https://github.com/freqtrade/freqtrade): metodología de backtesting, controles de lookahead y validación.
+- [vectorbt](https://github.com/polakowo/vectorbt) y [Backtrader](https://github.com/mementum/backtrader): motores de simulación cuantitativa.
+- [Microsoft Qlib](https://github.com/microsoft/qlib): análisis de modelos cuantitativos y separación entre entrenamiento y validación.
+
+Ninguno de estos proyectos se integró ciegamente: la v1.1 implementa solo análisis reproducible y protege expresamente tu capital real.
