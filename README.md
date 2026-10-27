@@ -1,6 +1,6 @@
 # Deriv IA Trader — laboratorio de datos y simulación
 
-**Versión 1.0 · 27/10/2026**
+**Versión 1.1 · 27/10/2026**
 
 Panel web independiente de Fundación Ecopiensa Evolution para visualizar cotizaciones públicas y probar operaciones VIRTUALES.
 
@@ -15,7 +15,7 @@ Panel web independiente de Fundación Ecopiensa Evolution para visualizar cotiza
 
 ## Activación de GitHub Pages
 
-En GitHub: Settings → Pages → Build and deployment → Source: GitHub Actions → Save. Después entra a Actions → Publicar Deriv IA Trader en GitHub Pages → Run workflow si la publicación no se lanza automáticamente.
+En GitHub: Settings → Pages → Build and deployment → Deploy from a branch → main → /(root) → Save. El flujo nativo de GitHub Pages ya quedó habilitado y publica automáticamente desde la rama main.
 
 URL prevista después de activarse:
 https://fundacionecopiensaevolution.github.io/deriv-bot/
@@ -106,7 +106,7 @@ Convertir 77,92 USD en 1.077,92 USD dentro de 30 días supone una rentabilidad c
 - [Laboratorio histórico](laboratorio.html): descarga ticks reales **públicos** de Deriv (sin cuenta), compara cinco reglas fijas y reserva un tramo temporal final para evaluación. Incluye tasa de acierto, P&L **hipotético**, drawdown virtual e informe JSON reproducible. El porcentaje de pago se introduce como hipótesis, **no es un payout real de Deriv**. No se puede afirmar ventaja estadística a partir de una sola muestra.
 - [Servidor MCP local de investigación](mcp_research.py): expone get_project_status, get_market_snapshot y compare_research_strategies. Solo datos públicos e investigación, sin métodos de compra, venta, retiro ni acceso a saldo. Requiere despliegue y conexión separada; subir un archivo Python a GitHub **no conecta este ChatGPT**.
 - [Guía de MCP](docs/MCP_SETUP.md): requisitos, limitaciones y pasos seguros de instalación.
-- [Pruebas](tests/) y [CI](.github/workflows/checks.yml): análisis de sintaxis, verificación de ausencia de compras reales en el HTML y pruebas unitarias desconectadas del broker.
+- [Pruebas](tests/) y [CI](.github/workflows/checks.yml): análisis de sintaxis, verificación de ausencia de compras reales en el HTML y pruebas unitarias desconectadas del broker. La publicación se realiza con el workflow **nativo** de GitHub Pages (el manual duplicado se eliminó por conflictos de despliegue).
 
 Referencias adicionales de investigación (no son promesas de rendimiento):
 
