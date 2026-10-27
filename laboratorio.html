@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#07131e">
+<meta name="description" content="Laboratorio de backtesting con cotizaciones públicas de Deriv, estrategias reproducibles, separación temporal y métricas transparentes.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src wss://api.derivws.com; base-uri 'self'; object-src 'none'; form-action 'none'">
+<title>Laboratorio de estrategias | Deriv IA Trader</title><link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<style>
+:root{color-scheme:dark;--bg:#06121d;--panel:#102331;--line:#284457;--text:#eef9fb;--muted:#a3b9c6;--accent:#40deb3;--warn:#ffe1a4;--bad:#ff8499}
+*{box-sizing:border-box}body{margin:0;padding:25px;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text);background:radial-gradient(circle at 90% 0%,#143947,transparent 40%),var(--bg);line-height:1.5}
+main{max-width:1280px;margin:auto}a{color:#8ad9f4}header{display:flex;justify-content:space-between;gap:20px;align-items:center;flex-wrap:wrap;padding:10px 0 21px}header img{width:53px;height:53px}header .mark{display:flex;align-items:center;gap:13px}h1{font-size:clamp(25px,3vw,38px);letter-spacing:-1px;margin:5px 0}h2{font-size:17px;margin:0 0 14px}small,.muted{color:var(--muted)}.eyebrow{color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;font-size:11px;font-weight:800}.panel{background:linear-gradient(145deg,#102634,#0c1d2c);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:16px}.banner{border:1px solid #79643c;background:#292619;color:var(--warn);padding:13px 16px;border-radius:12px;margin-bottom:17px;font-size:13px}.columns{display:grid;grid-template-columns:1fr 1fr;gap:16px}.inputs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;align-items:end}label{font-size:12px;color:var(--muted);display:block;margin-bottom:5px}button,input,select{font:inherit;color:inherit}input,select{width:100%;background:#071a27;padding:10px;border-radius:10px;border:1px solid #355265}button{background:linear-gradient(110deg,#40e0b4,#12a08e);color:#04272d;padding:11px 15px;border:0;border-radius:10px;cursor:pointer;font-weight:750}button:disabled{opacity:.55;cursor:not-allowed}.ghost{background:#213a4a;color:#dff4f7;border:1px solid var(--line)}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}.statrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}.stat{border:1px solid var(--line);border-radius:10px;padding:12px;background:#081d29}.stat .val{font-size:22px;font-weight:750;display:block}.stat small{font-size:11px}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:750px;font-size:13px}th,td{text-align:right;padding:12px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}th:first-child,td:first-child{text-align:left}th{color:var(--muted);font-size:12px;font-weight:650}.good{color:var(--accent)}.bad{color:var(--bad)}.warn{color:var(--warn)}.label{display:inline-block;padding:2px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:12px}.tiny{font-size:12px;color:var(--muted)}.log{white-space:pre-wrap;background:#05141f;border-radius:12px;border:1px solid #274354;padding:13px;overflow:auto;font-family:ui-monospace,monospace;font-size:12px;min-height:55px}.invisible{display:none}canvas{width:100%;height:200px}footer{font-size:12px;color:var(--muted);padding-bottom:25px}
+@media(max-width:800px){.inputs{grid-template-columns:repeat(2,1fr)}.statrow{grid-template-columns:repeat(2,1fr)}.columns{grid-template-columns:1fr}}@media(max-width:500px){body{padding:11px}.panel{padding:14px}.inputs{grid-template-columns:1fr 1fr}.stat .val{font-size:19px}}
+</style>
+</head><body><main>
+<header><div class="mark"><img src="./favicon.svg" alt="Favicon Deriv IA Trader"><div><div class="eyebrow">Ecopiensa Quant Lab · v1.1</div><h1>Laboratorio de estrategias</h1><div class="muted">Experimentos reproducibles con historial de Deriv</div></div></div><a href="./index.html">← Volver al panel</a></header>
+<div class="banner"><strong>Investigación, NO trading real.</strong> Esta página no solicita credenciales, no compra contratos y no promete rentabilidad. Los precios recibidos son históricos públicos. La columna de beneficio utiliza un payout <em>hipotético</em> editable, no una cotización Deriv. Elegir una estrategia por su rendimiento en una misma muestra introduce sesgo; se necesita nueva validación fuera de muestra.</div>
+<section class="panel"><h2>1. Descargar historial público y configurar simulación</h2>
+<div class="inputs">
+<div><label for="symbol">Mercado Deriv</label><select id="symbol"><option value="1HZ100V">Volatility 100 (1s)</option><option value="R_100">Volatility 100</option><option value="R_75">Volatility 75</option><option value="R_10">Volatility 10</option><option value="1HZ10V">Volatility 10 (1s)</option></select></div>
+<div><label for="count">Ticks históricos solicitados</label><input type="number" id="count" value="1000" min="250" max="5000" step="250"></div>
+<div><label for="horizon">Vencimiento hipotético (ticks)</label><input type="number" id="horizon" value="10" min="2" max="80" step="1"></div>
+<div><label for="payout">Pago hipotético neto al ganar (%)</label><input type="number" id="payout" value="80" min="1" max="200" step="1"></div>
+<div><label for="stake">Importe por apuesta simulada (USD)</label><input type="number" id="stake" value="1" min="0.1" max="10" step="0.1"></div>
+<div><label for="capital">Capital de simulación (USD)</label><input type="number" id="capital" value="77.92" min="1" max="100000" step="0.01"></div>
+<div><label for="test">Periodo reservado para prueba final (%)</label><input type="number" id="test" value="40" min="25" max="60" step="5"></div>
+<div><label for="file">O cargar tu CSV (precio por línea)</label><input type="file" id="file" accept=".csv,.txt,text/csv,text/plain"></div>
+</div>
+<div class="actions"><button id="download">Descargar ticks Deriv</button><button id="run" class="ghost" disabled>Analizar estrategias</button><button id="save" class="ghost" disabled>Exportar informe JSON</button></div>
+<p class="tiny" id="source">Sin datos. La descarga consulta únicamente el canal público de la API. El CSV local no se envía a ningún servidor.</p>
+<div class="log" role="status" aria-live="polite" id="status">Preparado para comenzar.</div></section>
+<section class="panel"><h2>2. Calidad de muestra y prueba temporal</h2><div class="statrow">
+<div class="stat"><small>Observaciones válidas</small><span class="val" id="n">—</span></div>
+<div class="stat"><small>Primeras observaciones</small><span class="val" id="trainN">—</span><small>Desarrollo / calibración</small></div>
+<div class="stat"><small>Prueba final sin reajustes</small><span class="val" id="testN">—</span><small>Out-of-sample temporal</small></div>
+<div class="stat"><small>Breakeven por tasa de acierto</small><span class="val" id="breakeven">—</span><small>Depende del payout supuesto</small></div>
+</div><div class="tiny" style="margin-top:12px" id="range">No se ha descargado una serie todavía.</div></section>
+<section class="panel" id="compare"><h2>3. Arena de estrategias · Comparación, no recomendación</h2>
+<div class="tablewrap"><table><thead><tr><th>Estrategia</th><th>Operac. desarrollo</th><th>Acierto desarrollo</th><th>Operac. prueba</th><th>Acierto prueba</th><th>Beneficio hipotético prueba</th><th>Máx. drawdown prueba</th></tr></thead><tbody id="results"><tr><td colspan="7" class="muted">Ejecuta el laboratorio para ver resultados.</td></tr></tbody></table></div>
+<p class="tiny">Se evalúan 5 reglas fijas, sin optimizar parámetros: tendencia EMA8/21, momentum 5 ticks, reversión 5 ticks, ruptura 20 ticks y consenso de reglas. Se permiten abstenciones. Cada estrategia inicia una nueva posición solo después de terminar la anterior; no hay solapamiento. En empate de precio se registra como pérdida conservadora. El pago hipotético no incluye incertidumbre de liquidación, costos ni negociación en Deriv.</p></section>
+<div class="columns">
+<section class="panel"><h2>4. Seguimiento del modelo y sesgos</h2><canvas id="equity" role="img" aria-label="Curvas de PnL de estrategias sobre período de prueba"></canvas><p class="tiny">Curvas virtuales desde 0 USD. No representa saldo del broker; las curvas se generan exclusivamente con la muestra descargada.</p></section>
+<section class="panel"><h2>5. Criterios antes de usar una cuenta demo</h2><div id="diagnostics" class="tiny">Sin diagnóstico. Las pruebas incluyen tamaño de muestra, balance de resultados, dependencia temporal, y número de operaciones.</div><p class="tiny">La muestra disponible se limita a la historia recuperable por API y puede ser demasiado corta. Al evaluar 5 estrategias en el mismo periodo se incrementa la probabilidad de un falso descubrimiento. Confirmar con otra serie independiente antes de considerar resultados prometedores.</p></section>
+</div>
+<footer>Deriv IA Trader · Sin permisos de trading · <a href="https://developers.deriv.com/docs/data/ticks-history/" target="_blank" rel="noopener noreferrer">Documentación de historial Deriv</a> · <a href="https://github.com/FUNDACIONECOPIENSAEVOLUTION/deriv-bot" target="_blank" rel="noopener noreferrer">GitHub</a></footer>
+</main><script>
+(function(){
+'use strict';const $=id=>document.getElementById(id),MAX=5000,WS='wss://api.derivws.com/trading/v1/options/ws/public';
+let quotes=[],epochs=[],origin='',lastReport=null,loading=false,conn=null,latestDraw=[];
+function say(s){$('status').textContent=s}const F=(n,d=2)=>Number(n).toLocaleString('es-CO',{minimumFractionDigits:d,maximumFractionDigits:d});
+function bounded(id,min,max,defaultValue){let x=Number($(id).value);return Number.isFinite(x)&&x>=min&&x<=max?x:defaultValue;}
+const mean=a=>a.reduce((s,x)=>s+x,0)/(a.length||1);
+function ema(data,end,len){if(end+1<len)return NaN;let k=2/(len+1),result=mean(data.slice(0,len));for(let i=len;i<=end;i++)result=data[i]*k+result*(1-k);return result;}
+function action(series,i,kind){
+ if(i<25)return 0;
+ const delta=series[i]-series[i-5],m=delta>0?1:delta<0?-1:0;
+ if(kind==='Momentum 5')return m;
+ if(kind==='Reversión 5')return -m;
+ if(kind==='EMA 8/21'){let f=ema(series,i,8),s=ema(series,i,21);return f>s?1:f<s?-1:0}
+ if(kind==='Ruptura 20'){let h=Math.max(...series.slice(i-20,i)),l=Math.min(...series.slice(i-20,i));return series[i]>h?1:series[i]<l?-1:0}
+ if(kind==='Consenso'){let e=action(series,i,'EMA 8/21'),b=action(series,i,'Ruptura 20');return e===m&&e!==0?e:b===m&&b!==0?m:0;}
+ return 0;
+}
+function evaluate(series,start,end,kind,H,payout,stake,initial) {
+ let trades=[],balance=initial,peak=initial,dd=0,hasRuined=false;
+ for(let i=Math.max(25,start);i+H<end;i+=H){
+  if(hasRuined)break;
+  let dir=action(series,i,kind);if(!dir)continue;
+  let change=series[i+H]-series[i],won=change*dir>0,pnl=won?stake*payout:-stake;
+  // En el escenario hipotético una apuesta perdedora nunca puede superar el dinero disponible.
+  if(balance<stake){hasRuined=true;break;}
+  balance+=pnl;peak=Math.max(peak,balance);dd=Math.max(dd,peak-balance);
+  trades.push({i,j:i+H,direction:dir,entry:series[i],exit:series[i+H],win:won,pnl,balance});
+ }
+ let wins=trades.filter(t=>t.win).length;
+ return {n:trades.length,wins,winrate:trades.length?wins/trades.length:null,pnl:balance-initial,maxDD:dd,ruined:hasRuined,trades};
+}
+function paint(curves){let el=$('equity'),r=el.getBoundingClientRect(),w=Math.max(250,Math.floor(r.width)),h=200,dpr=Math.min(devicePixelRatio||1,2),ctx=el.getContext('2d');el.width=w*dpr;el.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
+ ctx.strokeStyle='#315065';ctx.lineWidth=1;for(let i=0;i<5;i++){let y=10+i*(h-20)/4;ctx.beginPath();ctx.moveTo(5,y);ctx.lineTo(w-5,y);ctx.stroke();}
+ if(!curves.length){ctx.fillStyle='#9db3bf';ctx.textAlign='center';ctx.fillText('Todavía no hay resultados',w/2,h/2);return;}
+ const vals=curves.flatMap(z=>[0,...z.trades.map(t=>t.balance-z.initial)]),lo=Math.min(...vals,0),hi=Math.max(...vals,0),diff=Math.max(1,hi-lo),colors=['#40deb3','#70c8ed','#fcdb83','#ea90e7','#f88d91'];
+ curves.forEach((c,j)=>{let t=c.trades;ctx.strokeStyle=colors[j];ctx.lineWidth=2;ctx.beginPath();const points=[0,...t.map(x=>x.balance-c.initial)];points.forEach((v,i)=>{let x=10+i/Math.max(1,points.length-1)*(w-20),y=10+(hi-v)/diff*(h-20);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();});
+ ctx.font='11px sans-serif';curves.forEach((c,j)=>{let x=10+j*86;ctx.fillStyle=colors[j];ctx.fillRect(x,4,10,3);ctx.fillStyle='#bdcbd7';ctx.fillText(String(j+1)+': '+c.short,x,19)});}
+function run(){
+ if(quotes.length<130)return say('Se necesitan al menos 130 precios válidos para evaluar.');
+ let H=Math.floor(bounded('horizon',2,80,10)),P=bounded('payout',1,200,80)/100,stake=bounded('stake',.1,10,1),capital=bounded('capital',1,100000,77.92),frac=bounded('test',25,60,40)/100;
+ let split=Math.floor(quotes.length*(1-frac));if(split<50||quotes.length-split<Math.max(90,H*2))return say('No hay suficientes datos para ambas partes temporales.');
+ let strategies=['EMA 8/21','Momentum 5','Reversión 5','Ruptura 20','Consenso'];
+ let results=strategies.map((name,i)=>{const train=evaluate(quotes,0,split,name,H,P,stake,capital);const test=evaluate(quotes,split,quotes.length,name,H,P,stake,capital);return {name,short:['EMA','MOM','REV','BRK','CONS'][i],train,test,initial:capital}});
+ // Al reservar el tramo final no se optimizan parámetros con la muestra de prueba.
+ $('n').textContent=String(quotes.length);$('trainN').textContent=String(split);$('testN').textContent=String(quotes.length-split);$('breakeven').textContent=F(100/(1+P),2)+' %';
+ $('range').textContent='Fuente: '+origin+'. '+(epochs.length===quotes.length&&epochs[0]?'Intervalo UTC: '+new Date(epochs[0]*1000).toISOString()+' — '+new Date(epochs.at(-1)*1000).toISOString(): 'Sin fechas históricas verificadas')+'. Se emplea división temporal, no aleatoria.';
+ let body=$('results');body.replaceChildren();results.forEach(r=>{let tr=document.createElement('tr'),values=[r.name,String(r.train.n),r.train.winrate===null?'—':F(r.train.winrate*100,1)+' %',String(r.test.n),r.test.winrate===null?'—':F(r.test.winrate*100,1)+' %',(r.test.pnl>=0?'+':'')+F(r.test.pnl)+' USD',F(r.test.maxDD)+' USD'];values.forEach((v,i)=>{let td=document.createElement('td');td.textContent=v;if(i===5)td.className=r.test.pnl>0?'good':r.test.pnl<0?'bad':'';tr.appendChild(td)});body.appendChild(tr);});
+ latestDraw=results;paint(results);
+ const info=results.map(x=>x.name+': '+x.test.n+' pruebas, P&L hipotético '+F(x.test.pnl)+' USD'+(x.test.ruined?' (capital virtual agotado)':''));
+ let enough=results.every(r=>r.test.n>=30);let looks=results.some(r=>r.test.pnl>0);
+ $('diagnostics').textContent='Prueba final (sin optimización):\n'+info.join('\n')+'\n\n'+(enough?'Hay 30+ operaciones de prueba por estrategia. Aun así, la muestra es limitada.':'Muestra pequeña por estrategia: alta incertidumbre estadística.')+'\n'+(looks?'Alguna estrategia produjo beneficio hipotético en este tramo. Eso NO basta para demostrar capacidad predictiva.':'Ninguna ventaja neta observada bajo estos supuestos en esta muestra.')+'\nEl pago introducido es una hipótesis y la predicción de ticks puede no equivaler a la liquidación de contratos Deriv.';
+ lastReport={version:'1.1',generatedAt:new Date().toISOString(),mode:'research_only',source:origin,market:$('symbol').value,samples:quotes.length,firstEpoch:epochs[0]||null,lastEpoch:epochs.at(-1)||null,trainCount:split,testCount:quotes.length-split,horizonTicks:H,hypotheticalPayoutPct:P*100,stakeUSD:stake,startingPaperUSD:capital,strategies:results.map(x=>({name:x.name,train:summary(x.train),test:summary(x.test)})),disclaimer:'Payout es hipotético, no precio de contrato Deriv. No se ejecutan operaciones. Resultados fuera de muestra NO son garantía.'};
+ $('save').disabled=false;say('Evaluación finalizada. '+quotes.length+' precios; '+(quotes.length-split)+' reservados fuera de muestra. Ninguna orden enviada a Deriv.');
+}
+function summary(x){return {trades:x.n,wins:x.wins,winRate:x.winrate,netHypotheticalUSD:x.pnl,maxDrawdownHypotheticalUSD:x.maxDD,bankrupt:x.ruined};}
+function setQuotes(data,times,from){if(!data.length)throw Error('No hay precios');let p=data.map(Number);if(p.some(v=>!Number.isFinite(v)||v<=0))throw Error('Serie con valores inválidos');if(p.length<130)throw Error('Al menos 130 observaciones');quotes=p;epochs=times||[];origin=from;$('source').textContent='Fuente: '+from+' · '+quotes.length+' precios. No se usan credenciales ni cuentas Deriv.';$('run').disabled=false;$('save').disabled=true;lastReport=null;say('Serie preparada con '+quotes.length+' precios. Pulsa Analizar estrategias.');}
+function load(){
+ if(loading)return;loading=true;quotes=[];epochs=[];origin='';$('run').disabled=true;$('save').disabled=true;
+ let symbol=$('symbol').value,count=Math.floor(bounded('count',250,MAX,1000));say('Conectando al WebSocket público de Deriv para descargar '+count+' ticks de '+symbol+'...');$('download').disabled=true;
+ let socket,timer=setTimeout(()=>{if(socket)socket.close();failure('Tiempo de espera agotado: Deriv no respondió dentro de 16 segundos.');},16000),done=false;
+ function failure(msg){if(done)return;done=true;loading=false;clearTimeout(timer);$('download').disabled=false;say(msg);}
+ try{socket=new WebSocket(WS);conn=socket;}catch(e){return failure('No se pudo abrir conexión: '+e.message)}
+ socket.onopen=()=>socket.send(JSON.stringify({ticks_history:symbol,style:'ticks',end:'latest',count,req_id:99}));
+ socket.onerror=()=>failure('Falló la conexión de red WebSocket; no se inventaron datos.');
+ socket.onmessage=event=>{if(done)return;let d;try{d=JSON.parse(event.data)}catch(_){return;}
+ if(d.error)return failure('Deriv rechazó consulta: '+String(d.error.message||d.error.code));
+ if(d.msg_type==='history'&&d.history){try{setQuotes(d.history.prices||[],d.history.times||[], 'Deriv public WS / '+symbol);}catch(e){failure(String(e.message));return;}done=true;loading=false;clearTimeout(timer);$('download').disabled=false;socket.close();}
+ };
+ socket.onclose=()=>{if(!done)failure('WebSocket cerrado antes de recibir el historial.')};
+}
+$('download').addEventListener('click',load);$('run').addEventListener('click',run);
+$('file').addEventListener('change',async event=>{let f=event.target.files?.[0];if(!f)return;try{if(f.size>2e6)throw Error('Máximo 2 MB');let text=await f.text(),values=[],rows=text.split(/\r?\n/);for(let row of rows){let trimmed=row.trim();if(!trimmed)continue;let columns=trimmed.split(/[;,\t]/);let last=Number(columns.at(-1));if(!Number.isFinite(last)||last<=0){if(values.length===0&&/[a-z]/i.test(trimmed))continue;throw Error('Precio inválido en línea '+(values.length+1));}values.push(last);if(values.length>10000)throw Error('Máximo 10.000 precios en CSV');}setQuotes(values,[], 'Archivo local '+f.name);}catch(e){say('No se pudo cargar el CSV: '+e.message)}});
+$('save').addEventListener('click',()=>{if(!lastReport)return;let b=new Blob([JSON.stringify(lastReport,null,2)],{type:'application/json'}),href=URL.createObjectURL(b),a=document.createElement('a');a.href=href;a.download='ecopiensa-backtest-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),3000);});
+window.addEventListener('resize',()=>paint(latestDraw));paint([]);
+})();
+</script></body></html>
