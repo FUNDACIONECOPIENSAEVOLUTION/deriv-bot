@@ -1,6 +1,6 @@
 # Deriv IA Trader — laboratorio de datos y simulación
 
-**Versión 1.1 · 27/10/2026**
+**Versión 1.2 · 27/10/2026**
 
 Panel web independiente de Fundación Ecopiensa Evolution para visualizar cotizaciones públicas y probar operaciones VIRTUALES.
 
@@ -116,3 +116,13 @@ Referencias adicionales de investigación (no son promesas de rendimiento):
 - [Microsoft Qlib](https://github.com/microsoft/qlib): análisis de modelos cuantitativos y separación entre entrenamiento y validación.
 
 Ninguno de estos proyectos se integró ciegamente: la v1.1 implementa solo análisis reproducible y protege expresamente tu capital real.
+
+## Centro de operaciones v1.2 (sin transacciones)
+
+Se añadió [operaciones.html](operaciones.html) al panel. Prepara y exporta borradores de compra y venta DEMO y permite abrir el cajero oficial de Deriv para gestionar retiros personalmente. **No compra, no vende y no retira fondos automáticamente.**
+
+Deriv utiliza WebSocket autenticado para comprar o vender contratos, y un servicio REST que genera OTP para distinguir cuentas demo y reales. El retiro mediante agente de pagos necesita permiso de tipo payment y verificación. Nunca guardar tokens u OTP en GitHub Pages ni conceder permiso de retiros a la IA.
+
+El enlace público de Grok aportado (https://grok.com/share/c2hhcmQtMw_dfea0b6a-bc25-4234-b650-fb1485cd3f22) no pudo leerse desde este entorno. No se incorporó código ni se atribuyen características no verificadas a esa página. Como opción externa, se investigó https://github.com/apolito53/grok-transcript-extractor para exportar conversaciones públicas.
+
+Fuentes de API: https://developers.deriv.com/docs/trading/ ; https://developers.deriv.com/docs/options/websocket/ ; https://developers.deriv.com/docs/payment-agents/ .
