@@ -1,6 +1,6 @@
 # Deriv IA Trader — laboratorio de datos y simulación
 
-**Versión 1.2 · 27/10/2026**
+**Versión 1.3 · 27/10/2026**
 
 Panel web independiente de Fundación Ecopiensa Evolution para visualizar cotizaciones públicas y probar operaciones VIRTUALES.
 
@@ -126,3 +126,13 @@ Deriv utiliza WebSocket autenticado para comprar o vender contratos, y un servic
 El enlace público de Grok aportado (https://grok.com/share/c2hhcmQtMw_dfea0b6a-bc25-4234-b650-fb1485cd3f22) no pudo leerse desde este entorno. No se incorporó código ni se atribuyen características no verificadas a esa página. Como opción externa, se investigó https://github.com/apolito53/grok-transcript-extractor para exportar conversaciones públicas.
 
 Fuentes de API: https://developers.deriv.com/docs/trading/ ; https://developers.deriv.com/docs/options/websocket/ ; https://developers.deriv.com/docs/payment-agents/ .
+
+
+## v1.3 · Diagnóstico de conectividad Deriv
+
+- [conexion.html](conexion.html): botón para probar directamente en el navegador el WebSocket público oficial y recibir ticks R_100. No solicita correos, tokens, contraseña, OTP, datos bancarios o credenciales.
+- [scripts/probe_deriv_public.mjs](scripts/probe_deriv_public.mjs): prueba Node.js 22 del mismo endpoint sin autenticación y sin órdenes de trading.
+- [Workflow de conectividad](.github/workflows/deriv-connection.yml): ejecuta la prueba en GitHub Actions al modificarla y en comprobaciones diarias. Un resultado exitoso **no** significa que se haya autenticado la cuenta del usuario.
+- [Guía de vinculación privada](docs/DERIV_CONEXION_CUENTA.md): pasos OAuth2/PAT y restricciones de permisos, diagnóstico de Wallet vs Options y de la cuenta demo.
+
+**Privacidad:** el correo vinculado a Deriv nunca debe guardarse en este repositorio público. Los saldos de la página son virtuales, no leídos de una cuenta autenticada. La vinculación de cuenta aún no está implementada.
