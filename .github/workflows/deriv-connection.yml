@@ -1,0 +1,23 @@
+name: Comprobar conexión pública Deriv
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/probe_deriv_public.mjs
+      - .github/workflows/deriv-connection.yml
+  workflow_dispatch:
+  schedule:
+    - cron: '20 14 * * *'
+permissions:
+  contents: read
+jobs:
+  public-market-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Comprobar conexión WebSocket pública y recepción de ticks
+        run: node scripts/probe_deriv_public.mjs
