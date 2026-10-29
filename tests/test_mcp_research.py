@@ -40,6 +40,52 @@ class RiskFreeResearchTests(unittest.TestCase):
             asyncio.run(lab._market_data("INVALID_SYMBOL", 200))
 
 
+    def test_history_accepts_valid_ticks_with_duplicate_second(self):
+        now = 2_000_000_000
+        prices = [100.0 + 0.01 * i for i in range(100)]
+        times = [now - 100 + i for i in range(100)]
+        times[25] = times[24]  # Múltiples ticks en un segundo son posibles
+        p, t = lab._validate_history(prices, times, now_epoch=now)
+        self.assertEqual(len(p), 100)
+        self.assertEqual(t[24], t[25])
+
+    def test_history_rejects_mismatched_lengths(self):
+        now = 2_000_000_000
+        with self.assertRaisesRegex(ValueError, "longitud"):
+            lab._validate_history([100.0] * 100, [now] * 99, now_epoch=now)
+
+    def test_history_rejects_out_of_order_times(self):
+        now = 2_000_000_000
+        times = [now - 100 + i for i in range(100)]
+        times[40] = times[39] - 5
+        with self.assertRaisesRegex(ValueError, "fuera de orden"):
+            lab._validate_history([100.0] * 100, times, now_epoch=now)
+
+    def test_history_rejects_stale_data(self):
+        now = 2_000_000_000
+        with self.assertRaisesRegex(ValueError, "obsoleto"):
+            lab._validate_history([100.0] * 100, [now - 2000 + i for i in range(100)], now_epoch=now)
+
+    def test_history_rejects_future_timestamp(self):
+        now = 2_000_000_000
+        with self.assertRaisesRegex(ValueError, "imposibles"):
+            lab._validate_history([100.0] * 100, [now + 200 + i for i in range(100)], now_epoch=now)
+
+    def test_history_rejects_nan_price(self):
+        now = 2_000_000_000
+        prices = [100.0] * 100
+        prices[10] = math.nan
+        with self.assertRaisesRegex(ValueError, "inválidos"):
+            lab._validate_history(prices, [now - 100 + i for i in range(100)], now_epoch=now)
+
+    def test_history_rejects_noninteger_epoch(self):
+        now = 2_000_000_000
+        times = [now - 100 + i for i in range(100)]
+        times[10] += 0.5
+        with self.assertRaisesRegex(ValueError, "inválidos"):
+            lab._validate_history([100.0] * 100, times, now_epoch=now)
+
+
 class AsyncResearchTests(unittest.IsolatedAsyncioTestCase):
     async def test_comparison_uses_temporal_split(self):
         prices = [100 + 0.02 * i + 0.12 * math.sin(i / 3) for i in range(450)]
