@@ -81,7 +81,7 @@ Rutas:
 - GET /api/health: estado sin autenticación de los proveedores instalados.
 - POST /api/analyze: análisis protegido por X-Analysis-Key y validación del origen, con límite de solicitudes.
 
-Para usar el servidor desde GitHub Pages hay que desplegarlo en HTTPS separado del repositorio estático y protegerlo adicionalmente contra abuso. Nunca colocar claves de IA o tokens de Deriv en el JavaScript del navegador. La clave de acceso al servidor se introduce temporalmente en el panel y no se guarda en almacenamiento local.
+**El panel público no permite conectar este servidor ni solicita claves.** `server.mjs` es solo un prototipo local no desplegado. No basta con CORS ni con una cabecera `X-Analysis-Key` para exponerlo a Internet: antes de cualquier integración web se requiere HTTPS, autenticación de sesión en el backend, límites por usuario y un mecanismo de autorización que nunca envíe secretos al navegador. Nunca introducir tokens Deriv, claves de IA ni claves del servidor en GitHub Pages.
 
 **ChatGPT Plus no proporciona necesariamente créditos para la API de OpenAI.** Todos los proveedores externos requieren sus claves y disponibilidad. Si no están configurados, el panel marca que faltan y no fabrica respuestas.
 
@@ -136,3 +136,13 @@ Fuentes de API: https://developers.deriv.com/docs/trading/ ; https://developers.
 - [Guía de vinculación privada](docs/DERIV_CONEXION_CUENTA.md): pasos OAuth2/PAT y restricciones de permisos, diagnóstico de Wallet vs Options y de la cuenta demo.
 
 **Privacidad:** el correo vinculado a Deriv nunca debe guardarse en este repositorio público. Los saldos de la página son virtuales, no leídos de una cuenta autenticada. La vinculación de cuenta aún no está implementada.
+
+
+## Auditoría 29/10/2026 · Validación de integridad de datos públicos
+
+- El MCP de investigación ahora rechaza series de ticks públicos con longitudes de precios/tiempos desiguales, precios no finitos, marcas de tiempo fuera de orden, épocas futuras o datos de más de 15 minutos de antigüedad. Se permiten varios ticks en un mismo segundo porque la API expresa épocas con precisión de segundos.
+- Se agregaron siete pruebas unitarias desconectadas de Deriv, sin permisos de cuenta ni órdenes. La validación falla cerrada si los datos no cumplen.
+- Los límites de llamadas WebSocket/REST se documentan en https://developers.deriv.com/docs/limits/ . El canal público no permite leer saldos privados.
+- El último anuncio fechado de Deriv visible en https://developers.deriv.com/product-updates/ es del **20/08/2026** (estadísticas de markup: demora de una hora y consultas de hasta seis meses). No se infiere una actualización de octubre por el simple hecho de que la documentación se haya consultado en octubre.
+- La validación no corrige el hecho de que el P&L del laboratorio usa un pago **hipotético**, ni constituye evidencia de rentabilidad. No se conectaron cuentas demo o reales.
+
