@@ -29,6 +29,40 @@ server = FastMCP(
 )
 
 
+def _validate_history(prices: Any, times: Any, *, now_epoch: int | None = None,
+                      max_points: int = MAX_HISTORY) -> tuple[list[float], list[int]]:
+    """Rechaza series corruptas u obsoletas antes de analizar datos públicos.
+
+    Los tiempos de Deriv tienen resolución de segundos; se permiten empates
+    entre ticks consecutivos, pero no retrocesos temporales.
+    """
+    if not isinstance(prices, list) or not isinstance(times, list):
+        raise ValueError("Historial con formato inesperado")
+    if not 100 <= len(prices) <= max_points or len(prices) != len(times):
+        raise ValueError("Historial incompleto o longitud de precios/tiempos desigual")
+    try:
+        if any(isinstance(v, bool) for v in prices):
+            raise ValueError("Precio booleano no permitido")
+        p = [float(v) for v in prices]
+        if any(not math.isfinite(v) or v <= 0 for v in p):
+            raise ValueError("Historial con precios inválidos")
+        if any(isinstance(v, bool) for v in times):
+            raise ValueError("Tiempo booleano no permitido")
+        t = [int(v) for v in times]
+        if any(float(v) != epoch for v, epoch in zip(times, t)):
+            raise ValueError("Historial con épocas no enteras")
+    except (TypeError, OverflowError, ValueError) as exc:
+        raise ValueError("Historial con precios o marcas de tiempo inválidos") from exc
+    if any(t[i] < t[i - 1] for i in range(1, len(t))):
+        raise ValueError("Historial con marcas de tiempo fuera de orden")
+    now = int(datetime.now(tz=timezone.utc).timestamp()) if now_epoch is None else now_epoch
+    if t[0] < 946684800 or t[-1] > now + 120:
+        raise ValueError("Historial con marcas de tiempo imposibles")
+    if now - t[-1] > 900:
+        raise ValueError("Historial público obsoleto: última cotización hace más de 15 minutos")
+    return p, t
+
+
 async def _market_data(symbol: str, count: int) -> tuple[list[float], list[int]]:
     if symbol not in SYMBOLS:
         raise ValueError("Símbolo no permitido. Opciones: " + ", ".join(sorted(SYMBOLS)))
@@ -47,12 +81,7 @@ async def _market_data(symbol: str, count: int) -> tuple[list[float], list[int]]
                     obj = response.get("history", {})
                     prices = obj.get("prices", [])
                     times = obj.get("times", [])
-                    if not isinstance(prices, list) or not isinstance(times, list):
-                        raise ValueError("Historial con formato inesperado")
-                    p = [float(x) for x in prices]
-                    if len(p) < 100 or any(not math.isfinite(x) or x <= 0 for x in p):
-                        raise ValueError("Historial insuficiente o precios inválidos")
-                    return p, [int(x) for x in times]
+                    return _validate_history(prices, times, max_points=count)
             raise ValueError("No hubo respuesta de historial")
             
 
