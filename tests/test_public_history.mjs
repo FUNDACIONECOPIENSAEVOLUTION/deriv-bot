@@ -1,0 +1,17 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {validatePublicHistory} from '../scripts/public_history_validation.mjs';
+const nowMs = Date.UTC(2026, 9, 30, 20, 0, 0);
+const now = Math.floor(nowMs / 1000);
+const valid = () => ({prices: [100, 101, 102, 103, 104], times: [now - 4, now - 3, now - 2, now - 1, now]});
+const run = h => validatePublicHistory(h, {nowMs});
+test('Acepta cinco ticks públicos válidos', () => assert.equal(run(valid()).ok, true));
+test('Permite tiempos iguales con resolución de segundos', () => {const h = valid();h.times[2] = h.times[1];assert.equal(run(h).ok, true);});
+test('Rechaza historial sin tiempos', () => {const h = valid();delete h.times;assert.equal(run(h).code, 'MISSING_PRICES_OR_TIMES');});
+test('Rechaza longitud distinta', () => {const h = valid();h.times.pop();assert.equal(run(h).code, 'INVALID_HISTORY_LENGTH');});
+test('Rechaza precios no finitos', () => {const h = valid();h.prices[2] = 'NaN';assert.equal(run(h).code, 'INVALID_PRICE_OR_EPOCH');});
+test('Rechaza épocas fraccionarias', () => {const h = valid();h.times[2] += .5;assert.equal(run(h).code, 'INVALID_PRICE_OR_EPOCH');});
+test('Rechaza secuencia temporal inversa', () => {const h = valid();h.times[2] = now - 100;assert.equal(run(h).code, 'NON_MONOTONIC_EPOCHS');});
+test('Rechaza datos antiguos', () => {const h = valid();h.times = h.times.map(x => x - 1000);assert.equal(run(h).code, 'STALE_HISTORY');});
+test('Rechaza épocas futuras', () => {const h = valid();h.times = h.times.map(x => x + 200);assert.equal(run(h).code, 'FUTURE_HISTORY');});
+test('Rechaza booleanos y cero', () => {const h = valid();h.prices[0] = false;assert.equal(run(h).code, 'INVALID_PRICE_OR_EPOCH');h.prices[0] = 0;assert.equal(run(h).code, 'INVALID_PRICE_OR_EPOCH');});
