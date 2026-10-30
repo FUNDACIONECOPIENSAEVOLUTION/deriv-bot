@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - scripts/probe_deriv_public.mjs
+      - scripts/public_history_validation.mjs
+      - tests/test_public_history.mjs
       - .github/workflows/deriv-connection.yml
   workflow_dispatch:
   schedule:
@@ -19,5 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Validar integridad de datos públicos con pruebas unitarias
+        run: node --test tests/test_public_history.mjs
       - name: Comprobar conexión WebSocket pública y recepción de ticks
         run: node scripts/probe_deriv_public.mjs
