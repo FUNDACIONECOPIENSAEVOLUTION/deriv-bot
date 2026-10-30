@@ -27,5 +27,7 @@ jobs:
         run: node --check server.mjs
       - name: Validar HTML y seguridad básica
         run: node tests/test_html.mjs
+      - name: Validar integridad de cotizaciones públicas con datos sintéticos de prueba
+        run: node --test tests/test_public_history.mjs
       - name: Ejecutar pruebas unitarias sin conexión al broker
         run: python -m unittest discover -s tests -p 'test_*.py' -v
