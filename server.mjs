@@ -1,6 +1,7 @@
 // Deriv IA Trader v1.0. Node 20+, sin paquetes. Solo análisis; no operaciones.
 import http from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
+import { calculateStats } from './scripts/analysis_stats.mjs';
 const PORT=Number(process.env.PORT||8787), HOST=process.env.HOST||'127.0.0.1';
 const ORIGINS=(process.env.ALLOWED_ORIGINS||'https://fundacionecopiensaevolution.github.io,http://localhost:8080,http://127.0.0.1:8080').split(',').map(s=>s.trim());
 const TOKEN=process.env.ANALYSIS_ACCESS_TOKEN||'';
@@ -14,8 +15,7 @@ const hit=new Map();
 function send(res,status,data,headers={}){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff',...headers});res.end(JSON.stringify(data));}
 function same(a,b){const x=Buffer.from(String(a||'')),y=Buffer.from(String(b||''));return x.length===y.length&&timingSafeEqual(x,y);}
 async function request(url,opts){const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),10000);try{let res=await fetch(url,{...opts,signal:ctrl.signal});let obj=await res.json();if(!res.ok)throw Error('Proveedor respondió HTTP '+res.status);return obj;}finally{clearTimeout(timer);}}
-function getStats(p){const d=p.slice(-15).map((x,i,a)=>i?x-a[i-1]:0).slice(1);const up=d.reduce((v,x)=>v+Math.max(0,x),0),down=d.reduce((v,x)=>v+Math.max(0,-x),0);return {last:p.at(-1),variationPercent:Number((100*(p.at(-1)/p[0]-1)).toFixed(5)),rsiApprox:Number((down===0?100:100-100/(1+up/down)).toFixed(2)),samples:p.length};}
-function userPrompt(symbol,p){return 'Muestra histórica corta de ticks de Deriv enviada por el navegador (NO validada por el servidor). Mercado: '+symbol+'. Estadísticas: '+JSON.stringify(getStats(p))+'. Precios: '+JSON.stringify(p.slice(-50))+'. Devuelve exclusivamente JSON con {"decision":"UP|DOWN|HOLD","confidence":0.0,"reason":"explicación breve"}; usa HOLD para incertidumbre. No prometas retornos ni aconsejes operaciones reales o apalancamiento.';}
+function userPrompt(symbol,p){return 'Muestra histórica corta de ticks de Deriv enviada por el navegador (NO validada por el servidor). Mercado: '+symbol+'. Estadísticas: '+JSON.stringify(calculateStats(p))+'. Precios: '+JSON.stringify(p.slice(-50))+'. Devuelve exclusivamente JSON con {"decision":"UP|DOWN|HOLD","confidence":0.0,"reason":"explicación breve"}; usa HOLD para incertidumbre. No prometas retornos ni aconsejes operaciones reales o apalancamiento.';}
 const system='Eres un analista prudente; señal experimental, jamás una orden real. Responde exclusivamente JSON.';
 async function provider(c,prompt){
  const key=process.env[c.key],model=process.env[c.model]||c.default;
@@ -44,6 +44,6 @@ http.createServer(async(req,res)=>{
   const results=await Promise.all(active.map(async c=>{try{return {provider:c.name,status:'ok',...normalize(await provider(c,prompt))};}catch(e){return {provider:c.name,status:'error',decision:'HOLD',confidence:0,reason:String(e.message).slice(0,140)};}}));
   const valid=results.filter(x=>x.status==='ok'),counts={UP:0,DOWN:0,HOLD:0};valid.forEach(x=>counts[x.decision]++);
   const consensus=valid.length>=2&&counts.UP>=2&&counts.UP>counts.DOWN&&counts.HOLD===0?'UP':valid.length>=2&&counts.DOWN>=2&&counts.DOWN>counts.UP&&counts.HOLD===0?'DOWN':'HOLD';
-  return send(res,200,{mode:'READ_ONLY',dataSource:'precios suministrados por el navegador; servidor no confirma integridad',symbol,stats:getStats(p),models:results,consensus,note:'El consenso no es un predictor probado ni garantiza ganancia. Ninguna operación se envía a Deriv.',executedTrades:0},cors);
+  return send(res,200,{mode:'READ_ONLY',dataSource:'precios suministrados por el navegador; servidor no confirma integridad',symbol,stats:calculateStats(p),models:results,consensus,note:'El consenso no es un predictor probado ni garantiza ganancia. Ninguna operación se envía a Deriv.',executedTrades:0},cors);
  }catch(e){return send(res,400,{error:String(e.message).slice(0,190)},cors);}
 }).listen(PORT,HOST,()=>console.log('Servidor de análisis de solo lectura: http://'+HOST+':'+PORT));
