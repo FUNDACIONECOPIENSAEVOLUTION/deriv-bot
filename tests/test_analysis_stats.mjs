@@ -16,9 +16,9 @@ test('Precios decrecientes: RSI 0', () => {
   assert.equal(calculateStats(Array.from({length: 30}, (_, i) => 100 - i)).rsiApprox, 0);
 });
 test('Precios mixtos: RSI entre 0 y 100', () => {
-  const prices = Array.from({length: 30}, (_, i) => 100 + Math.floor(i / 2));
+  const prices = Array.from({length: 30}, (_, i) => 100 + (i % 2));
   const rsi = calculateStats(prices).rsiApprox;
-  assert.ok(rsi > 0 && rsi <= 100);
+  assert.ok(rsi > 0 && rsi < 100);
 });
 test('Rechaza muestras insuficientes', () => {
   assert.throws(() => calculateStats(Array(14).fill(100)), TypeError);
