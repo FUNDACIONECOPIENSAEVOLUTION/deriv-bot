@@ -30,8 +30,8 @@ if(!opened)badge('socketStatus','Sin conectar','err');badge('priceStatus',ok?'Co
 last={time:new Date().toISOString(),result:ok?'PASS':'FAIL',code,wsOpened:opened,priceCount:prices,durationMs:Date.now()-begin,environment:'browser_public_market_only',accountConnected:false,ordersSent:0};show(JSON.stringify(last,null,2));$('copy').disabled=false;};
 const timer=setTimeout(()=>finish(false,'TIMEOUT_12_SECONDS'),12000);
 try{ws=new WebSocket(url);active=ws;ws.onopen=function(){opened=true;badge('socketStatus','Conectado','ok');ws.send(JSON.stringify({ticks_history:'R_100',count:5,end:'latest',style:'ticks',req_id:341}));};
-ws.onmessage=function(event){let d;try{d=JSON.parse(event.data);}catch(_){return finish(false,'INVALID_JSON');}if(d.error){return finish(false,'DERIV_ERROR_'+String(d.error.code||'UNKNOWN').slice(0,40));}
-if(d.msg_type==='history'){let p=d.history?.prices||[];prices=p.length;let valid=p.length>=2&&p.every(x=>Number.isFinite(Number(x)));return finish(valid,valid?'PUBLIC_TICKS_RECEIVED':'INVALID_HISTORY');}};
+ws.onmessage=async function(event){let d;try{d=JSON.parse(event.data);}catch(_){return finish(false,'INVALID_JSON');}if(d.error){return finish(false,'DERIV_ERROR_'+String(d.error.code||'UNKNOWN').slice(0,40));}
+if(d.msg_type==='history'){try{const {validatePublicHistory}=await import('./scripts/public_history_validation.mjs');if(done)return;const verdict=validatePublicHistory(d.history);prices=verdict.ok?verdict.ticks:0;return finish(verdict.ok,verdict.ok?'PUBLIC_TICKS_RECEIVED':verdict.code);}catch(_){return finish(false,'HISTORY_VALIDATION_UNAVAILABLE');}}};
 ws.onerror=function(){finish(false,'WEBSOCKET_ERROR');};ws.onclose=function(){if(!done)finish(false,'WEBSOCKET_CLOSED');};}catch(e){finish(false,'CLIENT_ERROR_'+String(e.name||'Error'));}});
 $('copy').addEventListener('click',()=>{if(last)navigator.clipboard?.writeText(JSON.stringify(last,null,2)).catch(()=>{});});
 })();</script></body></html>
