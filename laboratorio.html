@@ -105,9 +105,9 @@ function load(){
  try{socket=new WebSocket(WS);conn=socket;}catch(e){return failure('No se pudo abrir conexión: '+e.message)}
  socket.onopen=()=>socket.send(JSON.stringify({ticks_history:symbol,style:'ticks',end:'latest',count,req_id:99}));
  socket.onerror=()=>failure('Falló la conexión de red WebSocket; no se inventaron datos.');
- socket.onmessage=event=>{if(done)return;let d;try{d=JSON.parse(event.data)}catch(_){return;}
+ socket.onmessage=async event=>{if(done)return;let d;try{d=JSON.parse(event.data)}catch(_){return;}
  if(d.error)return failure('Deriv rechazó consulta: '+String(d.error.message||d.error.code));
- if(d.msg_type==='history'&&d.history){try{setQuotes(d.history.prices||[],d.history.times||[], 'Deriv public WS / '+symbol);}catch(e){failure(String(e.message));return;}done=true;loading=false;clearTimeout(timer);$('download').disabled=false;socket.close();}
+ if(d.msg_type==='history'&&d.history){try{const {validatePublicHistory}=await import('./scripts/public_history_validation.mjs');if(done)return;const verdict=validatePublicHistory(d.history,{expectedCount:count});if(!verdict.ok)throw Error('Historial público rechazado por integridad temporal: '+verdict.code);setQuotes(d.history.prices||[],d.history.times||[], 'Deriv public WS / '+symbol);}catch(e){failure(String(e.message));return;}done=true;loading=false;clearTimeout(timer);$('download').disabled=false;socket.close();}
  };
  socket.onclose=()=>{if(!done)failure('WebSocket cerrado antes de recibir el historial.')};
 }
