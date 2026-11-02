@@ -30,7 +30,7 @@ server = FastMCP(
 
 
 def _validate_history(prices: Any, times: Any, *, now_epoch: int | None = None,
-                      max_points: int = MAX_HISTORY) -> tuple[list[float], list[int]]:
+                      max_points: int = MAX_HISTORY, expected_count: int | None = None) -> tuple[list[float], list[int]]:
     """Rechaza series corruptas u obsoletas antes de analizar datos públicos.
 
     Los tiempos de Deriv tienen resolución de segundos; se permiten empates
@@ -40,6 +40,8 @@ def _validate_history(prices: Any, times: Any, *, now_epoch: int | None = None,
         raise ValueError("Historial con formato inesperado")
     if not 100 <= len(prices) <= max_points or len(prices) != len(times):
         raise ValueError("Historial incompleto o longitud de precios/tiempos desigual")
+    if expected_count is not None and len(prices) != expected_count:
+        raise ValueError("Historial incompleto: cantidad distinta a la solicitada")
     try:
         if any(isinstance(v, bool) for v in prices):
             raise ValueError("Precio booleano no permitido")
@@ -81,7 +83,7 @@ async def _market_data(symbol: str, count: int) -> tuple[list[float], list[int]]
                     obj = response.get("history", {})
                     prices = obj.get("prices", [])
                     times = obj.get("times", [])
-                    return _validate_history(prices, times, max_points=count)
+                    return _validate_history(prices, times, max_points=count, expected_count=count)
             raise ValueError("No hubo respuesta de historial")
             
 
