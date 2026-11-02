@@ -34,6 +34,9 @@ if (typeof WebSocket !== 'function') {
       try { data = JSON.parse(event.data); } catch { return done(false, 'INVALID_JSON_RESPONSE'); }
       if (data.error) return done(false, 'DERIV_API_ERROR', {error_code: String(data.error.code || 'UNKNOWN').slice(0, 80)});
       if (data.msg_type === 'history') {
+        // Rechazar respuestas que no correspondan a la solicitud de solo lectura.
+        if (data.req_id !== undefined && data.req_id !== 130) return done(false, 'UNEXPECTED_REQUEST_ID');
+        if (data.echo_req?.ticks_history && data.echo_req.ticks_history !== requestedSymbol) return done(false, 'UNEXPECTED_SYMBOL');
         const verdict = validatePublicHistory(data.history);
         return done(verdict.ok, verdict.code, verdict.ok ? {ticks: verdict.ticks, last_epoch: verdict.lastEpoch} : {});
       }
