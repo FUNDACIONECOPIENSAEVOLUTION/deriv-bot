@@ -49,6 +49,20 @@ class RiskFreeResearchTests(unittest.TestCase):
         self.assertEqual(len(p), 100)
         self.assertEqual(t[24], t[25])
 
+    def test_history_rejects_partial_response_even_if_well_formed(self):
+        now = 2_000_000_000
+        prices = [100.0] * 100
+        times = [now - 100 + i for i in range(100)]
+        with self.assertRaisesRegex(ValueError, "cantidad distinta"):
+            lab._validate_history(prices, times, now_epoch=now, max_points=200, expected_count=200)
+
+    def test_history_accepts_exact_requested_count(self):
+        now = 2_000_000_000
+        prices = [100.0] * 100
+        times = [now - 100 + i for i in range(100)]
+        p, t = lab._validate_history(prices, times, now_epoch=now, expected_count=100)
+        self.assertEqual((len(p), len(t)), (100, 100))
+
     def test_history_rejects_mismatched_lengths(self):
         now = 2_000_000_000
         with self.assertRaisesRegex(ValueError, "longitud"):
