@@ -35,6 +35,21 @@ class RiskFreeResearchTests(unittest.TestCase):
         for name in ("buy", "sell", "withdraw", "transfer", "real_trade", "execute_order"):
             self.assertFalse(hasattr(lab, name))
 
+    def test_rejects_history_from_other_request(self):
+        with self.assertRaisesRegex(ValueError, "Identificador"):
+            lab._verify_history_response({"req_id": 999, "echo_req": {"ticks_history": "R_100"}}, "R_100")
+
+    def test_rejects_history_from_other_symbol(self):
+        with self.assertRaisesRegex(ValueError, "Símbolo"):
+            lab._verify_history_response({"req_id": 105, "echo_req": {"ticks_history": "R_75"}}, "R_100")
+
+    def test_rejects_history_without_request_identity(self):
+        with self.assertRaisesRegex(ValueError, "Identificador"):
+            lab._verify_history_response({"echo_req": {"ticks_history": "R_100"}}, "R_100")
+
+    def test_accepts_matching_history_identity(self):
+        lab._verify_history_response({"req_id": 105, "echo_req": {"ticks_history": "R_100"}}, "R_100")
+
     def test_invalid_symbol_blocked_before_socket(self):
         with self.assertRaises(ValueError):
             asyncio.run(lab._market_data("INVALID_SYMBOL", 200))
