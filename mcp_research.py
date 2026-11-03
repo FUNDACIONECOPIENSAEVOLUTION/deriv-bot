@@ -65,6 +65,15 @@ def _validate_history(prices: Any, times: Any, *, now_epoch: int | None = None,
     return p, t
 
 
+def _verify_history_response(response: dict[str, Any], symbol: str, req_id: int = 105) -> None:
+    """Rechaza historiales atribuidos a otra solicitud o símbolo."""
+    if response.get("req_id") != req_id:
+        raise ValueError("Identificador de solicitud inesperado")
+    echo = response.get("echo_req")
+    if not isinstance(echo, dict) or echo.get("ticks_history") != symbol:
+        raise ValueError("Símbolo de historial inesperado")
+
+
 async def _market_data(symbol: str, count: int) -> tuple[list[float], list[int]]:
     if symbol not in SYMBOLS:
         raise ValueError("Símbolo no permitido. Opciones: " + ", ".join(sorted(SYMBOLS)))
@@ -80,6 +89,7 @@ async def _market_data(symbol: str, count: int) -> tuple[list[float], list[int]]
                 if response.get("error"):
                     raise ValueError("La API Deriv rechazó el historial")
                 if response.get("msg_type") == "history":
+                    _verify_history_response(response, symbol)
                     obj = response.get("history", {})
                     prices = obj.get("prices", [])
                     times = obj.get("times", [])
