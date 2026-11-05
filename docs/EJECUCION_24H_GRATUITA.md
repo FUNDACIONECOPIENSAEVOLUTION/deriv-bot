@@ -43,7 +43,7 @@ Fuentes oficiales:
 2. Indicar datos reales y el país de facturación correcto; verificar el correo recibido.
 3. Crear la contraseña directamente en Oracle. No compartirla con asistentes ni guardarla en GitHub.
 4. Elegir Individual si la cuenta corresponde a una persona. Registrar una empresa exige sus datos legales reales.
-5. Revisar la región principal antes de confirmarla: el formulario indica que no se podrá cambiar después. En la revisión apareció Colombia Central (Bogota); aparecer en el formulario no garantiza que exista capacidad Always Free al crear una máquina.
+5. Revisar la región principal antes de confirmarla: el formulario indica que no se podrá cambiar después. Durante el registro se seleccionó US West (Phoenix); esa elección no confirma una cuenta creada ni garantiza capacidad Always Free. Si existe una cuenta anterior, comprobar su región real.
 6. Completar personalmente las verificaciones de identidad y tarjeta y revisar los términos. La cuenta sigue pendiente hasta que Oracle confirme su creación.
 7. Conservar Free Tier. No activar Pay As You Go ni recursos facturables como sustituto de una opción gratuita no disponible.
 
@@ -128,3 +128,8 @@ Se prueban límites, cronología, identidad de mensajes, persistencia, reinicios
 Los archivos anteriores index.html y laboratorio.html conservan sus motores originales. El nuevo panel persistente es runtime/dashboard.html, servido por runtime/service.mjs. No se sincronizan sus balances ni se afirma que los resultados de un motor validen al otro. Los fallos identificados en la auditoría del panel anterior requieren su propia corrección.
 
 ChatGPT Work puede interactuar con interfaces y formularios. Este asistente no ejecuta operaciones con dinero real ni retiros; esta integración permite desarrollo, consulta de datos públicos y simulación. Fuente de capacidades de interfaz: https://learn.chatgpt.com/docs/computer-use .
+
+
+## Preparación y comprobaciones de despliegue
+
+La [guía de operación de Oracle](OPERACION_ORACLE.md) añade comprobación del equipo, arranque, consulta y exportación de respaldos. El workflow `paper-container.yml` construye y comprueba recuperación en AMD64 y ARM64, sin usar red ni datos financieros reales. Consultar el resultado de cada revisión en GitHub Actions; añadir un workflow no implica que ya haya pasado.

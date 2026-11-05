@@ -155,3 +155,6 @@ Se añadió un proceso independiente para cotizaciones públicas y simulación c
 [Guía de ejecución persistente y opciones gratuitas](docs/EJECUCION_24H_GRATUITA.md). Oracle Always Free es la opción preparada, sujeta a cuotas, capacidad e inactividad; no implica que ya exista una cuenta, máquina o despliegue. Render Free no ofrece la persistencia y disponibilidad continua que requiere este diseño.
 
 Requiere Node.js 24. Sin paquetes npm: `node runtime/service.mjs` recopila datos; `docker compose up -d --build` activa explícitamente PAPER con el perfil de 10 USD. Las instrucciones de la guía describen cómo conservar el volumen y respaldarlo. El panel histórico y el nuevo servicio son experimentos separados.
+
+
+La [guía de operación en Oracle](docs/OPERACION_ORACLE.md) prepara instalación, consulta y respaldos fuera del volumen. `ops/paper.sh` permite comprobar el equipo y operar el proceso. El workflow de contenedores verifica AMD64 y ARM64 con datos sintéticos, sin conexión externa, e incluye reinicio y recuperación del respaldo. El archivo Compose limita el tamaño de sus registros de Docker.
