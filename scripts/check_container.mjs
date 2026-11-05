@@ -1,7 +1,7 @@
 // Integración Docker: datos sintéticos, volúmenes temporales, sin acceso a red.
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync,rmSync,chmodSync} from 'node:fs';
+import {mkdtempSync,rmSync,chmodSync,rmdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -84,5 +84,5 @@ try {
   // Únicamente los recursos con nombres únicos creados por este ensayo.
   for(const container of containers){try{docker('rm','-f',container);}catch{}}
   for(const volume of volumes){try{docker('volume','rm',volume);}catch{}}
-  rmSync(directory,{recursive:true,force:true});
+  rmSync(join(directory,'paper.sqlite'),{force:true});rmdirSync(directory);
 }
