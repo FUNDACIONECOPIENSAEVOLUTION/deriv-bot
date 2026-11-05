@@ -146,3 +146,12 @@ Fuentes de API: https://developers.deriv.com/docs/trading/ ; https://developers.
 - El último anuncio fechado de Deriv visible en https://developers.deriv.com/product-updates/ es del **20/08/2026** (estadísticas de markup: demora de una hora y consultas de hasta seis meses). No se infiere una actualización de octubre por el simple hecho de que la documentación se haya consultado en octubre.
 - La validación no corrige el hecho de que el P&L del laboratorio usa un pago **hipotético**, ni constituye evidencia de rentabilidad. No se conectaron cuentas demo o reales.
 
+
+
+## Servicio PAPER persistente · v1.4
+
+Se añadió un proceso independiente para cotizaciones públicas y simulación con USD 10 virtuales: `runtime/service.mjs`. Conserva posiciones, ticks y eventos en SQLite; valida datos, limita pérdidas hipotéticas y registra interrupciones como VOID. Incluye panel local, CSV, copias consistentes, Docker y Compose. No conecta cuentas financieras, no envía órdenes y no retira dinero.
+
+[Guía de ejecución persistente y opciones gratuitas](docs/EJECUCION_24H_GRATUITA.md). Oracle Always Free es la opción preparada, sujeta a cuotas, capacidad e inactividad; no implica que ya exista una cuenta, máquina o despliegue. Render Free no ofrece la persistencia y disponibilidad continua que requiere este diseño.
+
+Requiere Node.js 24. Sin paquetes npm: `node runtime/service.mjs` recopila datos; `docker compose up -d --build` activa explícitamente PAPER con el perfil de 10 USD. Las instrucciones de la guía describen cómo conservar el volumen y respaldarlo. El panel histórico y el nuevo servicio son experimentos separados.

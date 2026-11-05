@@ -1,0 +1,30 @@
+services:
+  paper:
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:8789:8789"
+    environment:
+      TRADING_MODE: PAPER
+      PAPER_ENABLED: "true"
+      SYMBOL: R_100
+      INITIAL_USD: "10"
+      STAKE_USD: "0.10"
+      DAILY_LOSS_USD: "0.30"
+      PAPER_COST_USD: "0"
+      PAYOUT_HYPOTHESIS_PCT: "80"
+      HORIZON_TICKS: "20"
+      COOLDOWN_TICKS: "35"
+      MAX_DAILY_TRADES: "12"
+    volumes:
+      - paper-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  paper-data:
