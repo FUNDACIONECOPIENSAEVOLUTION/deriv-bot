@@ -15,6 +15,10 @@ Revisado el 5 de noviembre de 2026. Este servicio recopila precios públicos y r
 
 El texto inicial de la idea menciona Deriv, Binance, APIs y servicios de IA. No contiene una lista de proveedores de alojamiento gratuito.
 
+## Alternativas después del fallo de registro de Oracle
+
+La [revisión de alternativas sin Oracle](ALTERNATIVAS_SIN_ORACLE.md) propone evaluar Cloudflare Workers Free con Durable Objects. Exige una adaptación y una prueba de cuotas; no es un despliegue directo del contenedor. Railway Free incluye crédito mensual limitado y volumen, sujeto a sus condiciones. La nueva captura de Oracle muestra la tarjeta verificada y un error posterior al crear la cuenta.
+
 ## Plataformas contrastadas
 
 | Plataforma | Resultado para este proyecto |
@@ -24,7 +28,7 @@ El texto inicial de la idea menciona Deriv, Binance, APIs y servicios de IA. No 
 | Render Free | Suspende servicios tras 15 minutos sin tráfico entrante; su sistema de archivos es efímero y no ofrece discos persistentes gratuitos. No es la opción para este registro continuo. |
 | Koyeb Free | Reduce a cero después de una hora sin tráfico entrante. No se seleccionó para este proceso continuo. |
 | PythonAnywhere Free | Las tareas Always-on son de pago. No se seleccionó. |
-| Cloudflare Free | Puede ser útil para recolección periódica y almacenamiento con cuotas; necesitaría otra arquitectura. No es un traslado directo de este proceso y su archivo SQLite. |
+| Cloudflare Free | Durable Objects con SQLite permite evaluar un proceso persistente dentro de cuotas. Requiere adaptar el servicio y comprobar conexión, recuperación y consumo; aún no está implementado. |
 | Oracle Always Free | Permite una máquina con disco para un proceso continuo dentro de las cuotas, sujeto a disponibilidad y recuperación por inactividad. Opción preparada, pendiente de crear cuenta y máquina. |
 | Equipo propio | Puede ejecutar el mismo proceso sin alquilar servidor; depende de que el equipo permanezca encendido y conectado. |
 

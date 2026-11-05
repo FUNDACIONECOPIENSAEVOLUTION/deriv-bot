@@ -158,3 +158,8 @@ Requiere Node.js 24. Sin paquetes npm: `node runtime/service.mjs` recopila datos
 
 
 La [guía de operación en Oracle](docs/OPERACION_ORACLE.md) prepara instalación, consulta y respaldos fuera del volumen. `ops/paper.sh` permite comprobar el equipo y operar el proceso. El workflow de contenedores verifica AMD64 y ARM64 con datos sintéticos, sin conexión externa, e incluye reinicio y recuperación del respaldo. El archivo Compose limita el tamaño de sus registros de Docker.
+
+
+## Alternativa a Oracle: evaluación de Cloudflare Free
+
+La [comparación de alternativas sin Oracle](docs/ALTERNATIVAS_SIN_ORACLE.md) prioriza una prueba de adaptación a Workers Free con Durable Objects y almacenamiento SQL. Requiere cambiar transporte y persistencia y medir cuotas; todavía no está implementada ni desplegada. Railway permite probar el contenedor con crédito mensual limitado. El servicio Node/Docker actual conserva su ejecución y configuración.
