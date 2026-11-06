@@ -62,3 +62,16 @@ test('API errors do not disclose response content or the deployment token', asyn
     ok: false, status: 403, json: async () => ({ success: false, errors: ['sensitive-response-value'] }),
   }) }), error => error.message.includes('403') && !error.message.includes('sensitive') && !error.message.includes(env.CLOUDFLARE_API_TOKEN));
 });
+
+test('an already aligned placeholder is left untouched, including its deployment source', async () => {
+  let calls = 0;
+  await alignFirstDeploy({ env, log: () => {}, request: async () => {
+    calls++;
+    return response({ ...placeholder, compatibility_date: '2026-11-05', observability: {
+      enabled: true, issues: { enabled: false },
+      logs: { enabled: true, invocation_logs: false, head_sampling_rate: 0.1 },
+      traces: { enabled: true, head_sampling_rate: 0.01 },
+    } });
+  } });
+  assert.equal(calls, 1);
+});
