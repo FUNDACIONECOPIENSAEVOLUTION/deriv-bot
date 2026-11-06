@@ -3,12 +3,15 @@ import { PUBLIC_ENDPOINT } from '../../runtime/feed.mjs';
 /** Outgoing Workers upgrade restricted to the public market-data endpoint. */
 export class PublicSocket extends EventTarget {
   readyState = 0;
+  errorCode = 'NETWORK_ERROR';
+  errorDetail = '';
   private socket: WebSocket | null = null;
   private abort = new AbortController();
-  constructor(url: string, ctx: DurableObjectState) {
+  constructor(url: string, ctx: Pick<DurableObjectState, 'waitUntil'>) {
     super();
     if (url !== PUBLIC_ENDPOINT) throw Error('PUBLIC_ENDPOINT_ONLY');
-    ctx.waitUntil(this.connect(url).catch(() => {
+    ctx.waitUntil(this.connect(url).catch(error => {
+      if (!this.errorDetail) this.errorDetail = (error instanceof Error ? error.message : 'Public connection failed').replace(/[\r\n]/g, ' ').slice(0, 160);
       if (this.readyState !== 3) this.dispatchEvent(new Event('error'));
       this.close();
     }));
@@ -17,6 +20,8 @@ export class PublicSocket extends EventTarget {
     const response = await fetch(url.replace(/^wss:/, 'https:'), {headers:{Upgrade:'websocket'},signal:this.abort.signal});
     const socket = response.webSocket;
     if (response.status !== 101 || !socket) {
+      this.errorCode=`UPGRADE_HTTP_${response.status}`;
+      this.errorDetail='The public market endpoint did not accept the WebSocket upgrade';
       await response.body?.cancel(); throw Error('PUBLIC_UPGRADE_FAILED');
     }
     if (this.readyState === 3) {socket.accept();socket.close();return;}

@@ -12,7 +12,7 @@ export class PublicFeed {
     Object.assign(this,{symbol,onHistory,onTick,onCandles,onChartStatus,onStatus,socketFactory,now});
     this.socket=null;this.stopped=true;this.attempt=0;this.serial=0;this.lastMessage=0;
   }
-  status(state,code=''){this.onStatus({state,code,at:Math.floor(this.now()/1000)});}
+  status(state,code='',detail=''){this.onStatus({state,code,detail,at:Math.floor(this.now()/1000)});}
   start(){
     this.stopped=false;this.connect();
     this.watchdog=setInterval(()=>{
@@ -41,7 +41,7 @@ export class PublicFeed {
       if(raw.length>1000000)return this.fail(socket,'MESSAGE_TOO_LARGE');
       let data;try{data=JSON.parse(raw);}catch{return this.fail(socket,'INVALID_JSON');}
       if(!data||typeof data!=='object')return this.fail(socket,'INVALID_MESSAGE');
-      if(data.error){if(data.req_id===candleRequest){this.onChartStatus('unavailable');return;}return this.fail(socket,'PUBLIC_API_ERROR');}
+      if(data.error){if(data.req_id===candleRequest){this.onChartStatus('unavailable');return;}return this.fail(socket,'PUBLIC_API_ERROR',typeof data.error.code==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(data.error.code)?data.error.code:'');}
       if(data.msg_type==='candles'&&this.onCandles){
         if(candlesReceived)return;
         if(data.req_id!==candleRequest||data.echo_req?.ticks_history!==this.symbol||data.echo_req?.style!=='candles'||data.echo_req?.granularity!==60){this.onChartStatus('invalid');return;}
@@ -72,18 +72,18 @@ export class PublicFeed {
         this.onTick({symbol:this.symbol,quote,epoch});
       }
     });
-    socket.addEventListener('error',()=>this.fail(socket,'NETWORK_ERROR'));
+    socket.addEventListener('error',()=>this.fail(socket,/^UPGRADE_HTTP_[1-5][0-9]{2}$/.test(socket.errorCode??'')?socket.errorCode:'NETWORK_ERROR',String(socket.errorDetail??'').slice(0,160)));
     socket.addEventListener('close',()=>this.fail(socket,'CONNECTION_CLOSED'));
   }
-  fail(socket,code){
+  fail(socket,code,detail=''){
     if(this.stopped||socket!==this.socket)return;
     this.socket=null;this.ready=false;clearTimeout(this.syncTimer);
     try{socket.close();}catch{}
-    this.retry(code);
+    this.retry(code,detail);
   }
-  retry(code){
+  retry(code,detail=''){
     if(this.stopped)return;
-    this.status('disconnected',code);
+    this.status('disconnected',code,detail);
     const delay=Math.min(30000,1000*2**Math.min(this.attempt++,5));
     this.retryTimer=setTimeout(()=>this.connect(),delay);this.retryTimer.unref?.();
   }

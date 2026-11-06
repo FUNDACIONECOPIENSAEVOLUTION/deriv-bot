@@ -2,10 +2,12 @@ export const PUBLIC_ENDPOINT: 'wss://api.derivws.com/trading/v1/options/ws/publi
 export function encodePublicRequest(message: Record<string, unknown>): string;
 export interface FeedSocket extends EventTarget {
   readonly readyState: number;
+  readonly errorCode?: string;
+  readonly errorDetail?: string;
   send(message: string): void;
   close(): void;
 }
-export interface MarketStatus { state: string; code?: string; at: number; }
+export interface MarketStatus { state: string; code?: string; detail?: string; at: number; }
 export class PublicFeed {
   constructor(options: {
     symbol: string;

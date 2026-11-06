@@ -82,6 +82,22 @@ class Socket extends EventTarget {
  close(){}
  message(data){this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(data)}));}
 }
+
+test('el diagnóstico público conserva códigos del proveedor sin aceptar mensajes arbitrarios',()=>{
+ for(const code of ['InvalidSymbol','<script>secret</script>']){
+  const socket=new Socket(),statuses=[];
+  const feed=new PublicFeed({symbol:'R_100',onHistory(){assert.fail('historial inesperado')},onTick(){assert.fail('tick inesperado')},onStatus:s=>statuses.push(s),socketFactory:()=>socket,now:()=>now*1000});
+  feed.start();socket.dispatchEvent(new Event('open'));socket.message({error:{code}});
+  assert.equal(statuses.at(-1).code,'PUBLIC_API_ERROR');
+  assert.equal(statuses.at(-1).detail,code==='InvalidSymbol'?'InvalidSymbol':'');feed.stop();
+ }
+});
+test('el diagnóstico distingue un rechazo HTTP de un fallo genérico de red',()=>{
+ const socket=new Socket(),statuses=[];socket.errorCode='UPGRADE_HTTP_403';socket.errorDetail='public connection rejected';
+ const feed=new PublicFeed({symbol:'R_100',onHistory(){},onTick(){},onStatus:s=>statuses.push(s),socketFactory:()=>socket});
+ feed.start();socket.dispatchEvent(new Event('error'));
+ assert.equal(statuses.at(-1).code,'UPGRADE_HTTP_403');assert.equal(statuses.at(-1).detail,'public connection rejected');feed.stop();
+});
 test('historial de otro símbolo provoca desconexión y nunca llega al motor',()=>{
  const socket=new Socket(),statuses=[];let delivered=false;
  const feed=new PublicFeed({symbol:'R_100',onHistory:()=>{delivered=true},onTick(){},onStatus:s=>statuses.push(s),socketFactory:url=>{assert.equal(url,PUBLIC_ENDPOINT);return socket},now:()=>now*1000});
