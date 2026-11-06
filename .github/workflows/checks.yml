@@ -15,10 +15,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Configurar Node.js 22
+      - name: Configurar Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
       - name: Instalar dependencias Python de investigación
         run: python -m pip install "mcp>=1.14,<2" "websockets>=14,<17"
       - name: Verificar sintaxis Python
@@ -28,8 +28,11 @@ jobs:
       - name: Validar HTML y seguridad básica
         run: node tests/test_html.mjs
       - name: Validar integridad de cotizaciones públicas con datos sintéticos de prueba
-        run: node --test tests/test_public_history.mjs
+        run: node --test tests/test_public_history.mjs tests/test_deriv_probe.mjs
       - name: Validar RSI neutral y estadísticas de análisis sin órdenes
         run: node --test tests/test_analysis_stats.mjs
       - name: Ejecutar pruebas unitarias sin conexión al broker
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Validar servicio PAPER persistente y recuperación
+        run: node --test tests/test_runtime.mjs tests/test_market_data.mjs

@@ -146,3 +146,20 @@ Fuentes de API: https://developers.deriv.com/docs/trading/ ; https://developers.
 - El último anuncio fechado de Deriv visible en https://developers.deriv.com/product-updates/ es del **20/08/2026** (estadísticas de markup: demora de una hora y consultas de hasta seis meses). No se infiere una actualización de octubre por el simple hecho de que la documentación se haya consultado en octubre.
 - La validación no corrige el hecho de que el P&L del laboratorio usa un pago **hipotético**, ni constituye evidencia de rentabilidad. No se conectaron cuentas demo o reales.
 
+
+
+## Servicio PAPER persistente · v1.4
+
+Se añadió un proceso independiente para cotizaciones públicas y simulación con USD 10 virtuales: `runtime/service.mjs`. Conserva posiciones, ticks y eventos en SQLite; valida datos, limita pérdidas hipotéticas y registra interrupciones como VOID. Incluye panel local, CSV, copias consistentes, Docker y Compose. No conecta cuentas financieras, no envía órdenes y no retira dinero.
+
+[Guía de ejecución persistente y opciones gratuitas](docs/EJECUCION_24H_GRATUITA.md). Oracle Always Free es la opción preparada, sujeta a cuotas, capacidad e inactividad; no implica que ya exista una cuenta, máquina o despliegue. Render Free no ofrece la persistencia y disponibilidad continua que requiere este diseño.
+
+Requiere Node.js 24. Sin paquetes npm: `node runtime/service.mjs` recopila datos; `docker compose up -d --build` activa explícitamente PAPER con el perfil de 10 USD. Las instrucciones de la guía describen cómo conservar el volumen y respaldarlo. El panel histórico y el nuevo servicio son experimentos separados.
+
+
+La [guía de operación en Oracle](docs/OPERACION_ORACLE.md) prepara instalación, consulta y respaldos fuera del volumen. `ops/paper.sh` permite comprobar el equipo y operar el proceso. El workflow de contenedores verifica AMD64 y ARM64 con datos sintéticos, sin conexión externa, e incluye reinicio y recuperación del respaldo. El archivo Compose limita el tamaño de sus registros de Docker.
+
+
+## Alternativa a Oracle: evaluación de Cloudflare Free
+
+La [comparación de alternativas sin Oracle](docs/ALTERNATIVAS_SIN_ORACLE.md) prioriza una prueba de adaptación a Workers Free con Durable Objects y almacenamiento SQL. Requiere cambiar transporte y persistencia y medir cuotas; todavía no está implementada ni desplegada. Railway permite probar el contenedor con crédito mensual limitado. El servicio Node/Docker actual conserva su ejecución y configuración.

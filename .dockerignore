@@ -1,0 +1,10 @@
+.*
+!.dockerignore
+node_modules
+data
+work
+outputs
+__pycache__
+*.sqlite*
+*.pem
+*.key

@@ -7,6 +7,13 @@ on:
       - scripts/public_history_validation.mjs
       - tests/test_public_history.mjs
       - .github/workflows/deriv-connection.yml
+  pull_request:
+    paths:
+      - runtime/feed.mjs
+      - scripts/probe_deriv_public.mjs
+      - scripts/public_history_validation.mjs
+      - tests/test_deriv_probe.mjs
+      - .github/workflows/deriv-connection.yml
   workflow_dispatch:
   schedule:
     - cron: '20 14 * * *'
@@ -20,8 +27,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
       - name: Validar integridad de datos públicos con pruebas unitarias
-        run: node --test tests/test_public_history.mjs
-      - name: Comprobar conexión WebSocket pública y recepción de ticks
+        run: node --test tests/test_public_history.mjs tests/test_deriv_probe.mjs
+      - name: Comprobar historial y tres ticks públicos en directo
         run: node scripts/probe_deriv_public.mjs

@@ -1,0 +1,14 @@
+{
+  "name": "ecopiensa-paper-runtime",
+  "version": "1.4.0",
+  "private": true,
+  "description": "Cotizaciones públicas y simulación persistente sin cuentas financieras",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start": "node runtime/service.mjs",
+    "test": "node --test tests/test_runtime.mjs tests/test_analysis_stats.mjs tests/test_public_history.mjs tests/test_html.mjs tests/test_market_data.mjs",
+    "backup": "node runtime/backup.mjs"
+  }
+}

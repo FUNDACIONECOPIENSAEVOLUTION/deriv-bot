@@ -1,49 +1,46 @@
 /**
- * Prueba de conectividad pública de Deriv, solo lectura, sin tokens ni órdenes.
- * Verifica estructura, cronología y frescura; no es prueba de trading ni rendimiento.
+ * Exercise the actual public-only feed: validated history AND fresh live ticks.
+ * No account tokens, balances, proposals, purchases, or withdrawals.
  */
-import {validatePublicHistory} from './public_history_validation.mjs';
-const url = 'wss://api.derivws.com/trading/v1/options/ws/public';
-const requestedSymbol = 'R_100';
-const started = Date.now();
-let ws;
-let completed = false;
-const done = (ok, code, meta = {}) => {
-  if (completed) return;
-  completed = true;
-  clearTimeout(timer);
-  try { ws?.close(1000, 'end'); } catch {}
-  console.log(JSON.stringify({
-    status: ok ? 'OK' : 'FAIL', code,
-    source: 'Deriv Options public WebSocket', symbol: requestedSymbol,
-    elapsed_ms: Date.now() - started, ...meta,
-  }));
-  process.exitCode = ok ? 0 : 1;
-};
-const timer = setTimeout(() => done(false, 'PUBLIC_WS_TIMEOUT'), 18000);
-if (typeof WebSocket !== 'function') {
-  done(false, 'NODE_GLOBAL_WEBSOCKET_NOT_AVAILABLE');
-} else {
-  try {
-    ws = new WebSocket(url);
-    ws.addEventListener('open', () => {
-      ws.send(JSON.stringify({ticks_history: requestedSymbol, count: 5, end: 'latest', style: 'ticks', req_id: 130}));
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {PublicFeed} from '../runtime/feed.mjs';
+
+export function probePublicFeed({socketFactory,now=()=>Date.now(),timeoutMs=20000,sampleTicks=3}={}) {
+  if(!Number.isInteger(sampleTicks)||sampleTicks<1||sampleTicks>10)throw Error('Invalid sample size');
+  if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>60000)throw Error('Invalid probe timeout');
+  const started=now();
+  return new Promise(resolveResult=>{
+    let settled=false,historyTicks=0,liveTicks=0,lastEpoch=null;
+    let feed;
+    const finish=(ok,code)=>{
+      if(settled)return;
+      settled=true;clearTimeout(timer);
+      const result={status:ok?'OK':'FAIL',code,source:'Deriv Options public WebSocket',
+        symbol:'R_100',history_ticks:historyTicks,live_ticks:liveTicks,
+        last_epoch:lastEpoch,elapsed_ms:Math.max(0,now()-started)};
+      // start() may still be setting up its watchdog when a synchronous
+      // connection failure occurs. Stop after start has returned.
+      queueMicrotask(()=>{feed?.stop();resolveResult(result);});
+    };
+    const timer=setTimeout(()=>finish(false,'PUBLIC_WS_TIMEOUT'),timeoutMs);
+    feed=new PublicFeed({
+      symbol:'R_100',socketFactory,now,
+      onHistory:prices=>{historyTicks=prices.length;},
+      onTick:tick=>{
+        liveTicks++;lastEpoch=tick.epoch;
+        if(historyTicks===150&&liveTicks>=sampleTicks)finish(true,'PUBLIC_HISTORY_AND_LIVE_TICKS_VALIDATED');
+      },
+      onStatus:status=>{
+        if(status.state==='disconnected')finish(false,status.code||'PUBLIC_WS_DISCONNECTED');
+      },
     });
-    ws.addEventListener('message', event => {
-      let data;
-      try { data = JSON.parse(event.data); } catch { return done(false, 'INVALID_JSON_RESPONSE'); }
-      if (data.error) return done(false, 'DERIV_API_ERROR', {error_code: String(data.error.code || 'UNKNOWN').slice(0, 80)});
-      if (data.msg_type === 'history') {
-        // Rechazar respuestas que no correspondan a la solicitud de solo lectura.
-        if (data.req_id !== undefined && data.req_id !== 130) return done(false, 'UNEXPECTED_REQUEST_ID');
-        if (data.echo_req?.ticks_history && data.echo_req.ticks_history !== requestedSymbol) return done(false, 'UNEXPECTED_SYMBOL');
-        const verdict = validatePublicHistory(data.history);
-        return done(verdict.ok, verdict.code, verdict.ok ? {ticks: verdict.ticks, last_epoch: verdict.lastEpoch} : {});
-      }
-    });
-    ws.addEventListener('error', () => done(false, 'PUBLIC_WS_NETWORK_ERROR'));
-    ws.addEventListener('close', () => { if (!completed) done(false, 'PUBLIC_WS_CLOSED_BEFORE_HISTORY'); });
-  } catch (error) {
-    done(false, 'PUBLIC_WS_CLIENT_ERROR', {name: error?.name || 'Error'});
-  }
+    try{feed.start();}catch{finish(false,'PUBLIC_WS_CLIENT_ERROR');}
+  });
+}
+
+if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href) {
+  const result=await probePublicFeed();
+  console.log(JSON.stringify(result));
+  process.exitCode=result.status==='OK'?0:1;
 }

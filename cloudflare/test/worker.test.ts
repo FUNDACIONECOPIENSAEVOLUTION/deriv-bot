@@ -1,0 +1,113 @@
+import { env } from 'cloudflare:workers';
+import { createExecutionContext, waitOnExecutionContext, runInDurableObject, evictDurableObject, runDurableObjectAlarm, abortAllDurableObjects, reset } from 'cloudflare:test';
+import { setupNetwork } from '@msw/cloudflare';
+import { http, HttpResponse } from 'msw';
+import { afterEach, beforeAll, afterAll, expect, it } from 'vitest';
+import worker from '../src/index';
+
+const token='test-only-token-with-at-least-32-characters';
+const headers={Authorization:'Bearer '+token};
+const network=setupNetwork();
+beforeAll(()=>{
+  network.enable();
+  network.use(http.all('*',()=>new HttpResponse('offline fixture',{status:503})));
+});
+afterAll(()=>network.disable());
+afterEach(async()=>{await abortAllDurableObjects();await reset();});
+async function request(path:string,init:RequestInit={},bindings=env) {
+  const ctx=createExecutionContext();
+  const response=await worker.fetch(new Request('https://paper.example'+path,init),bindings,ctx);
+  const body=await response.text();await waitOnExecutionContext(ctx);
+  return {response,body};
+}
+
+it('health is public but the dashboard, status, CSV and controls require credentials',async()=>{
+  expect((await request('/api/health')).response.status).toBe(200);
+  for(const path of ['/','/api/status','/api/trades.csv','/api/market?provider=binance','/api/start','/api/stop']) {
+    const {response}=await request(path,{method:path==='/api/start'||path==='/api/stop'?'POST':'GET'});
+    expect(response.status).toBe(401);expect(response.headers.get('WWW-Authenticate')).toContain('Basic');
+  }
+});
+it('fails closed when the owner secret is missing or too short',async()=>{
+  expect((await request('/api/status',{headers},{...env,ADMIN_TOKEN:''})).response.status).toBe(503);
+  expect((await request('/api/status',{headers},{...env,ADMIN_TOKEN:'short'})).response.status).toBe(503);
+  expect((await request('/api/status',{headers:{Authorization:'Bearer wrong'}})).response.status).toBe(401);
+});
+it('serves the private panel with nonce protection and accepts browser Basic auth',async()=>{
+  const {response,body}=await request('/',{headers:{Authorization:'Basic '+btoa('owner:'+token)}});
+  expect(response.status).toBe(200);expect(body).toContain('Iniciar simulación');
+  expect(body).not.toContain('__NONCE__');expect(body).not.toContain(token);
+  expect(response.headers.get('Content-Security-Policy')).toContain("connect-src 'self'");
+  expect(response.headers.get('Cache-Control')).toBe('no-store');
+});
+it('rejects cross-site changes and requests without the control header',async()=>{
+  const base={...headers,'Content-Type':'application/json','X-Paper-Control':'1'};
+  expect((await request('/api/start',{method:'POST',headers:{...base,Origin:'https://other.example'}})).response.status).toBe(403);
+  expect((await request('/api/start',{method:'POST',headers})).response.status).toBe(403);
+  expect((await request('/api/stop',{method:'POST',headers:{...base,Origin:'https://paper.example'}})).response.status).toBe(200);
+});
+it('initializes USD 10 in pause and keeps different experiments independent',async()=>{
+  const a=env.PAPER.getByName('a'),b=env.PAPER.getByName('b');
+  expect((await a.status()).balanceCents).toBe(1000);
+  await runInDurableObject(a,(_instance,ctx)=>{
+    const row=ctx.storage.sql.exec<{data:string}>('SELECT data FROM experiment WHERE id=1').one();
+    const saved=JSON.parse(row.data);saved.state.balanceCents=1234;
+    ctx.storage.sql.exec('UPDATE experiment SET data=? WHERE id=1',JSON.stringify(saved));
+  });
+  await evictDurableObject(a);
+  expect((await a.status()).balanceCents).toBe(1234);
+  expect((await b.status()).balanceCents).toBe(1000);
+  expect((await a.status()).running).toBe(false);
+});
+it('keeps chart candles across eviction without reviving the simulation or accepting arbitrary market URLs',async()=>{
+  const stub=env.PAPER.getByName('chart');await stub.status();
+  const time=Math.floor(Date.now()/60000)*60-60;
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    const saved=JSON.parse(ctx.storage.sql.exec<{data:string}>('SELECT data FROM experiment WHERE id=1').one().data);
+    saved.candles=[{time,open:100,high:103,low:99,close:102,partial:false}];
+    ctx.storage.sql.exec('UPDATE experiment SET data=? WHERE id=1',JSON.stringify(saved));
+  });
+  await evictDurableObject(stub);
+  const status=await stub.status();expect(status.chart.candles).toHaveLength(1);expect(status.chart.candles[0].close).toBe(102);
+  expect(status.running).toBe(false);expect(status.providers.map(p=>p.id)).toEqual(['deriv','binance','coinbase']);
+  expect((await request('/api/market?provider=https://other.example',{headers})).response.status).toBe(400);
+});
+it('preserves accounting and invalidates a persisted open position exactly once after eviction',async()=>{
+  const stub=env.PAPER.getByName('recover');await stub.status();
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    const saved=JSON.parse(ctx.storage.sql.exec<{data:string}>('SELECT data FROM experiment WHERE id=1').one().data);
+    saved.state.balanceCents=1234;
+    saved.state.position={id:'recovery-1',symbol:'R_100',direction:1,entryEpoch:Math.floor(Date.now()/1000)-10,
+      entryQuote:100,ticksHeld:2,stakeCents:10,payoutPct:80,costCents:0};
+    ctx.storage.sql.exec('UPDATE experiment SET data=? WHERE id=1',JSON.stringify(saved));
+    ctx.storage.sql.exec('INSERT INTO trades VALUES(?,?,?)','recovery-1',saved.state.position.entryEpoch,JSON.stringify({...saved.state.position,status:'OPEN'}));
+  });
+  await evictDurableObject(stub);
+  const recovered=await stub.status();
+  expect(recovered.balanceCents).toBe(1234);expect(recovered.position).toBeNull();expect(recovered.voided).toBe(1);
+  expect(recovered.trades[0].status).toBe('VOID');expect(recovered.trades[0].pnlCents).toBe(0);
+  expect(recovered.trades[0].reason).toBe('OBJECT_RESTART');
+  await evictDurableObject(stub);expect((await stub.status()).voided).toBe(1);
+});
+it('schedules recovery on start and removes the alarm on pause',async()=>{
+  const stub=env.PAPER.getByName('alarm');
+  await stub.start();
+  expect(await runInDurableObject(stub,(_instance,ctx)=>ctx.storage.getAlarm())).not.toBeNull();
+  await stub.stop();
+  expect(await runInDurableObject(stub,(_instance,ctx)=>ctx.storage.getAlarm())).toBeNull();
+  expect(await runDurableObjectAlarm(stub)).toBe(false);
+  expect((await stub.status()).running).toBe(false);
+});
+it('exports all rows across more than one page and streams the owner CSV',async()=>{
+  const stub=env.PAPER.getByName('owner-usd10-v1');await stub.status();
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    ctx.storage.transactionSync(()=>{for(let i=0;i<205;i++){
+      const id='export-'+String(i).padStart(4,'0');
+      ctx.storage.sql.exec('INSERT INTO trades VALUES(?,?,?)',id,i,JSON.stringify({id,status:'CLOSED',entryEpoch:i,symbol:'R_100',pnlCents:0}));
+    }});
+  });
+  const first=await stub.exportPage(),second=await stub.exportPage(first.next);
+  expect(first.trades.length).toBe(200);expect(second.trades.length).toBe(5);expect(second.next).toBeNull();
+  const {response,body}=await request('/api/trades.csv',{headers});
+  expect(response.status).toBe(200);expect(body.trim().split('\n')).toHaveLength(206);
+});

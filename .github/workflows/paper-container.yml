@@ -1,0 +1,35 @@
+name: Verificar contenedor PAPER AMD y ARM
+on:
+  push:
+    branches: [main]
+    paths: ['runtime/**', 'scripts/public_history_validation.mjs', 'scripts/check_container.mjs', 'ops/**', 'Dockerfile', '.dockerignore', 'compose.yaml', '.github/workflows/paper-container.yml']
+  pull_request:
+    paths: ['runtime/**', 'scripts/public_history_validation.mjs', 'scripts/check_container.mjs', 'ops/**', 'Dockerfile', '.dockerignore', 'compose.yaml', '.github/workflows/paper-container.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: paper-container-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  container:
+    name: Contenedor ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Comprobar operaciones y configuración
+        run: |
+          bash -n ops/paper.sh
+          docker compose config --quiet
+      - name: Construir la imagen en la arquitectura nativa
+        run: docker build --pull --tag ecopiensa-paper:test .
+      - name: Verificar reinicio, respaldo y recuperación sin conexión externa
+        run: node scripts/check_container.mjs ecopiensa-paper:test

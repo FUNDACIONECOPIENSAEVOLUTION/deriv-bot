@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+const panel=readFileSync('runtime/dashboard.html','utf8');
+for(const script of panel.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(script[1]);
 for(const name of ['index.html','laboratorio.html','operaciones.html','conexion.html']){
  const html=readFileSync(name,'utf8');
  const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
@@ -16,3 +18,4 @@ for(const name of ['index.html','laboratorio.html','operaciones.html','conexion.
  if(name==='operaciones.html'){assert.ok(html.includes('DEMO_DRAFT_ONLY'));assert.ok(html.includes('https://app.deriv.com/'));assert.ok(!html.includes('derivToken'));}
  console.log('OK '+name+' JavaScript validado, favicon incluido, sin compras ni credenciales');
 }
+

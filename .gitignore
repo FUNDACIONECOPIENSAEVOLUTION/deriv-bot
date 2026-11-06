@@ -1,0 +1,13 @@
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env
+.env.*
+!.env.example
+__pycache__/
+*.pyc
+node_modules/
+
+# Copias locales; nunca se publican en GitHub.
+/backups-export/
