@@ -37,3 +37,13 @@ jobs:
         run: npm test
       - name: Preparar compilación sin desplegar ni usar credenciales
         run: npm run build
+      - name: Validar la salida preparada sin publicar recursos
+        run: npx cf deploy --prebuilt --mode production --dry-run
+      - name: Conservar la compilación lista para publicar
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-paper-prebuilt
+          path: cloudflare/.cloudflare/output/v0/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
