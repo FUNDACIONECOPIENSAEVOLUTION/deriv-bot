@@ -8,7 +8,7 @@
 <div id="error" class="error" role="status" aria-live="polite"></div>
 <div class="metrics">
 <section class="card"><div class="metric-label">Saldo virtual · Deriv</div><div id="balance" class="value">—</div><div id="capital" class="metric-foot">Capital inicial: USD 10</div></section>
-<section class="card"><div class="metric-label">Resultado virtual neto</div><div id="profit" class="value">—</div><div class="metric-foot">Pago y costos hipotéticos</div></section>
+<section class="card"><div class="metric-label">Ganancia o pérdida virtual</div><div id="profit" class="value">—</div><div class="metric-foot">Resultado neto · pago y costos hipotéticos</div></section>
 <section class="card"><div class="metric-label">Simulaciones terminadas</div><div id="completed" class="value">—</div><div id="voided" class="metric-foot">Sin operaciones recibidas</div></section>
 <section class="card"><div class="metric-label">Cotización del motor · Deriv</div><div id="quote" class="value">—</div><div id="quoteTime" class="metric-foot">Sin precio recibido</div></section>
 </div>
@@ -77,7 +77,7 @@ function render(){
   if(!state)return;const x=state,provider=$('provider').value;
   const live=x.market.state==='live'&&x.quoteAgeSeconds!==null&&x.quoteAgeSeconds<=15&&x.quoteAgeSeconds>=-3;
   chip('engine-status','Deriv · '+(x.running===false?'en pausa':live?'recibiendo datos':'sin datos recientes'),x.running===false?'warn':live?'live':'offline');
-  $('balance').textContent=money(x.balanceCents);$('profit').textContent=money(x.profitCents);$('profit').className='value '+(x.profitCents>=0?'positive':'negative');$('capital').textContent='Capital inicial: '+money(x.config.initialCents);$('completed').textContent=x.completed;$('voided').textContent=x.voided+' no evaluables';$('quote').textContent=price(x.lastQuote);$('quoteTime').textContent=x.lastEpoch?time(x.lastEpoch)+' · hace '+x.quoteAgeSeconds+' s':'Sin precio reciente';
+  $('balance').textContent=money(x.balanceCents);$('profit').textContent=money(x.profitCents);$('profit').className='value '+(x.profitCents>=0?'positive':'negative');$('capital').textContent='Capital inicial: '+money(x.config.initialCents);$('completed').textContent=x.completed;$('voided').textContent=x.wins+' ganadas · '+(x.completed-x.wins)+' perdidas · '+x.voided+' no evaluables';$('quote').textContent=price(x.lastQuote);$('quoteTime').textContent=x.lastEpoch?time(x.lastEpoch)+' · hace '+x.quoteAgeSeconds+' s':'Sin precio reciente';
   if(x.lastEpoch)$('quoteTime').textContent=time(x.lastEpoch)+' · hace '+Math.max(0,x.quoteAgeSeconds)+' s';
   $('feed').textContent=feedLabels[x.market.state]||x.market.state;$('position').textContent=x.position?(x.position.direction>0?'Alcista':'Bajista')+' · '+x.position.ticksHeld+'/'+x.config.horizon+' ticks':'Sin posición';$('ticks').textContent=x.acceptedTicks;
   const d=x.decision||{};$('fast').textContent=price(d.fast);$('slow').textContent=price(d.slow);$('rsi').textContent=price(d.rsi);$('vol').textContent=d.volatility===null||d.volatility===undefined?'—':price(d.volatility)+' %';
