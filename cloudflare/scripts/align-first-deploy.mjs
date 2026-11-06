@@ -44,6 +44,15 @@ export async function alignFirstDeploy({ env = process.env, request = fetch, log
       || Object.values(before.exports ?? {}).some(value => value.type === 'durable_object')) {
     throw new Error('Refusing to change an unexpected Worker configuration');
   }
+  const obs = before.observability;
+  if (before.compatibility_date === desired.compatibility_date
+      && obs?.enabled === true && obs.issues?.enabled === false
+      && obs.logs?.enabled === true && obs.logs.invocation_logs === false
+      && obs.logs.head_sampling_rate === 0.1
+      && obs.traces?.enabled === true && obs.traces.head_sampling_rate === 0.01) {
+    log('Initial settings already aligned; no API changes required');
+    return;
+  }
   const form = new FormData();
   form.set('settings', new Blob([JSON.stringify(desired)], { type: 'application/json' }));
   await api({ method: 'PATCH', body: form });
