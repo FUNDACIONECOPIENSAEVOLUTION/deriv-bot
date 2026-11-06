@@ -4,6 +4,8 @@ El directorio cloudflare/ adapta el motor de USD 10 virtuales a Workers y un Dur
 
 El Worker tiene un nombre propio, ecopiensa-paper-10. La configuración no modifica otros Workers ni utiliza R2. No añadir un segundo experimento activo para probar: la cuota de duración gratuita se comparte por cuenta.
 
+El panel incorpora velas de un minuto, marcas de entradas y salidas simuladas, curva de saldo y decisiones explicadas. Guarda hasta 180 velas con el punto de recuperación del objeto, sin escribir cada tick en una fila. Incluye vistas públicas de Binance y Coinbase; la simulación sigue siendo exclusiva de Deriv. Consulta [panel y plataformas](PANEL_Y_PLATAFORMAS.md) para las capacidades y sus límites.
+
 ## Acceso y arranque
 
 El secreto ADMIN_TOKEN debe contener al menos 32 caracteres aleatorios y guardarse como secreto del Worker, nunca en GitHub. El panel usa el usuario owner y esa contraseña sobre HTTPS. Las consultas por programa admiten el mismo secreto como Bearer. Sin un secreto válido el panel y los datos quedan cerrados. /api/health solo informa de que el código responde, no demuestra que haya cotizaciones recientes.

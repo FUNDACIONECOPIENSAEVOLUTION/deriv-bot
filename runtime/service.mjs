@@ -3,7 +3,8 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {randomBytes} from 'node:crypto';
-import {readConfig,seedHistory,onTick,invalidatePosition,entryBlock} from './core.mjs';
+import {readConfig,seedHistory,onTick,invalidatePosition,entryBlock,analyzeSignal} from './core.mjs';
+import {addCandleTick,mergeCandleHistory,publicMarketSnapshot,PROVIDERS,equityPoints} from './market-data.mjs';
 import {Store} from './store.mjs';
 import {PublicFeed} from './feed.mjs';
 
@@ -12,14 +13,18 @@ export async function startService({env=process.env,connect=true,listenPort,cloc
   const config=readConfig(env),filename=resolve(env.DATA_DIR||'data','paper.sqlite');
   const store=new Store(filename,config,clock());
   let state=store.load(),market={state:'starting',at:clock()},stopping=false;
+  let candles=[],chartHistoryStatus='waiting';
   // Un reinicio conserva el registro de la posición como VOID, nunca como una ganancia.
   let result=invalidatePosition(state,'PROCESS_RESTART',clock());
   store.commit(result.state,[{type:'runtime_started',epoch:clock(),mode:'PAPER'},...result.events]);state=result.state;
   const feed=new PublicFeed({
     symbol:config.symbol,socketFactory,now:()=>clock()*1000,
     onHistory:prices=>{const next=seedHistory(state,prices);store.commit(next);state=next;},
+    onCandles:rows=>{candles=mergeCandleHistory(candles,rows);},
+    onChartStatus:status=>{chartHistoryStatus=status;},
     onTick:tick=>{
       const result=onTick(state,config,tick,{nowEpoch:clock()});
+      candles=addCandleTick(candles,tick);
       store.commit(result.state,result.events,tick);state=result.state;
       for(const event of result.events)console.log(JSON.stringify(event));
     },
@@ -35,7 +40,15 @@ export async function startService({env=process.env,connect=true,listenPort,cloc
   const server=http.createServer((req,res)=>{
     if(req.method!=='GET'&&req.method!=='HEAD'){res.setHeader('Allow','GET, HEAD');return json(res,405,{error:'Solo lectura'});}
     if(req.url==='/api/health')return json(res,stopping?503:200,{status:stopping?'stopping':'ok',mode:'PAPER',market:market.state});
-    if(req.url==='/api/status')return json(res,200,{mode:'PAPER',source:'Deriv public WebSocket',hypothetical:true,config,
+    const url=new URL(req.url,'http://localhost');
+    if(url.pathname==='/api/market'){
+      const provider=url.searchParams.get('provider');
+      if(provider!=='binance'&&provider!=='coinbase')return json(res,400,{error:'Proveedor público no permitido'});
+      publicMarketSnapshot(provider).then(data=>json(res,200,data)).catch(()=>json(res,503,{error:'Datos públicos no disponibles'}));return;
+    }
+    if(req.url==='/api/status')return json(res,200,{mode:'PAPER',source:'Deriv public WebSocket',hypothetical:true,serverManaged:false,config,
+      providers:PROVIDERS,decision:analyzeSignal(state.prices),equity:equityPoints(store.recentTrades(),state.balanceCents),
+      chart:{provider:'deriv',symbol:config.symbol,intervalSeconds:60,candles,historyStatus:chartHistoryStatus},
       balanceCents:state.balanceCents,profitCents:state.balanceCents-config.initialCents,
       goalProfitCents:7000,daily:state.daily,position:state.position,acceptedTicks:state.acceptedTicks,
       completed:state.completed,wins:state.wins,voided:state.voided,entryBlock:entryBlock(state,config,clock()),

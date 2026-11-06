@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
-import { readConfig, initialState, seedHistory, onTick, invalidatePosition, entryBlock } from '../../runtime/core.mjs';
+import { readConfig, initialState, seedHistory, onTick, invalidatePosition, entryBlock, analyzeSignal } from '../../runtime/core.mjs';
+import { addCandleTick, mergeCandleHistory, validateCandles, publicMarketSnapshot, PROVIDERS, equityPoints, type Candle } from '../../runtime/market-data.mjs';
 import { PublicFeed, type MarketStatus } from '../../runtime/feed.mjs';
 import dashboard from '../../runtime/dashboard.html?raw';
 import { PublicSocket } from './public-socket';
@@ -20,6 +21,8 @@ export class PaperExperiment extends DurableObject<Env> {
   private market:MarketStatus={state:'stopped',at:now()};
   private checkpointAt=0;
   private feed:PublicFeed|null=null;
+  private candles:Candle[]=[];
+  private chartHistoryStatus='waiting';
 
   constructor(ctx:DurableObjectState,env:Env) {
     super(ctx,env);this.config=readConfig(env);
@@ -33,6 +36,7 @@ export class PaperExperiment extends DurableObject<Env> {
         if(saved.fingerprint!==JSON.stringify(this.config))throw Error('EXPERIMENT_CONFIG_CHANGED');
         const record=JSON.parse(saved.data);
         this.state=record.state;this.running=record.running===true;
+        if(record.candles?.length){try{this.candles=validateCandles(record.candles,now());this.chartHistoryStatus='cached';}catch{this.candles=[];}}
         const recovered=invalidatePosition(this.state,'OBJECT_RESTART',now());
         this.market={state:this.running?'recovering':'stopped',at:now()};
         this.persist(recovered.state,recovered.events);
@@ -43,7 +47,7 @@ export class PaperExperiment extends DurableObject<Env> {
 
   private persist(next:EngineState,events:PaperEvent[]=[],running=this.running) {
     const checkpointAt=Date.now();
-    const envelope=JSON.stringify({state:next,running,market:this.market,checkpointAt});
+    const envelope=JSON.stringify({state:next,running,market:this.market,checkpointAt,candles:this.candles});
     this.ctx.storage.transactionSync(()=>{
       const sql=this.ctx.storage.sql;
       sql.exec('INSERT INTO experiment VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data',JSON.stringify(this.config),envelope);
@@ -61,8 +65,11 @@ export class PaperExperiment extends DurableObject<Env> {
     this.feed=new PublicFeed({symbol:this.config.symbol,
       socketFactory:url=>new PublicSocket(url,this.ctx),
       onHistory:prices=>{this.state=seedHistory(this.state,prices);},
+      onCandles:candles=>{this.candles=mergeCandleHistory(this.candles,candles);},
+      onChartStatus:status=>{this.chartHistoryStatus=status;},
       onTick:tick=>{
         const result=onTick(this.state,this.config,tick,{nowEpoch:now()});
+        this.candles=addCandleTick(this.candles,tick);
         // Persist all position changes before caching them. Only intermediate
         // price windows and tick counters may be lost between checkpoints.
         if(result.events.length)this.persist(result.state,result.events);
@@ -98,12 +105,15 @@ export class PaperExperiment extends DurableObject<Env> {
   async alarm(){await this.watchdog();}
   status() {
     const s=this.state;
-    return {mode:'PAPER',hypothetical:true,config:this.config,running:this.running,source:'Deriv public WebSocket',
+    const trades=this.ctx.storage.sql.exec<{data:string}>('SELECT data FROM trades ORDER BY entry_epoch DESC,id DESC LIMIT 30').toArray().map(row=>JSON.parse(row.data));
+    return {mode:'PAPER',hypothetical:true,serverManaged:true,config:this.config,running:this.running,source:'Deriv public WebSocket',
+      providers:PROVIDERS,decision:analyzeSignal(s.prices),equity:equityPoints(trades,s.balanceCents),
+      chart:{provider:'deriv',symbol:this.config.symbol,intervalSeconds:60,candles:this.candles,historyStatus:this.chartHistoryStatus},
       balanceCents:s.balanceCents,profitCents:s.balanceCents-this.config.initialCents,goalProfitCents:7000,
       daily:s.daily,position:s.position,acceptedTicks:s.acceptedTicks,completed:s.completed,wins:s.wins,voided:s.voided,
       entryBlock:this.running?entryBlock(s,this.config,now()):'PAUSED',lastQuote:s.lastQuote,lastEpoch:s.lastEpoch,
       quoteAgeSeconds:s.lastEpoch===null?null:now()-s.lastEpoch,checkpointAt:this.checkpointAt,market:this.market,
-      trades:this.ctx.storage.sql.exec<{data:string}>('SELECT data FROM trades ORDER BY entry_epoch DESC,id DESC LIMIT 30').toArray().map(row=>JSON.parse(row.data)),
+      trades,
       events:this.ctx.storage.sql.exec<{data:string}>('SELECT data FROM events ORDER BY id DESC LIMIT 20').toArray().map(row=>JSON.parse(row.data))};
   }
   exportPage(after:string|null=null):ExportPage {
@@ -129,11 +139,7 @@ async function authorized(request:Request,secret:string) {
 
 function privateDashboard() {
   const nonce=crypto.randomUUID();
-  const controls='<div class="banner"><strong>Control del experimento</strong><p><button id="paper-start">Iniciar simulación</button> <button id="paper-stop">Pausar</button></p><span id="paper-control-status" role="status"></span></div>';
-  const script='<script nonce="'+nonce+'">for(const action of ["start","stop"])document.getElementById("paper-"+action).onclick=async()=>{const out=document.getElementById("paper-control-status");try{const r=await fetch("/api/"+action,{method:"POST",headers:{"Content-Type":"application/json","X-Paper-Control":"1"},body:"{}"});if(!r.ok)throw Error();out.textContent=action==="start"?"Simulación iniciada":"Simulación pausada";}catch{out.textContent="No se pudo confirmar el cambio";}};</script>';
-  const html=dashboard.replaceAll('__NONCE__',nonce).replace('<div id="error"',controls+'<div id="error"')
-    .replace('Ticks guardados por el motor','Ticks procesados').replace('const labels={',"const labels={PAUSED:'En pausa',")
-    .replace('cada 5 segundos','cada 15 segundos').replace('setInterval(refresh,5000)','setInterval(refresh,15000)').replace('</body>',script+'</body>');
+  const html=dashboard.replaceAll('__NONCE__',nonce);
   return new Response(html,{headers:{...security,'Content-Type':'text/html; charset=utf-8',
     'Content-Security-Policy':"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"}});
 }
@@ -145,13 +151,18 @@ export default {
     if(url.pathname==='/api/health'&&request.method==='GET')return json({status:'ok',mode:'PAPER'});
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
-    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv'].includes(url.pathname);
+    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market'].includes(url.pathname);
     const validPost=request.method==='POST'&&['/api/start','/api/stop'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
     try {
       if(url.pathname==='/')return privateDashboard();
+      if(url.pathname==='/api/market'){
+        const provider=url.searchParams.get('provider');
+        if(provider!=='binance'&&provider!=='coinbase')return json({error:'Proveedor público no permitido'},400);
+        return json(await publicMarketSnapshot(provider));
+      }
       const experiment=env.PAPER.getByName(EXPERIMENT);
       if(url.pathname==='/api/status')return json(await experiment.status());
       if(url.pathname==='/api/start')return json(await experiment.start());

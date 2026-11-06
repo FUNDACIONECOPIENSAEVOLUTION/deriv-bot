@@ -11,6 +11,8 @@ export class PublicFeed {
     symbol: string;
     onHistory: (prices: number[]) => void;
     onTick: (tick: {symbol: string; quote: number; epoch: number}) => void;
+    onCandles?: (candles: import('./market-data.mjs').Candle[]) => void;
+    onChartStatus?: (status: string) => void;
     onStatus?: (status: MarketStatus) => void;
     socketFactory?: (url: string) => FeedSocket;
     now?: () => number;

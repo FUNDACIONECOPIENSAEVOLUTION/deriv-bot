@@ -44,8 +44,8 @@ export function initialState(config,epoch) {
     daily:{date:dayAt(epoch),lossCents:0,opened:0},completed:0,wins:0,voided:0,
     lastOpenTick:-100000,lastEpoch:null,lastQuote:null};
 }
-export function signal(prices) {
-  if(prices.length<30)return 0;
+export function analyzeSignal(prices) {
+  if(prices.length<30)return {direction:0,reason:'WARMUP',fast:null,slow:null,rsi:null,volatility:null};
   const mean=a=>a.reduce((s,x)=>s+x,0)/a.length;
   const fast=mean(prices.slice(-8)),slow=mean(prices.slice(-21));
   const diff=(fast/slow-1)*100;
@@ -57,8 +57,11 @@ export function signal(prices) {
   const avg=mean(returns),vol=Math.sqrt(mean(returns.map(x=>(x-avg)**2)));
   const trend=diff>.002?1:diff<-.002?-1:0;
   const momentum=rsi>=54&&rsi<=75?1:rsi<=46&&rsi>=25?-1:0;
-  return vol<=.45&&trend&&trend===momentum?trend:0;
+  const direction=vol<=.45&&trend&&trend===momentum?trend:0;
+  return {direction,reason:direction?'TREND_AND_MOMENTUM':vol>.45?'HIGH_VOLATILITY':!trend?'NO_TREND':'RSI_CONFLICT',
+    fast,slow,rsi,volatility:vol};
 }
+export function signal(prices){return analyzeSignal(prices).direction;}
 export function entryBlock(state,config,epoch) {
   if(!config.enabled)return 'COLLECTION_ONLY';
   if(state.position)return 'POSITION_OPEN';
@@ -90,18 +93,18 @@ export function onTick(state,config,tick,{nowEpoch=Math.floor(Date.now()/1000)}=
       // Empates se consideran pérdidas en este experimento, no liquidaciones Deriv.
       const won=(tick.quote-p.entryQuote)*p.direction>0;
       const pnlCents=(won?Math.round(p.stakeCents*p.payoutPct/100):-p.stakeCents)-p.costCents;
-      const trade={...p,status:'CLOSED',exitEpoch:tick.epoch,exitQuote:tick.quote,won,pnlCents};
+      const trade={...p,status:'CLOSED',exitEpoch:tick.epoch,exitQuote:tick.quote,won,pnlCents,reason:'HORIZON_REACHED'};
       next.balanceCents+=pnlCents;next.daily.lossCents+=Math.max(0,-pnlCents);
       next.completed++;next.wins+=Number(won);next.position=null;closed=true;
       events.push({type:'paper_closed',epoch:tick.epoch,trade});
     }
   }
   if(!closed&&!entryBlock(next,config,tick.epoch)) {
-    const direction=signal(next.prices);
+    const decision=analyzeSignal(next.prices),direction=decision.direction;
     if(direction) {
       const p={id:config.symbol+'-'+tick.epoch+'-'+next.acceptedTicks,symbol:config.symbol,
         direction,entryEpoch:tick.epoch,entryQuote:tick.quote,ticksHeld:0,
-        stakeCents:config.stakeCents,payoutPct:config.payoutPct,costCents:config.costCents};
+        stakeCents:config.stakeCents,payoutPct:config.payoutPct,costCents:config.costCents,decision};
       next.position=p;next.daily.opened++;next.lastOpenTick=next.acceptedTicks;
       events.push({type:'paper_opened',epoch:tick.epoch,trade:{...p,status:'OPEN'}});
     }

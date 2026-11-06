@@ -23,7 +23,7 @@ async function request(path:string,init:RequestInit={},bindings=env) {
 
 it('health is public but the dashboard, status, CSV and controls require credentials',async()=>{
   expect((await request('/api/health')).response.status).toBe(200);
-  for(const path of ['/','/api/status','/api/trades.csv','/api/start','/api/stop']) {
+  for(const path of ['/','/api/status','/api/trades.csv','/api/market?provider=binance','/api/start','/api/stop']) {
     const {response}=await request(path,{method:path==='/api/start'||path==='/api/stop'?'POST':'GET'});
     expect(response.status).toBe(401);expect(response.headers.get('WWW-Authenticate')).toContain('Basic');
   }
@@ -58,6 +58,19 @@ it('initializes USD 10 in pause and keeps different experiments independent',asy
   expect((await a.status()).balanceCents).toBe(1234);
   expect((await b.status()).balanceCents).toBe(1000);
   expect((await a.status()).running).toBe(false);
+});
+it('keeps chart candles across eviction without reviving the simulation or accepting arbitrary market URLs',async()=>{
+  const stub=env.PAPER.getByName('chart');await stub.status();
+  const time=Math.floor(Date.now()/60000)*60-60;
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    const saved=JSON.parse(ctx.storage.sql.exec<{data:string}>('SELECT data FROM experiment WHERE id=1').one().data);
+    saved.candles=[{time,open:100,high:103,low:99,close:102,partial:false}];
+    ctx.storage.sql.exec('UPDATE experiment SET data=? WHERE id=1',JSON.stringify(saved));
+  });
+  await evictDurableObject(stub);
+  const status=await stub.status();expect(status.chart.candles).toHaveLength(1);expect(status.chart.candles[0].close).toBe(102);
+  expect(status.running).toBe(false);expect(status.providers.map(p=>p.id)).toEqual(['deriv','binance','coinbase']);
+  expect((await request('/api/market?provider=https://other.example',{headers})).response.status).toBe(400);
 });
 it('preserves accounting and invalidates a persisted open position exactly once after eviction',async()=>{
   const stub=env.PAPER.getByName('recover');await stub.status();

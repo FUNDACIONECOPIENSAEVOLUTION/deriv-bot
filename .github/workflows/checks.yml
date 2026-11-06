@@ -35,4 +35,4 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Validar servicio PAPER persistente y recuperación
-        run: node --test tests/test_runtime.mjs
+        run: node --test tests/test_runtime.mjs tests/test_market_data.mjs
