@@ -12,8 +12,8 @@
 		"allowImportingTsExtensions": true,
 		"isolatedModules": true,
 		"verbatimModuleSyntax": true,
-		"skipLibCheck": true
-		,"allowJs": true
+		"skipLibCheck": true,
+		"allowJs": true
 	},
 	"include": [
 		"src",

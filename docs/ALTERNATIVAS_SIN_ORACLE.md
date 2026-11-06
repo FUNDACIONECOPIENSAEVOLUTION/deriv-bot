@@ -26,7 +26,7 @@ Un WebSocket saliente no hiberna. Necesita recuperación y seguimiento de duraci
 
 Estimación propia: un tick cada dos segundos produce 43.200 ticks/día. Dos filas por tick sumarían 86.400 escrituras antes de índices, eventos y alarmas; a un tick por segundo no cabrían. Un objeto de 128 MB activo todo el día rondaría 11.100 GB-s. Hace falta medir el uso completo de la cuenta y dejar margen; estos cálculos no prueban disponibilidad ni continuidad.
 
-**Estado:** arquitectura propuesta. No se ha implementado, creado una cuenta de Cloudflare, desplegado ni probado Deriv desde Cloudflare. El código Node/Docker existente conserva sus pruebas anteriores.
+**Estado:** adaptación implementada en cloudflare/, con compilación y pruebas de HTTP privado, SQLite, recuperación, alarmas y exportación correctas en GitHub. Aún no se ha desplegado ni probado Deriv desde un Worker. Quedan por medir el uso completo de la cuenta, la continuidad durante un día y la recuperación en el servicio publicado. Véase OPERACION_CLOUDFLARE.md.
 
 Siguiente página para registrar o acceder a la cuenta: https://dash.cloudflare.com/ . Conservar Workers Free; no activar productos de pago para resolver una cuota agotada.
 
@@ -55,6 +55,6 @@ Fuentes primarias:
 
 ## Decisión práctica
 
-Para priorizar costo cero y evitar otra verificación de tarjeta, la siguiente investigación técnica es una adaptación pequeña en Cloudflare Free y una prueba de consumo y recuperación. Para ejecutar el contenedor existente sin esa adaptación, Railway es una opción de prueba con crédito limitado; no se promete un mes completo gratuito.
+Para priorizar costo cero y evitar otra verificación de tarjeta, el siguiente paso es publicar la adaptación de Cloudflare Free y medir consumo y recuperación. Para ejecutar el contenedor existente sin esa adaptación, Railway es una opción de prueba con crédito limitado; no se promete un mes completo gratuito.
 
 No se ha demostrado una alternativa gratuita que garantice ejecución continua ilimitada del contenedor actual. El objetivo sigue siendo datos públicos y simulación; el alojamiento no valida una estrategia ni genera rentabilidad por sí mismo.

@@ -19,8 +19,8 @@ El workflow “Comprobar conexión pública Deriv” ejecuta también esta prueb
 
 ## Estado de Cloudflare
 
-El módulo público y el simulador Node/Docker ya existen. La adaptación a Workers y Durable Objects sigue en desarrollo; esta revisión no despliega un Worker ni confirma que Deriv sea accesible desde Cloudflare. La prueba final deberá ejecutarse en el Worker desplegado y medir recuperación y cuotas con el navegador cerrado.
+El módulo público y el simulador Node/Docker ya existen. La adaptación a Workers y Durable Objects está en cloudflare/ y ya pasó comprobaciones de tipos, compilación y pruebas dentro del entorno Workers. Esta revisión no despliega un Worker ni confirma que Deriv sea accesible desde Cloudflare. La prueba final deberá ejecutarse en el Worker desplegado y medir recuperación y cuotas con el navegador cerrado.
 
-El propietario confirmó haber autenticado el servidor cloudflare en la aplicación. En la sesión de trabajo actual todavía no aparecen sus herramientas, de modo que el acceso efectivo a la cuenta sigue pendiente de comprobar.
+La publicación requiere verificar el acceso efectivo a la cuenta Cloudflare, crear el secreto del propietario y completar la prueba en el Worker desplegado.
 
 Esta integración no necesita una clave privada de Deriv. El saldo de USD 10 corresponde al experimento virtual.

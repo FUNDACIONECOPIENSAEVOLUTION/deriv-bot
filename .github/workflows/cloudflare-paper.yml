@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: '24.22.0'
       - name: Instalar herramientas oficiales en el entorno temporal de GitHub
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
       - name: Conservar versiones resueltas para reproducir la compilación
         uses: actions/upload-artifact@v4
         with:

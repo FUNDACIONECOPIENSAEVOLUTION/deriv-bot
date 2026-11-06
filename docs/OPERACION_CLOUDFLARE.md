@@ -22,7 +22,7 @@ La exportación CSV pagina y transmite el historial completo; la vista del panel
 
 ## Pruebas y despliegue
 
-Desde cloudflare/: npm install, npm run typecheck, npm test y npm run build. La configuración utiliza la herramienta oficial cf, sin archivo Wrangler. Las pruebas de HTTP, SQLite, expulsión del objeto y alarmas corren en el entorno de Workers mediante el complemento oficial de Vitest. Utilizan un proveedor sintético que devuelve un error de red controlado, sin acceso a una cuenta financiera.
+Desde cloudflare/: npm ci, npm run typecheck, npm test y npm run build. La configuración utiliza la herramienta oficial cf, sin archivo Wrangler. Las pruebas de HTTP, SQLite, expulsión del objeto y alarmas corren en el entorno de Workers mediante el complemento oficial de Vitest. Utilizan un proveedor sintético que devuelve un error de red controlado, sin acceso a una cuenta financiera.
 
 La comprobación real independiente de Deriv se ejecuta con node scripts/probe_deriv_public.mjs desde la raíz. Verifica historial y ticks en directo desde el lugar donde se ejecuta; no acredita por sí sola acceso desde un Worker desplegado.
 
