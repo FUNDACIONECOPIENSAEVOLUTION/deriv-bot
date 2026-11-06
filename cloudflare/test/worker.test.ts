@@ -1,15 +1,18 @@
 import { env } from 'cloudflare:workers';
-import { createExecutionContext, waitOnExecutionContext, runInDurableObject, evictDurableObject, runDurableObjectAlarm, abortAllDurableObjects, reset, fetchMock } from 'cloudflare:test';
+import { createExecutionContext, waitOnExecutionContext, runInDurableObject, evictDurableObject, runDurableObjectAlarm, abortAllDurableObjects, reset } from 'cloudflare:test';
+import { setupNetwork } from '@msw/cloudflare';
+import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, afterAll, expect, it } from 'vitest';
 import worker from '../src/index';
 
 const token='test-only-token-with-at-least-32-characters';
 const headers={Authorization:'Bearer '+token};
+const network=setupNetwork();
 beforeAll(()=>{
-  fetchMock.activate();fetchMock.disableNetConnect();
-  fetchMock.get('https://api.derivws.com').intercept({path:'/trading/v1/options/ws/public',method:'GET'}).reply(503,'offline fixture').persist();
+  network.enable();
+  network.use(http.all('*',()=>new HttpResponse('offline fixture',{status:503})));
 });
-afterAll(()=>fetchMock.deactivate());
+afterAll(()=>network.disable());
 afterEach(async()=>{await abortAllDurableObjects();await reset();});
 async function request(path:string,init:RequestInit={},bindings=env) {
   const ctx=createExecutionContext();
