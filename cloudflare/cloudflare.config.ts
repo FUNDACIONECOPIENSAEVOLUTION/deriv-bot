@@ -1,8 +1,7 @@
-import { bindings, defineConfig, exports, triggers } from "cf/config";
+import { bindings, defineConfig, defineWorker, exports, triggers } from "cf/config";
 import * as entrypoint from "./src/index.ts" with { type: "cf-worker" };
 
-export default defineConfig({
-	worker: {
+const paperWorker = defineWorker({
 		name: "ecopiensa-paper-10",
 		compatibilityDate: "2026-11-05",
 		entrypoint,
@@ -10,7 +9,6 @@ export default defineConfig({
 		previewUrls: false,
 		exports: { PaperExperiment: exports.durableObject({ storage: "sqlite" }) },
 		env: {
-			PAPER: bindings.durableObject({ worker: "ecopiensa-paper-10", exportName: "PaperExperiment" }),
 			ADMIN_TOKEN: bindings.secret(),
 			PAPER_ENABLED: bindings.text("true"),
 			INITIAL_USD: bindings.text("10"),
@@ -22,6 +20,15 @@ export default defineConfig({
 			enabled: true,
 			logs: { enabled: true, invocationLogs: false, headSamplingRate: 0.1 },
 			traces: { enabled: true, headSamplingRate: 0.01 },
+		},
+});
+
+export default defineConfig({
+	worker: {
+		...paperWorker,
+		env: {
+			...paperWorker.env,
+			PAPER: bindings.durableObject({ worker: paperWorker, exportName: "PaperExperiment" }),
 		},
 	},
 });

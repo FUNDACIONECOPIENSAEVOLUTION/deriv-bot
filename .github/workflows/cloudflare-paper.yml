@@ -25,6 +25,12 @@ jobs:
           node-version: '24.22.0'
       - name: Instalar herramientas oficiales en el entorno temporal de GitHub
         run: npm install --no-audit --no-fund
+      - name: Conservar versiones resueltas para reproducir la compilación
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-dependency-lock
+          path: cloudflare/package-lock.json
+          retention-days: 3
       - name: Generar tipos y comprobar la compilación
         run: npm run typecheck
       - name: Probar HTTP privado, SQLite, recuperación y alarmas dentro de Workers

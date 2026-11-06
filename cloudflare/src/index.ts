@@ -6,6 +6,7 @@ import { PublicSocket } from './public-socket';
 
 type EngineState = ReturnType<typeof initialState>;
 type PaperEvent = {type:string;epoch:number;trade?:{id:string;status:string;entryEpoch:number}};
+type ExportPage = {trades:Record<string,unknown>[];next:string|null};
 const EXPERIMENT='owner-usd10-v1', CHECKPOINT_MS=60_000;
 const now=()=>Math.floor(Date.now()/1000);
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
@@ -105,7 +106,7 @@ export class PaperExperiment extends DurableObject<Env> {
       trades:this.ctx.storage.sql.exec<{data:string}>('SELECT data FROM trades ORDER BY entry_epoch DESC,id DESC LIMIT 30').toArray().map(row=>JSON.parse(row.data)),
       events:this.ctx.storage.sql.exec<{data:string}>('SELECT data FROM events ORDER BY id DESC LIMIT 20').toArray().map(row=>JSON.parse(row.data))};
   }
-  exportPage(after:string|null=null) {
+  exportPage(after:string|null=null):ExportPage {
     const sql=this.ctx.storage.sql;
     const rows=after===null?sql.exec<{id:string;data:string}>('SELECT id,data FROM trades ORDER BY id LIMIT 200').toArray()
       :sql.exec<{id:string;data:string}>('SELECT id,data FROM trades WHERE id > ? ORDER BY id LIMIT 200',after).toArray();
@@ -162,7 +163,7 @@ export default {
           await writer.write(encoder.encode(fields.join(',')+'\n'));
           let after:string|null=null;
           do {
-            const page=await experiment.exportPage(after);
+            const page:ExportPage=await experiment.exportPage(after);
             for(const trade of page.trades)await writer.write(encoder.encode(fields.map(key=>'"'+String(trade[key]??'').replaceAll('"','""')+'"').join(',')+'\n'));
             after=page.next;
           } while(after!==null);
