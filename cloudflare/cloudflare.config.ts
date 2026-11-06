@@ -18,6 +18,7 @@ const paperWorker = defineWorker({
 		triggers: [triggers.scheduled({ schedule: "*/5 * * * *" })],
 		observability: {
 			enabled: true,
+			issues: { enabled: false },
 			logs: { enabled: true, invocationLogs: false, headSamplingRate: 0.1 },
 			traces: { enabled: true, headSamplingRate: 0.01 },
 		},

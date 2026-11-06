@@ -4,10 +4,10 @@
 	"type": "module",
 	"scripts": {
 		"dev": "cf dev",
-		"build": "cf build",
+		"build": "cf build && node scripts/align-first-deploy.mjs",
 		"deploy": "cf deploy",
 		"typecheck": "cf workers types && tsc",
-		"test": "vitest run"
+		"test": "node --test scripts/align-first-deploy.test.mjs && vitest run"
 	},
 	"devDependencies": {
 		"@cloudflare/vite-plugin": "beta",
