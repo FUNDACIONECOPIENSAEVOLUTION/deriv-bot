@@ -75,9 +75,10 @@ function drawEquity(){
 function entryExplanation(trade){const d=trade.decision;if(!d)return 'Entrada anterior sin indicadores registrados';return 'SMA 8 '+price(d.fast)+(trade.direction>0?' > ':' < ')+'SMA 21 '+price(d.slow)+' · RSI '+price(d.rsi)+' · volatilidad '+price(d.volatility)+' %';}
 function render(){
   if(!state)return;const x=state,provider=$('provider').value;
-  const live=x.market.state==='live'&&x.quoteAgeSeconds!==null&&x.quoteAgeSeconds<=15&&x.quoteAgeSeconds>=0;
+  const live=x.market.state==='live'&&x.quoteAgeSeconds!==null&&x.quoteAgeSeconds<=15&&x.quoteAgeSeconds>=-3;
   chip('engine-status','Deriv · '+(x.running===false?'en pausa':live?'recibiendo datos':'sin datos recientes'),x.running===false?'warn':live?'live':'offline');
   $('balance').textContent=money(x.balanceCents);$('profit').textContent=money(x.profitCents);$('profit').className='value '+(x.profitCents>=0?'positive':'negative');$('capital').textContent='Capital inicial: '+money(x.config.initialCents);$('completed').textContent=x.completed;$('voided').textContent=x.voided+' no evaluables';$('quote').textContent=price(x.lastQuote);$('quoteTime').textContent=x.lastEpoch?time(x.lastEpoch)+' · hace '+x.quoteAgeSeconds+' s':'Sin precio reciente';
+  if(x.lastEpoch)$('quoteTime').textContent=time(x.lastEpoch)+' · hace '+Math.max(0,x.quoteAgeSeconds)+' s';
   $('feed').textContent=feedLabels[x.market.state]||x.market.state;$('position').textContent=x.position?(x.position.direction>0?'Alcista':'Bajista')+' · '+x.position.ticksHeld+'/'+x.config.horizon+' ticks':'Sin posición';$('ticks').textContent=x.acceptedTicks;
   const d=x.decision||{};$('fast').textContent=price(d.fast);$('slow').textContent=price(d.slow);$('rsi').textContent=price(d.rsi);$('vol').textContent=d.volatility===null||d.volatility===undefined?'—':price(d.volatility)+' %';
   $('decision').textContent=labels[x.entryBlock]||(d.direction?'Señal '+(d.direction>0?'alcista':'bajista'):'Sin señal de entrada');
