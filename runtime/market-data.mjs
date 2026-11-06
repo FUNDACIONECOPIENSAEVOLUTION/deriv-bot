@@ -63,7 +63,9 @@ export async function publicMarketSnapshot(provider,{fetcher=fetch,now=Math.floo
     url.searchParams.set('start',new Date((Math.floor(now/60)*60-179*60)*1000).toISOString());
     url.searchParams.set('end',new Date(now*1000).toISOString());
   }
-  const response=await fetcher(url.href,{method:'GET',redirect:'error',signal:AbortSignal.timeout(4500)});
+  // Workers supports manual redirects, not Fetch's error mode. Non-2xx responses
+  // are rejected below, so a provider can never redirect this fetch elsewhere.
+  const response=await fetcher(url.href,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(4500)});
   const raw=await boundedJson(response);
   if(!Array.isArray(raw)||!raw.length||raw.length>500||raw.some(row=>!Array.isArray(row)||row.length<6))throw Error('INVALID_MARKET_RESPONSE');
   const rows=raw.map(row=>provider==='binance'

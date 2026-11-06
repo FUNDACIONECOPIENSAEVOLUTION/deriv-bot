@@ -37,13 +37,16 @@ test('crypto adapters normalize both public formats without sharing financial cr
     const raw=provider==='binance'?[[base*1000,'100','103','99','102','1']]:[[base,99,103,100,102,1]];
     const snapshot=await publicMarketSnapshot(provider,{now,fetcher:async(url,init)=>{
       called=true;assert.equal(new URL(url).hostname,provider==='binance'?'data-api.binance.vision':'api.exchange.coinbase.com');
-      assert.equal(init.method,'GET');assert.equal(init.redirect,'error');assert.equal(init.headers,undefined);
+      assert.equal(init.method,'GET');assert.equal(init.redirect,'manual');assert.equal(init.headers,undefined);
       return Response.json(raw);
     }});
     assert.ok(called);assert.equal(snapshot.capability,'MARKET_DATA_ONLY');assert.equal(snapshot.candles[0].close,102);
   }
   await assert.rejects(()=>publicMarketSnapshot('https://evil.example',{fetcher:()=>{throw Error('Must not fetch');}}),/UNSUPPORTED/);
   await assert.rejects(()=>publicMarketSnapshot('binance',{fetcher:async()=>new Response('restricted',{status:451})}),/HTTP_451/);
+  let redirectCalls=0;
+  await assert.rejects(()=>publicMarketSnapshot('binance',{fetcher:async()=>{redirectCalls++;return new Response(null,{status:302,headers:{Location:'https://unrelated.example/'}});}}),/HTTP_302/);
+  assert.equal(redirectCalls,1);
   await assert.rejects(()=>publicMarketSnapshot('binance',{fetcher:async()=>new Response('x'.repeat(150001))}),/TOO_LARGE/);
   const extra=await publicMarketSnapshot('coinbase',{now,fetcher:async()=>Response.json(Array.from({length:350},(_,i)=>[base-i*60,99,103,100,102,1]))});
   assert.equal(extra.candles.length,180);assert.equal(extra.candles.at(-1).time,base);

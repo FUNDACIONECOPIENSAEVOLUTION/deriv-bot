@@ -4,6 +4,9 @@ import { setupNetwork } from '@msw/cloudflare';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, afterAll, expect, it } from 'vitest';
 import worker from '../src/index';
+import { PublicSocket } from '../src/public-socket';
+import { PUBLIC_ENDPOINT } from '../../runtime/feed.mjs';
+import { publicMarketSnapshot } from '../../runtime/market-data.mjs';
 
 const token='test-only-token-with-at-least-32-characters';
 const headers={Authorization:'Bearer '+token};
@@ -20,6 +23,34 @@ async function request(path:string,init:RequestInit={},bindings=env) {
   const body=await response.text();await waitOnExecutionContext(ctx);
   return {response,body};
 }
+
+it('reports the public upgrade rejection and keeps the endpoint restricted',async()=>{
+  const ctx=createExecutionContext();
+  expect(()=>new PublicSocket('wss://unrelated.example/',ctx)).toThrow('PUBLIC_ENDPOINT_ONLY');
+  const socket=new PublicSocket(PUBLIC_ENDPOINT,ctx);
+  await waitOnExecutionContext(ctx);
+  expect(socket.errorCode).toBe('UPGRADE_HTTP_503');
+  expect(socket.errorDetail).toContain('public market endpoint');
+  expect(socket.readyState).toBe(3);
+});
+
+it('reports only a bounded public market error code when a crypto source rejects a request',async()=>{
+  const {response,body}=await request('/api/market?provider=binance',{headers});
+  expect(response.status).toBe(503);
+  expect(JSON.parse(body).code).toBe('PUBLIC_MARKET_HTTP_503');
+  expect(body).not.toContain(token);
+});
+
+it('constructs crypto requests using a redirect mode supported by the real Workers runtime',async()=>{
+  const time=Math.floor(Date.now()/60000)*60000;
+  const result=await publicMarketSnapshot('binance',{fetcher:async(url,init)=>{
+    const nativeRequest=new Request(url,init);
+    expect(nativeRequest.redirect).toBe('manual');
+    return Response.json([[time,'100','101','99','100.5','1']]);
+  }});
+  expect(result.candles).toHaveLength(1);
+  expect(result.provider).toBe('binance');
+});
 
 it('health is public but the dashboard, status, CSV and controls require credentials',async()=>{
   expect((await request('/api/health')).response.status).toBe(200);
