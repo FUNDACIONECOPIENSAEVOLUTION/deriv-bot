@@ -8,12 +8,17 @@ const WORKER = 'ecopiensa-paper-10';
 const API = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/workers/scripts/${WORKER}/settings`;
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 
+export function isApprovedPrompt(output) {
+  const compact = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/[\s│└┌├┤┘┐─◇◆]/g, '');
+  return compact.includes('lastupdatedviathescriptAPI') && compact.includes('Wouldyouliketocontinue?');
+}
+
 // Explicitly authorized by the owner: one interactive confirmation for this empty
 // Worker, entirely on Workers Builds. cf beta.28 cannot confirm in CI (#69).
 // Existing simulations and any other prompts retain their protection checks.
 export async function reviewedTerminal(command, { timeout = 120_000, onOutput = text => process.stdout.write(text) } = {}) {
   if (process.platform !== 'linux') throw new Error('Initial upload requires the online Linux build service');
-  const child = spawn('script', ['--quiet', '--return', '--command', command, '/dev/null'], {
+  const child = spawn('script', ['--quiet', '--return', '--command', `stty cols 160 rows 40 && exec ${command}`, '/dev/null'], {
     env: { ...process.env, CI: 'false', DO_NOT_TRACK: '1', CF_SEND_TELEMETRY: 'false' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -27,9 +32,7 @@ export async function reviewedTerminal(command, { timeout = 120_000, onOutput = 
       const text = chunk.toString();
       onOutput(text);
       output = (output + text).slice(-30_000);
-      const plain = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
-      if (!answered && plain.includes('last updated via the script API')
-          && plain.includes('Would you like to continue?')) {
+      if (!answered && isApprovedPrompt(output)) {
         answered = true;
         child.stdin.write('y\r');
       }
