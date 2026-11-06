@@ -66,8 +66,10 @@ test('the installed cf CLI accepts the specific confirmation against a dummy API
   let output = '';
   try {
     const command = `env -C ${shellQuote(temp)} CLOUDFLARE_ACCOUNT_ID=fixture CLOUDFLARE_API_TOKEN=fixture-only CLOUDFLARE_API_BASE_URL=http://127.0.0.1:${server.address().port}/client/v4 ${shellQuote(process.execPath)} ${shellQuote(resolve('node_modules/cf/bin/cf'))} deploy --prebuilt`;
-    await assert.rejects(reviewedTerminal(command, { timeout: 15_000, onOutput: text => { output += text; } }), /Reviewed initial upload failed \(exit/);
-    assert.equal(isApprovedPrompt(output), true, 'real CLI must show the approved question');
+    // The dummy account must not inherit the real Workers Builds match-tag or
+    // override-name variables. Production uses the unchanged default environment.
+    await assert.rejects(reviewedTerminal(command, { timeout: 15_000, environment: { PATH: process.env.PATH }, onOutput: text => { output += text; } }), /Reviewed initial upload failed \(exit/);
+    assert.equal(isApprovedPrompt(output), true, `real CLI must show the approved question: ${output.slice(-4000)}`);
     assert.ok(calls.length > 1, 'real CLI must proceed beyond its initial service lookup after confirmation');
   } finally {
     server.closeAllConnections();

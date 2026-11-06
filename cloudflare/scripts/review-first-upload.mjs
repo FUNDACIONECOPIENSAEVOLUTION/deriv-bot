@@ -16,10 +16,10 @@ export function isApprovedPrompt(output) {
 // Explicitly authorized by the owner: one interactive confirmation for this empty
 // Worker, entirely on Workers Builds. cf beta.28 cannot confirm in CI (#69).
 // Existing simulations and any other prompts retain their protection checks.
-export async function reviewedTerminal(command, { timeout = 120_000, onOutput = text => process.stdout.write(text) } = {}) {
+export async function reviewedTerminal(command, { timeout = 120_000, onOutput = text => process.stdout.write(text), environment = process.env } = {}) {
   if (process.platform !== 'linux') throw new Error('Initial upload requires the online Linux build service');
   const child = spawn('script', ['--quiet', '--return', '--command', `stty cols 160 rows 40 && exec ${command}`, '/dev/null'], {
-    env: { ...process.env, CI: 'false', DO_NOT_TRACK: '1', CF_SEND_TELEMETRY: 'false' },
+    env: { ...environment, CI: 'false', DO_NOT_TRACK: '1', CF_SEND_TELEMETRY: 'false' },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   await new Promise((accept, reject) => {
