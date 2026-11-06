@@ -1,0 +1,33 @@
+name: Validar adaptación PAPER para Cloudflare
+on:
+  pull_request:
+    paths:
+      - cloudflare/**
+      - runtime/**
+      - scripts/public_history_validation.mjs
+      - .github/workflows/cloudflare-paper.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: cloudflare
+    env:
+      CF_SEND_TELEMETRY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Instalar herramientas oficiales en el entorno temporal de GitHub
+        run: npm install --no-audit --no-fund
+      - name: Generar tipos y comprobar la compilación
+        run: npm run typecheck
+      - name: Probar HTTP privado, SQLite, recuperación y alarmas dentro de Workers
+        run: npm test
+      - name: Preparar compilación sin desplegar ni usar credenciales
+        run: npm run build
