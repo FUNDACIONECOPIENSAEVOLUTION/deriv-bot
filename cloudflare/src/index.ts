@@ -182,9 +182,13 @@ export default {
         }catch(error){await writer.abort(error);}
       })());
       return new Response(stream.readable,{headers:{...security,'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="paper-trades.csv"'}});
-    }catch{
-      console.error(JSON.stringify({type:'paper_request_failed',path:url.pathname}));
-      return json({error:'Servicio no disponible; revisa el estado y la cuota'},503);
+    }catch(error){
+      const code=url.pathname==='/api/market'
+        ? error instanceof Error&&/^(PUBLIC_MARKET_HTTP_[1-5][0-9]{2}|EMPTY_MARKET_RESPONSE|MARKET_RESPONSE_TOO_LARGE|INVALID_MARKET_RESPONSE|INVALID_CANDLES)$/.test(error.message)
+          ?error.message:error instanceof Error&&['TimeoutError','AbortError'].includes(error.name)?'PUBLIC_MARKET_TIMEOUT':'PUBLIC_MARKET_NETWORK_ERROR'
+        :undefined;
+      console.error(JSON.stringify({type:'paper_request_failed',path:url.pathname,code}));
+      return json({error:'Servicio no disponible; revisa el estado y la cuota',...(code?{code}:{})},503);
     }
   },
   async scheduled(_event:ScheduledController,env:Env){await env.PAPER.getByName(EXPERIMENT).watchdog();},

@@ -33,6 +33,13 @@ it('reports the public upgrade rejection and keeps the endpoint restricted',asyn
   expect(socket.readyState).toBe(3);
 });
 
+it('reports only a bounded public market error code when a crypto source rejects a request',async()=>{
+  const {response,body}=await request('/api/market?provider=binance',{headers});
+  expect(response.status).toBe(503);
+  expect(JSON.parse(body).code).toBe('PUBLIC_MARKET_HTTP_503');
+  expect(body).not.toContain(token);
+});
+
 it('health is public but the dashboard, status, CSV and controls require credentials',async()=>{
   expect((await request('/api/health')).response.status).toBe(200);
   for(const path of ['/','/api/status','/api/trades.csv','/api/market?provider=binance','/api/start','/api/stop']) {
