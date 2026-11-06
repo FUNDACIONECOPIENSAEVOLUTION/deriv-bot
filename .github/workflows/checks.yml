@@ -28,7 +28,7 @@ jobs:
       - name: Validar HTML y seguridad básica
         run: node tests/test_html.mjs
       - name: Validar integridad de cotizaciones públicas con datos sintéticos de prueba
-        run: node --test tests/test_public_history.mjs
+        run: node --test tests/test_public_history.mjs tests/test_deriv_probe.mjs
       - name: Validar RSI neutral y estadísticas de análisis sin órdenes
         run: node --test tests/test_analysis_stats.mjs
       - name: Ejecutar pruebas unitarias sin conexión al broker
