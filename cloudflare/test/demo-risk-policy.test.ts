@@ -30,7 +30,7 @@ describe('DERIV virtual-dollar rule, not raw win percentage',()=>{
     expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:15,haltedToday:true}).reason).toBe('DEMO_DAY_HALTED');
   });
   it('reserves possible worst-case losses of open contracts even during a profitable session',()=>{
-    expect(assessDailyDemoRisk({...input,dailyNetCents:-10,openContracts:8,exposureCents:80})
+    expect(assessDailyDemoRisk({...input,dailyNetCents:-10,openContracts:9,exposureCents:90})
       .reason).toBe('DEMO_DAILY_RISK_FLOOR');
     expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:8,
       openContracts:9,exposureCents:90,lifetimeNetCents:8}).allowed).toBe(true);
