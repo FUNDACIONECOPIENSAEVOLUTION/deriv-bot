@@ -325,6 +325,13 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return {mode:'DERIV_DEMO',...result,tradeReport:this.reportDemo()};
   }
 
+  /** Scheduled check is read-only and skips the broker when no contract is open. */
+  async reconcileOpenDemoOnly(){
+    const unresolved=this.reportDemo().unresolved;
+    if(!unresolved||unresolved.state!=='OPEN')return {state:'NOTHING_TO_RECONCILE'};
+    return this.checkDemoSettlement();
+  }
+
   /** Read a single previously acknowledged contract. No new buy occurs. */
   async checkDemoSettlement() {
     const pending=this.reportDemo().unresolved;
