@@ -177,7 +177,13 @@ export default {
   async fetch(request:Request,env:Env,ctx:ExecutionContext):Promise<Response> {
     const url=new URL(request.url);
     if(url.protocol!=='https:'){url.protocol='https:';return Response.redirect(url.href,308);}
-    if(url.pathname==='/api/health'&&request.method==='GET')return json({status:'ok',mode:'PAPER'});
+    if(url.pathname==='/api/health'&&request.method==='GET')return json({
+      status:'ok',mode:'PAPER',version:'1.5.0',release:'cloudflare-deriv-demo-panel-v1.5',
+      publishedFeature:'private-demo-panel',date:'2026-11-07',
+      demoBuyingEnabled:String(env.DEMO_BUY_ENABLED)==='true',
+      demoAutomationEnabled:String(env.DEMO_AUTO_ENABLED)==='true',
+      note:'Estado técnico del Worker. No confirma sesión Deriv ni operaciones DEMO.'
+    });
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
