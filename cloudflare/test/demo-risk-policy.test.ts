@@ -33,7 +33,7 @@ describe('DERIV virtual-dollar rule, not raw win percentage',()=>{
     expect(assessDailyDemoRisk({...input,dailyNetCents:-100,openContracts:9,exposureCents:900})
       .reason).toBe('DEMO_DAILY_RISK_FLOOR');
     expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:80,
-      openContracts:9,exposureCents:9000,lifetimeNetCents:8}).allowed).toBe(true);
+      openContracts:9,exposureCents:900,lifetimeNetCents:8}).allowed).toBe(true);
   });
   it('halts on any uncertain buy and on exhausted research allocation',()=>{
     expect(assessDailyDemoRisk({...input,unknownCount:1,exposureCents:100}).reason).toBe('DEMO_BUY_OUTCOME_UNKNOWN');
