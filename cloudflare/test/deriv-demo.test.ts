@@ -129,16 +129,16 @@ it('allows quote requests only to the owner and never quotes without a connected
   expect(calls).toEqual([]);
 });
 
-it('keeps all broker orders disabled by default and blocks unauthenticated calls',async()=>{
+it('permits owner-only manual DEMO after OAuth while blocking unauthenticated calls',async()=>{
   const status=await env.DERIV_DEMO.getByName('safety-state').status();
-  expect(status.demoTradingEnabled).toBe(false);
+  expect(status.demoTradingEnabled).toBe(true);
   expect(status.tradeReport.settled).toBe(0);
   expect(status.tradeReport.unresolved).toBeNull();
   expect((await request('/api/deriv/demo/buy-once',{method:'POST'})).r.status).toBe(401);
   expect((await request('/api/deriv/demo/check',{method:'POST'})).r.status).toBe(401);
   expect((await request('/api/deriv/demo/buy-once',{method:'POST',headers,body:'{}'})).r.status).toBe(403);
   expect(await errorFrom(env.DERIV_DEMO.getByName('safety-state'),d=>d.buyDemoOnce('UP')))
-    .toBe('DEMO_EXECUTION_DISABLED');
+    .toBe('DERIV_DEMO_REQUIRED');
   expect(calls).toEqual([]);
 });
 it('persists virtual settlement reports separately from PAPER while leaving unresolved orders blocked',async()=>{
