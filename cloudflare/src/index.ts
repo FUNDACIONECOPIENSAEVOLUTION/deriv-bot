@@ -225,7 +225,7 @@ export default {
           if(direction!=='UP'&&direction!=='DOWN')return json({error:'Dirección inválida'},400);
           const stakeCents=choice&&typeof choice==='object'&&'stakeCents' in choice?
             (choice as {stakeCents?:unknown}).stakeCents:100;
-          if(typeof stakeCents!=='number'||![10,25,50,100].includes(stakeCents))
+          if(typeof stakeCents!=='number'||![35,50,75,100].includes(stakeCents))
             return json({error:'Importe virtual no permitido'},400);
           return json(await demo.preflightDemo(direction,stakeCents));
         }
