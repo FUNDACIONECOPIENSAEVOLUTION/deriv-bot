@@ -168,7 +168,7 @@ export default {
           // A browser click alone is NOT permission to trade: the broker is
           // DEMO-only, the feature switch defaults OFF, and the local rule
           // must have a fresh confirmed upward signal from real public ticks.
-          if(env.DEMO_BUY_ENABLED!=='true')return json({error:'Ejecución DEMO desactivada'},403);
+          if(String(env.DEMO_BUY_ENABLED)!=='true')return json({error:'Ejecución DEMO desactivada'},403);
           const paper=await env.PAPER.getByName(EXPERIMENT).status();
           const ready=paper.running===true&&paper.market.state==='live'
             &&paper.config.symbol==='R_100'&&paper.decision.direction===1
