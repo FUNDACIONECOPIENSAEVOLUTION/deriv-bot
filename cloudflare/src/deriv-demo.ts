@@ -246,6 +246,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const stats=sql.exec<{settled:number;wins:number;losses:number;net:number}>(
       "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents<0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED'"
     ).one();
+    const browserObservedSettlements=sql.exec<{n:number}>(
+      "SELECT COUNT(*) AS n FROM demo_trades WHERE state='SETTLED' AND code='CLIENT_OBSERVED'"
+    ).one().n;
     const raw=this.getRiskSnapshot();
     const history=sql.exec<Row>(
       'SELECT * FROM demo_trades ORDER BY id DESC LIMIT 50'
@@ -289,6 +292,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
         maxConcurrent:this.chosenMaxConcurrent()});
     const lastChecked=this.read<number>('demo-last-balance-at')||null;
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.net,
+      brokerVerifiedSettled:stats.settled-browserObservedSettlements,
+      browserObservedSettled:browserObservedSettlements,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
       virtualResearchAllocationCents:DEMO_PILOT_BUDGET_CENTS,
       pilotMaxPurchases:DEMO_PILOT_MAX_PURCHASES,
