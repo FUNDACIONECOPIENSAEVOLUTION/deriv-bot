@@ -602,6 +602,22 @@ export class DerivDemoConnection extends DurableObject<Env> {
       code:ack.accepted?null:ack.code,tradeReport:this.reportDemo()};
   }
 
+  /** Read-only account-scoped contract check in the owner browser.
+   * Used only after an acknowledged DEMO contract; never sends a buy.
+   */
+  async beginBrowserSettlement() {
+    const r=this.read<{id:number;nonce:string;state:string}>('demo-browser-reservation');
+    if(!r||r.state!=='OPEN')throw Error('DEMO_BROWSER_NO_OPEN_CONTRACT');
+    const entry=this.ctx.storage.sql.exec<{contract_id:number}>(
+      "SELECT contract_id FROM demo_trades WHERE id=? AND state='OPEN' AND code='CLIENT_ACK'",r.id
+    ).toArray()[0];
+    if(!entry||!Number.isSafeInteger(entry.contract_id))throw Error('DEMO_BROWSER_NO_OPEN_CONTRACT');
+    const creds=await this.verifiedDemoCredentials();
+    const url=await this.otpDemoUrl(creds);
+    return {mode:'DEMO_BROWSER_SETTLEMENT',noOrders:true,accountType:'demo',
+      wsUrl:url,nonce:r.nonce,id:r.id,contractId:entry.contract_id};
+  }
+
   async settleBrowserPilot(input:{nonce:string;id:number;response:unknown}) {
     const reservation=this.read<{id:number;nonce:string;at:number;state:string}>('demo-browser-reservation');
     if(!reservation||reservation.nonce!==input?.nonce||reservation.id!==input.id
