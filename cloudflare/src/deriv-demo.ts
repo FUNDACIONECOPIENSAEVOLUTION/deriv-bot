@@ -507,7 +507,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const planned=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
     if(stakeCents!==planned)throw Error('DEMO_QUOTE_WRONG_NEXT_STAKE');
     const existing=this.read<{id:number;at:number}>('demo-browser-reservation');
-    if(existing&&epoch()-existing.at<180)throw Error('DEMO_BROWSER_ORDER_PENDING');
+    if(existing&&['UNKNOWN','OPEN'].includes((existing as {state?:string}).state||''))throw Error('DEMO_BROWSER_ORDER_PENDING');
     const creds=await this.verifiedDemoCredentials();
     const risk=this.riskFor(stakeCents);
     if(!risk.allowed)throw Error(risk.reason);
@@ -539,13 +539,14 @@ export class DerivDemoConnection extends DurableObject<Env> {
       symbol:'R_100',durationTicks:5,contractType:session.signal==='UP'?'CALL':'PUT',
       quotedAt:epoch(),stakeCents:input.stakeCents
     };
+    const current=this.getRiskSnapshot();
     const buy=buildDemoBuyRequest({
       accountType:'demo',currency:'USD',socketUrl:session.url,
       userEnabledDemoExecution:true,signal:input.signal,quote,now:epoch(),
-      openContracts:risk.openContracts,unknownCount:risk.unknownCount,
-      exposureCents:risk.openExposureCents,lifetimeNetCents:this.getRiskSnapshot().lifetimeNetCents,
+      openContracts:current.openContracts,unknownCount:current.unknownCount,
+      exposureCents:current.exposureCents,lifetimeNetCents:current.lifetimeNetCents,
       brokerBalanceCents:risk.brokerBalanceCents,baselineBalanceCents:risk.baselineBalanceCents,
-      halted:this.getRiskSnapshot().halted,maxConcurrent:this.chosenMaxConcurrent(),
+      halted:current.halted,maxConcurrent:this.chosenMaxConcurrent(),
       pilotPurchases:risk.pilotPurchases,pilotCommittedCents:risk.pilotCommittedCents,
       batchCommittedCents:risk.batchCommittedCents,batchSettlementPending:risk.batchSettlementPending
     });
