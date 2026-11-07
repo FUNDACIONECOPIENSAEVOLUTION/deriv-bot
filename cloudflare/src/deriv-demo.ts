@@ -1,5 +1,5 @@
 import { dayAt } from '../../runtime/core.mjs';
-import { assessDailyDemoRisk, DEMO_MAX_OPEN, DEMO_ALLOCATION_CENTS, DEMO_MIN_SETTLED_FOR_REVIEW, DEMO_STAKE_CENTS } from './demo-risk-policy';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
@@ -51,8 +51,9 @@ export const DEMO_QUOTE_REQUEST = Object.freeze({
   proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',
   duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1
 });
-export function demoQuoteRequest(signal:'UP'|'DOWN'='UP'){
-  return {...DEMO_QUOTE_REQUEST,contract_type:signal==='UP'?'CALL':signal==='DOWN'?'PUT':(()=>{throw Error('DEMO_SIGNAL_INVALID')})()};
+export function demoQuoteRequest(signal:'UP'|'DOWN'='UP',stakeCents=100){
+  if(![10,25,50,100].includes(stakeCents))throw Error('DEMO_STAKE_INVALID');
+  return {...DEMO_QUOTE_REQUEST,amount:stakeCents/100,contract_type:signal==='UP'?'CALL':signal==='DOWN'?'PUT':(()=>{throw Error('DEMO_SIGNAL_INVALID')})()};
 }
 
 const quoteMoney=(value:unknown):number|null=>{
@@ -60,7 +61,7 @@ const quoteMoney=(value:unknown):number|null=>{
   const number=Number(value);
   return Number.isFinite(number)&&number>=0&&number<=1_000_000?number:null;
 };
-export function parseDemoQuote(payload:unknown,signal:'UP'|'DOWN'='UP') {
+export function parseDemoQuote(payload:unknown,signal:'UP'|'DOWN'='UP',stakeCents=100) {
   if(!payload||typeof payload!=='object')throw Error('DERIV_QUOTE_INVALID_RESPONSE');
   const p=payload as Record<string,unknown>;
   if(p.req_id!==undefined&&p.req_id!==1)throw Error('DERIV_QUOTE_WRONG_REQUEST');
@@ -68,12 +69,12 @@ export function parseDemoQuote(payload:unknown,signal:'UP'|'DOWN'='UP') {
   if(rejected){
     const raw=rejected.code;
     const code=typeof raw==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(raw)?raw:'REJECTED';
-    return {accepted:false,code,stake:1,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT'};
+    return {accepted:false,code,stake:stakeCents/100,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT'};
   }
   if(p.msg_type!=='proposal'||!p.proposal||typeof p.proposal!=='object')throw Error('DERIV_QUOTE_INVALID_RESPONSE');
   const proposal=p.proposal as Record<string,unknown>,askPrice=quoteMoney(proposal.ask_price),payout=quoteMoney(proposal.payout);
   if(askPrice===null||payout===null)throw Error('DERIV_QUOTE_INVALID_RESPONSE');
-  return {accepted:true,stake:1,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT',
+  return {accepted:true,stake:stakeCents/100,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT',
     askPrice,payout,potentialProfit:Math.round((payout-askPrice)*100)/100,quotedAt:epoch()};
 }
 export function demoSocketUrl(payload:unknown):string {
@@ -87,7 +88,7 @@ export function demoSocketUrl(payload:unknown):string {
 }
 
 /** Fetch an exact demo-account quote, no buy/sell ever. */
-async function requestDemoQuote(wsUrl:string,signal:'UP'|'DOWN'='UP'):Promise<ReturnType<typeof parseDemoQuote>> {
+async function requestDemoQuote(wsUrl:string,signal:'UP'|'DOWN'='UP',stakeCents=100):Promise<ReturnType<typeof parseDemoQuote>> {
   const response=await fetch(wsUrl.replace(/^wss:/,'https:'),{
     headers:{Upgrade:'websocket'},redirect:'manual',signal:AbortSignal.timeout(8000)
   });
@@ -108,13 +109,13 @@ async function requestDemoQuote(wsUrl:string,signal:'UP'|'DOWN'='UP'):Promise<Re
         if(typeof event.data!=='string'||event.data.length>32768)throw Error('DERIV_QUOTE_INVALID_RESPONSE');
         const message=JSON.parse(event.data) as Record<string,unknown>;
         if(message.req_id!==undefined&&message.req_id!==1)return;
-        if(message.msg_type==='proposal'||message.error||message.errors)finish(undefined,parseDemoQuote(message,signal));
+        if(message.msg_type==='proposal'||message.error||message.errors)finish(undefined,parseDemoQuote(message,signal,stakeCents));
       }catch{finish(Error('DERIV_QUOTE_INVALID_RESPONSE'));}
     });
     socket.addEventListener('error',()=>finish(Error('DERIV_QUOTE_SOCKET_ERROR')));
     socket.addEventListener('close',()=>finish(Error('DERIV_QUOTE_SOCKET_CLOSED')));
     // No buy, sell, transfer, payout change or automatic stake escalation.
-    try{socket.send(JSON.stringify(demoQuoteRequest(signal)));}catch{finish(Error('DERIV_QUOTE_SEND_FAILED'));}
+    try{socket.send(JSON.stringify(demoQuoteRequest(signal,stakeCents)));}catch{finish(Error('DERIV_QUOTE_SEND_FAILED'));}
   });
 }
 
@@ -288,7 +289,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     this.write('snapshot',{account,checkedAt:epoch(),expiresAt:credentials.expiresAt});return this.status();
   }
 
-  async quote(signal:'UP'|'DOWN'='UP') {
+  async quote(signal:'UP'|'DOWN'='UP',stakeCents=100) {
     const snapshot=this.read<{account:DemoAccount;checkedAt:number;expiresAt:number}>('snapshot');
     if(!snapshot||snapshot.account.account_type!=='demo'||snapshot.account.currency!=='USD'||!this.status().connected)
       throw Error('DERIV_DEMO_REQUIRED');
@@ -305,7 +306,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       'https://api.derivws.com/trading/v1/options/accounts/'+accountId+'/otp',
       {method:'POST',headers:{Authorization:'Bearer '+credentials.accessToken},
         redirect:'manual',signal:AbortSignal.timeout(8000)}),8192);
-    return requestDemoQuote(demoSocketUrl(otp),signal);
+    return requestDemoQuote(demoSocketUrl(otp),signal,stakeCents);
   }
 
 
