@@ -35,6 +35,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.5 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T22:50:40.296Z (UTC).
+- **Commit de origen:** `0e49602fc0e8`.
+- Validar stakes DEMO 35/50/75/100 antes de desplegar corrección en Cloudflare
+
 ## v4.4 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T22:35:28.284Z (UTC).

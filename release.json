@@ -1,10 +1,10 @@
 {
-  "version": "4.4",
-  "updatedAt": "2026-11-07T22:35:28.284Z",
-  "summary": "Unificar importes del HTTP y motor de riesgo DEMO en una sola fuente de verdad para evitar regresiones",
+  "version": "4.5",
+  "updatedAt": "2026-11-07T22:50:40.296Z",
+  "summary": "Validar stakes DEMO 35/50/75/100 antes de desplegar corrección en Cloudflare",
   "changes": [
-    "Unificar importes del HTTP y motor de riesgo DEMO en una sola fuente de verdad para evitar regresiones"
+    "Validar stakes DEMO 35/50/75/100 antes de desplegar corrección en Cloudflare"
   ],
-  "sourceCommit": "5284fba62f704ce40eaf6a2e83bd2caa2ed2beb4",
+  "sourceCommit": "0e49602fc0e8661bfb8280afcdf03396539b8b47",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
