@@ -34,18 +34,31 @@ El plan Free tiene límites compartidos de solicitudes, duración y almacenamien
 
 Referencias oficiales: https://developers.cloudflare.com/durable-objects/platform/pricing/ , https://developers.cloudflare.com/cf/projects/cloudflare-config/ , https://developers.cloudflare.com/workers/testing/vitest-integration/ , https://developers.deriv.com/es/docs/options/ws-public/
 
-## Deriv DEMO — primera tanda de 10 operaciones US$1 virtuales (07/11/2026)
+## Deriv DEMO — preparación para entrenamiento controlado (07/11/2026)
 
-**PREPARADO EN PR #11; AÚN NO DESPLEGADO NI COMPROBADO CON LA CUENTA AUTORIZADA.** Ver [plan de integración](PLAN_INTEGRACION_DERIV_DEMO_2026-11-07.md).
+**Estado real: PR #11 en borrador, sin fusionar ni desplegar, sin órdenes autenticadas con la cuenta del titular.** La página pública GitHub Pages ejecuta un simulador PAPER distinto, no el saldo oficial de Deriv.
 
-Se han incorporado una cotización de **US$1 virtual** para CALL/PUT sobre R_100 a 20 ticks, una compra única bajo una propuesta del broker, conciliación por contract ID y acumulación de resultados netos. No existe ningún canal para comprar en cuenta real.
+La integración en preparación consulta únicamente la cuenta **DEMO USD** a través de OAuth2 PKCE y un canal OTP restringido a `/trading/v1/options/ws/demo`. El bot no contiene rutas de compra de dinero real. La cuenta muestra un saldo previsto de US$10.000, que debe ser confirmado por la API autenticada antes de habilitar operaciones.
 
-La primera tanda utiliza **solo US$10 virtuales** de asignación interna y permite hasta **10 contratos DEMO abiertos**; como máximo **10 compras acumuladas** en la fase inicial, independientemente de las ganancias. Después de diez compras, el bot se detiene hasta revisar los diez resultados. También se detiene ante un ACK de compra desconocido, falta de cotizaciones actuales, datos incorrectos, exposición superior al presupuesto o controles de pérdida.
+### Opciones de entrenamiento
 
-`DEMO_BUY_ENABLED=false` y `DEMO_AUTO_ENABLED=false` por defecto. Habilitar solo después de comprobar **OAuth demo**, OTP, propuesta oficial, una primera compra virtual y liquidación verificada. La automatización se solicita expresamente desde el panel privado y como máximo evalúa una entrada nueva por minuto. El servicio programado puede verificar liquidaciones sin realizar compras.
+- Importes virtuales rotativos fijos: **US$0,10, US$0,25, US$0,50 y US$1** por contrato; los importes rechazados no se incrementan automáticamente.
+- Instrumento inicial R_100, dirección CALL o PUT según señal confirmada, 20 ticks de duración. Se registra cada compra, entrada, resultado y señales SMA/RSI. No hay predicciones infalibles.
+- El panel ofrece un **selector de 1 a 10 contratos DEMO abiertos simultáneamente**. La selección se valida otra vez en el Durable Object antes de transmitir cada compra, para impedir carreras entre solicitudes.
+- La parada rígida se fija en **US$9.900** de saldo oficial o antes si el coste de los contratos abiertos puede superar una pérdida de US$100 con respecto a US$10.000. La pérdida realizada se consulta directamente del broker y se contrasta con el registro.
+- Ante una compra sin confirmación, bloquea todas las compras hasta conciliarla con Deriv; jamás repite automáticamente la orden incierta. Consulta liquidaciones pendientes sin emitir nuevas compras.
+- Muestra en el panel **separadamente** saldo oficial de Deriv, exposición de contratos abiertos, P&L verificado y saldo ficticio PAPER. Junto a las velas se muestra el estado oficial con marca de actualización; datos no verificados llevan ese aviso.
+- Métricas por importe: intentos aceptados/rechazados, ganancias, pérdidas, acierto y resultado neto. Atribuir la causa a indicadores requiere pruebas prospectivas adicionales.
 
-Las métricas históricas contienen ganancia/pérdida oficial por contrato, indicadores, acierto, P&L neto, expectativa y drawdown. Esos datos sirven para analizar errores y versionar hipótesis. Un resultado de 9/10 no demuestra una probabilidad del 90 % ni implica que las operaciones futuras ganen.
+### Activación aún pendiente
 
-Los casos de resultado incierto permanecen bloqueados hasta conciliación con el historial del broker. Los porcentajes de 70, 80, 90 o 100 % nunca habilitan dinero real automáticamente.
+1. Obtener acceso autorizado al proyecto Cloudflare que hospeda `ecopiensa-paper-10`, verificar que existen los recursos, los secretos y los límites disponibles. GitHub CI solo prepara la compilación, **no despliega**.
+2. Validar `ADMIN_TOKEN` privado, HTTPS, la URL real del Worker, la app Deriv y su redirect OAuth. No registrar tokens ni contraseñas en este repositorio público ni compartirlos por chat.
+3. Desplegar la rama revisada, verificar el acceso real a una cuenta **DEMO USD** y el saldo oficial de US$10.000, sin conectar cuenta real.
+4. Validar **cotizaciones** con los cuatro importes. Activar `DEMO_BUY_ENABLED` solo para una **compra virtual de prueba** y comprobar el contrato y su liquidación. Ante respuestas desconocidas, detener y conciliar.
+5. Tras esa prueba, autorizar opcionalmente `DEMO_AUTO_ENABLED` **solo para DEMO** y pulsar el botón del panel. El cron evalúa oportunidades cada minuto; no garantiza que haya señal, ejecución en ese momento ni ganancias.
+6. Si hay una caída de US$100 respecto de US$10.000, detener y reportar con datos verificados. No cambiar a capital real por ningún porcentaje de acierto.
+
+**No existe activación remota desde este chat sin un servicio conectado y autorizado.** La apertura de una pestaña de Deriv en el navegador no transfiere la sesión OAuth al Worker. La puesta en marcha requiere una sesión de Cloudflare y una autorización de Deriv DEMO efectuadas por el titular.
 
 Documentación: https://developers.deriv.com/docs/options/ws-demo/ , https://developers.deriv.com/docs/trading/proposal/ , https://developers.deriv.com/docs/trading/buy/ , https://developers.deriv.com/docs/trading/proposal-open-contract/ .
