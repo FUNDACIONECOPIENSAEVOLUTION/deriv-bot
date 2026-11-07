@@ -167,6 +167,23 @@ const proposalRequest=(direction,stakeCents)=>({
  contract_type:direction==='UP'?'CALL':'PUT',underlying_symbol:'R_100',
  duration:5,duration_unit:'t',req_id:1
 });
+async function browserPublicContracts(){
+ const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public');
+ try{
+  const items=[];
+  for(const [i,symbol] of ['R_100','1HZ100V'].entries()){
+   const q=await brokerMessage(ws,{contracts_for:symbol,req_id:51+i});
+   if(q.error||q.errors){items.push(symbol+': rechazo de Deriv');continue;}
+   const list=q.contracts_for?.available||q.contracts_for?.contracts;
+   if(!Array.isArray(list)){items.push(symbol+': formato no reconocido');continue;}
+   const types=new Set(list.map(x=>x.contract_type));
+   items.push(symbol+': '+list.length+' contratos, CALL '+(types.has('CALL')?'sí':'no')+
+    ', PUT '+(types.has('PUT')?'sí':'no'));
+  }
+  return items.join(' · ');
+ }finally{try{ws.close();}catch{}}
+}
+
 async function directPublicQuote(direction,stakeCents){
  const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public');
  try{return await brokerMessage(ws,proposalRequest(direction,stakeCents));}
@@ -398,7 +415,9 @@ function renderDemo(data){
      +' · Abiertos: '+(report.openCount||0)+'/'+selectedConcurrent
     +' · Saldo DEMO comprobado: '+(report.brokerBalanceCents===null?'sin verificar':money(report.brokerBalanceCents))
     +' · Compras sin confirmación: '+(report.unknownCount||0)
-    +' · DEMO liquidadas: '+(report.settled||0)
+    +' · DEMO liquidadas registradas: '+(report.settled||0)
+     +' · Verificadas en servidor: '+(report.brokerVerifiedSettled||0)
+     +' · Observadas por navegador: '+(report.browserObservedSettled||0)
     +' · Ganadas: '+(report.wins||0)+' · Perdidas: '+(report.losses||0)
     +' · Acierto: '+(report.winRatePct===null?'sin datos':String(report.winRatePct)+' %')
     +' · Resultado neto virtual: '+money(report.pnlCents||0)+'.';
@@ -495,7 +514,16 @@ $('deriv-market-check').onclick=async()=>{
     ).join(' · ')+'. Esta prueba no compra ni autoriza cambiar el mercado del bot.';
   }catch(error){
     const m=error instanceof Error?error.message:'ERROR_DE_CONEXIÓN';
-    out.textContent='No pudo comprobarse la disponibilidad: '+m.slice(0,180)+'. No se compró ningún contrato.';
+    if(/DERIV_(?:SOCKET_CONNECT|MARKET_SOCKET|MARKET_TIMEOUT)/.test(m)){
+      try{
+        const result=await browserPublicContracts();
+        out.textContent='Disponibilidad consultada desde tu navegador: '+result+
+          '. Esta comprobación pública no compra contratos.';
+      }catch(browserError){
+        out.textContent='No hay comprobación de contratos verificable desde este navegador ('+
+          (browserError instanceof Error?browserError.message:'ERROR')+'). Ninguna compra realizada.';
+      }
+    }else out.textContent='No pudo comprobarse la disponibilidad: '+m.slice(0,180)+'. Ninguna compra realizada.';
   }finally{btn.disabled=false;}
 };
 $('deriv-quote').onclick=async()=>{
