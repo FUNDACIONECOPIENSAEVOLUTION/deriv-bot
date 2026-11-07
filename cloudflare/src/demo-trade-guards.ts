@@ -1,3 +1,5 @@
+import { assessDailyDemoRisk, DEMO_ALLOCATION_CENTS, DEMO_MAX_OPEN, DEMO_STAKE_CENTS } from './demo-risk-policy';
+
 /**
  * Side-effect-free safety gate for a future broker DEMO order executor.
  *
@@ -7,7 +9,7 @@
  */
 export type DemoQuoteForBuy = {
   id:string; askPrice:number; payout:number; quotedAt:number;
-  symbol:'R_100'; contractType:'CALL'; durationTicks:20; stake:0.10;
+  symbol:'R_100'; contractType:'CALL'|'PUT'; durationTicks:20; stake:0.10;
 };
 export type DemoTradeGate = {
   accountType:'demo'|'real'|'unknown';
@@ -27,13 +29,17 @@ export type DemoTradeGate = {
   activeExposureCents?:number;
   /** Total realized broker-verified P&L, all days, in cents. */
   lifetimePnlCents?:number;
+  /** Signed daily broker-verified net P&L, not cumulative loss of losing tickets. */
+  dailyNetPnlCents?:number;
+  /** Count of today's broker-confirmed settled contracts. */
+  dailySettled?:number;
+  /** Sticky day-stop stored in the database, not recalculated away when late trades settle. */
+  haltedToday?:boolean;
 };
 
 const MAX_STAKE_CENTS=10;
-export const DEMO_RESEARCH_ALLOCATION_CENTS=1000;
-export const DEMO_MAX_PARALLEL_CONTRACTS=3;
-const DAILY_LOSS_LIMIT_CENTS=30;
-const MAX_DAILY_TRADES=12;
+export const DEMO_RESEARCH_ALLOCATION_CENTS=DEMO_ALLOCATION_CENTS;
+export const DEMO_MAX_PARALLEL_CONTRACTS=DEMO_MAX_OPEN;
 const MAX_QUOTE_AGE_SECONDS=8;
 
 const cents=(input:unknown):number|null=>{
@@ -53,26 +59,21 @@ export function buildDemoBuyRequest(gate:DemoTradeGate){
     ||parsed.username||parsed.password||parsed.port||parsed.hash
     ||parsed.searchParams.size!==1||!parsed.searchParams.get('otp'))throw Error('DEMO_SOCKET_REQUIRED');
   if(!gate.userEnabledDemoExecution)throw Error('DEMO_EXECUTION_DISABLED');
-  if(gate.signal!=='UP')throw Error('NO_APPROVED_SIGNAL');
-  // An UNKNOWN broker response is an account-level emergency stop. Confirmed
-  // OPEN demo positions can coexist, up to three, when budget permits.
-  const open=gate.openContracts===undefined?(gate.hasOpenContract?DEMO_MAX_PARALLEL_CONTRACTS:0):gate.openContracts;
-  if(!Number.isSafeInteger(open)||open<0||open>DEMO_MAX_PARALLEL_CONTRACTS
-    ||gate.unresolvedBuy||open>=DEMO_MAX_PARALLEL_CONTRACTS)throw Error('DEMO_POSITION_UNRESOLVED');
-  const exposure=gate.activeExposureCents===undefined?open*MAX_STAKE_CENTS:gate.activeExposureCents;
-  if(!Number.isSafeInteger(exposure)||exposure<open*MAX_STAKE_CENTS||exposure>DEMO_RESEARCH_ALLOCATION_CENTS)
-    throw Error('DEMO_EXPOSURE_INVALID');
+  if(gate.signal!=='UP'&&gate.signal!=='DOWN')throw Error('NO_APPROVED_SIGNAL');
+  const open=gate.openContracts===undefined?(gate.hasOpenContract?DEMO_MAX_OPEN:0):gate.openContracts;
+  const exposure=gate.activeExposureCents===undefined?open*DEMO_STAKE_CENTS:gate.activeExposureCents;
   const lifetime=gate.lifetimePnlCents??0;
-  if(!Number.isSafeInteger(lifetime)||Math.abs(lifetime)>100000000)throw Error('DEMO_ALLOCATION_INVALID');
-  if(DEMO_RESEARCH_ALLOCATION_CENTS+lifetime-exposure<MAX_STAKE_CENTS)
-    throw Error('DEMO_ALLOCATION_EXHAUSTED');
-  if(!Number.isSafeInteger(gate.todayTrades)||gate.todayTrades<0||gate.todayTrades>=MAX_DAILY_TRADES)
-    throw Error('DEMO_TRADE_LIMIT');
-  if(!Number.isSafeInteger(gate.todayLossCents)||gate.todayLossCents<0
-    ||gate.todayLossCents+exposure+MAX_STAKE_CENTS>DAILY_LOSS_LIMIT_CENTS)
-    throw Error('DEMO_LOSS_LIMIT');
+  const dailyNet=gate.dailyNetPnlCents??-gate.todayLossCents;
+  if(!Number.isSafeInteger(gate.todayTrades)||gate.todayTrades<0)throw Error('DEMO_RISK_INVALID');
+  const risk=assessDailyDemoRisk({
+    openContracts:open,unknownCount:gate.unresolvedBuy?1:0,
+    exposureCents:exposure,lifetimeNetCents:lifetime,
+    dailyNetCents:dailyNet,dailySettled:gate.dailySettled??0,haltedToday:gate.haltedToday===true
+  });
+  if(!risk.allowed)throw Error(risk.reason);
   const q=gate.quote;
-  if(q.symbol!=='R_100'||q.contractType!=='CALL'||q.durationTicks!==20||q.stake!==0.10)
+  const requiredType=gate.signal==='UP'?'CALL':'PUT';
+  if(q.symbol!=='R_100'||q.contractType!==requiredType||q.durationTicks!==20||q.stake!==0.10)
     throw Error('DEMO_CONTRACT_NOT_ALLOWED');
   if(!/^[A-Za-z0-9_-]{32,128}$/.test(q.id))throw Error('DEMO_PROPOSAL_ID_INVALID');
   if(!Number.isSafeInteger(gate.now)||!Number.isSafeInteger(q.quotedAt)
@@ -113,7 +114,7 @@ export function parseDemoSettlement(raw:unknown,expectedContractId:number):DemoS
   if(data.is_sold===false||data.is_sold===0)return null;
   if(data.is_sold!==true&&data.is_sold!==1)throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
   if(data.currency!==undefined&&data.currency!=='USD')throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
-  if(data.contract_type!==undefined&&data.contract_type!=='CALL')throw Error('DEMO_SETTLEMENT_WRONG_TYPE');
+  if(data.contract_type!==undefined&&data.contract_type!=='CALL'&&data.contract_type!=='PUT')throw Error('DEMO_SETTLEMENT_WRONG_TYPE');
   if(data.underlying_symbol!==undefined&&data.underlying_symbol!=='R_100')throw Error('DEMO_SETTLEMENT_WRONG_SYMBOL');
   const profit=cents(data.profit),buy=cents(data.buy_price),payout=cents(data.payout);
   if(profit===null||buy!==MAX_STAKE_CENTS||payout===null||payout<0)
