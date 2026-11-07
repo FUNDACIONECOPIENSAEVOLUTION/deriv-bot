@@ -31,7 +31,7 @@
 <p id="demo-quote" class="note" role="status">Solo se consultará un precio al broker. No se comprará ningún contrato y no se incrementará el importe si Deriv lo rechaza.</p>
 <div class="divider"></div>
 <h2>Prueba con operaciones reales en la cuenta DEMO (saldo virtual)</h2>
-<p class="note">La ejecución está desactivada hasta aprobar la configuración del servidor. Solo admite una compra DEMO CALL/R_100 de USD 0,10, 20 ticks, con señal alcista reciente. Nunca utiliza saldo real.</p>
+<p class="note">La ejecución está desactivada hasta aprobar la configuración del servidor. Presupuesto interno de investigación: USD 10 del saldo DEMO; como máximo tres contratos virtuales CALL/R_100 simultáneos, USD 0,10 por contrato y 20 ticks. Ningún uso de dinero real.</p>
 <div class="tools">
   <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
   <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
@@ -144,16 +144,24 @@ function renderDemo(data){
   const eligible=state?.running===true&&state?.market?.state==='live'
     &&state?.config?.symbol==='R_100'&&state?.decision?.direction===1
     &&Number.isFinite(state?.quoteAgeSeconds)&&state.quoteAgeSeconds>=0&&state.quoteAgeSeconds<=10;
-  $('demo-buy-once').disabled=!(data.connected&&data.demoTradingEnabled&&eligible&&!pending);
-  $('demo-check').disabled=!(data.connected&&pending&&pending.state==='OPEN');
-  $('demo-trade-summary').textContent='Operaciones DEMO liquidadas: '+(report.settled||0)
-    +' · Aciertos: '+(report.wins||0)+' · Fallos: '+(report.losses||0)
-    +' · Porcentaje de acierto: '+(report.winRatePct===null?'sin datos':String(report.winRatePct)+' %')
-    +' · Resultado NETO virtual verificado: '+money(report.pnlCents||0)+'.';
+  $('demo-buy-once').disabled=!(data.connected&&data.demoTradingEnabled&&eligible
+    &&(report.unknownCount||0)===0&&(report.openCount||0)<3
+    &&Number(report.virtualResearchRemainingCents)>=10);
+  $('demo-check').disabled=!(data.connected&&(report.openCount||0)>0);
+  $('demo-trade-summary').textContent='Asignación virtual inicial: USD 10'
+    +' · Disponibilidad estimada de la asignación: '+money(report.virtualResearchRemainingCents??1000)
+    +' · Abiertos: '+(report.openCount||0)+'/3'
+    +' · Compras sin confirmación: '+(report.unknownCount||0)
+    +' · DEMO liquidadas: '+(report.settled||0)
+    +' · Ganadas: '+(report.wins||0)+' · Perdidas: '+(report.losses||0)
+    +' · Acierto: '+(report.winRatePct===null?'sin datos':String(report.winRatePct)+' %')
+    +' · Resultado neto virtual: '+money(report.pnlCents||0)+'.';
   $('demo-trade-status').textContent=!data.demoTradingEnabled
-    ?'La compra DEMO está deshabilitada en el servidor hasta completar su validación.'
-    :pending?(pending.state==='UNKNOWN'?'Resultado de compra sin confirmar: no volver a comprar hasta conciliar con Deriv.':'Hay un contrato DEMO abierto; verifica su liquidación.')
-    :eligible?'Señal alcista reciente; puedes decidir si haces UNA operación virtual.':'Esperando señal alcista verificable del motor PAPER.';
+    ?'Las compras DEMO siguen deshabilitadas en el servidor hasta validar la integración.'
+    :(report.unknownCount||0)>0?'Compra DEMO sin confirmar: quedan bloqueadas todas las nuevas compras hasta conciliarla con Deriv.'
+    :(report.openCount||0)>=3?'Tres contratos DEMO pendientes: espera una liquidación antes de comprar más.'
+    :eligible?'Señal alcista reciente: puedes decidir si compras UN contrato virtual. Se permiten hasta tres simultáneos.'
+    :'Esperando señal alcista actual y datos verificables de Deriv.';
   const history=$('demo-trade-history');history.replaceChildren();
   for(const item of report.history||[]){
     const tr=document.createElement('tr');
