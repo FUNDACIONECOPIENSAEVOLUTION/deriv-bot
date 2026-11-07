@@ -10,7 +10,7 @@ export type DemoTradeGate = {
   userEnabledDemoExecution:boolean;signal:'UP'|'DOWN'|'HOLD';
   quote:DemoQuoteForBuy;now:number;openContracts:number;unknownCount:number;
   exposureCents:number;lifetimeNetCents:number;brokerBalanceCents:number;
-  baselineBalanceCents:number;halted:boolean;
+  baselineBalanceCents:number;halted:boolean;maxConcurrent?:number;
 };
 const cents=(input:unknown):number|null=>{
   if(typeof input!=='number' && !(typeof input==='string' && /^-?(?:0|[1-9][0-9]*)(?:[.][0-9]{1,8})?$/.test(input)))return null;
@@ -34,7 +34,7 @@ export function buildDemoBuyRequest(gate:DemoTradeGate) {
     openContracts:gate.openContracts,unknownCount:gate.unknownCount,
     exposureCents:gate.exposureCents,lifetimeNetCents:gate.lifetimeNetCents,
     brokerBalanceCents:gate.brokerBalanceCents,baselineBalanceCents:gate.baselineBalanceCents,
-    halted:gate.halted,stakeCents:q.stakeCents
+    halted:gate.halted,maxConcurrent:gate.maxConcurrent,stakeCents:q.stakeCents
   });
   if(!risk.allowed)throw Error(risk.reason);
   if(q.symbol!=='R_100'||q.contractType!==(gate.signal==='UP'?'CALL':'PUT')
