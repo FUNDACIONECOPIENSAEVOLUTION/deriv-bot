@@ -1,11 +1,10 @@
 {
-  "version": "6.5",
-  "updatedAt": "2026-11-07T23:57:55.438Z",
-  "summary": "Validar herramienta MCP de diez PAPER contra el motor original sin operaciones al broker",
+  "version": "6.6",
+  "updatedAt": "2026-11-07T23:59:25.719Z",
+  "summary": "Crear página pública para ejecutar diez simulaciones PAPER del bot con histórico real y sin cuentas",
   "changes": [
-    "Validar herramienta MCP de diez PAPER contra el motor original sin operaciones al broker",
-    "Agregar herramienta MCP para ejecutar diez simulaciones PAPER del bot con históricos públicos sin órdenes Deriv"
+    "Crear página pública para ejecutar diez simulaciones PAPER del bot con histórico real y sin cuentas"
   ],
-  "sourceCommit": "70baabd6bfb2de17ce5d7cc5ce373c9471258edf",
+  "sourceCommit": "ea3d85deb26584be9cd42cbed27b90b35e678101",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

@@ -56,6 +56,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.6 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:59:25.719Z (UTC).
+- **Commit de origen:** `ea3d85deb265`.
+- Crear página pública para ejecutar diez simulaciones PAPER del bot con histórico real y sin cuentas
+
 ## v6.5 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:57:55.438Z (UTC).
