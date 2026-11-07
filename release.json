@@ -1,10 +1,10 @@
 {
-  "version": "3.7",
-  "updatedAt": "2026-11-07T20:46:18.892Z",
-  "summary": "Distinguir restricciones del contrato con matriz pública sin órdenes: stake, CALL/PUT y duración en R_100 y 1HZ100V",
+  "version": "3.8",
+  "updatedAt": "2026-11-07T20:47:06.840Z",
+  "summary": "Confirmar mediante propuestas públicas mínimas US$0.35/0.50/0.75/1 y 5 ticks antes de modificar bot",
   "changes": [
-    "Distinguir restricciones del contrato con matriz pública sin órdenes: stake, CALL/PUT y duración en R_100 y 1HZ100V"
+    "Confirmar mediante propuestas públicas mínimas US$0.35/0.50/0.75/1 y 5 ticks antes de modificar bot"
   ],
-  "sourceCommit": "6524747d57334a95c5c5dc02e57944e9e7307c07",
+  "sourceCommit": "bd4abbd1b5ddc60f923cf682424f95147052ab76",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

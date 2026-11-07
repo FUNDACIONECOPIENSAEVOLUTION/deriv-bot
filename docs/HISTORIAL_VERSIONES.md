@@ -28,6 +28,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.8 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:47:06.840Z (UTC).
+- **Commit de origen:** `bd4abbd1b5dd`.
+- Confirmar mediante propuestas públicas mínimas US$0.35/0.50/0.75/1 y 5 ticks antes de modificar bot
+
 ## v3.7 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:46:18.892Z (UTC).
