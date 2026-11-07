@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 const release=JSON.parse(readFileSync('release.json','utf8'));
-assert.match(release.version,/^\\d+\\.[0-9]$/);
+assert.match(release.version,/^\d+\.[0-9]$/);
 assert.ok(Number.isFinite(Date.parse(release.updatedAt)),'Release debe tener fecha válida');
 assert.ok(Array.isArray(release.changes)&&release.changes.length>0,'Historial de mejoras obligatorio');
 const panel=readFileSync('runtime/dashboard.html','utf8');
