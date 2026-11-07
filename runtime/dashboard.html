@@ -278,6 +278,94 @@ async function oneBrowserDemoBuy(approved,msg){
  }finally{try{ws.close();}catch{}}
 }
 
+/**
+ * Owner-initiated comparative experiment. Ten NEW DEMO trades, alternating
+ * five CALL and five PUT. No background loop: leaving this page stops new buys.
+ * Every order uses a new authenticated DEMO OTP, and durable UNKNOWN reservation
+ * before buy. No retry after an ambiguous acknowledgement.
+ */
+async function trialBrokerSnapshot(){
+ const response=await fetch('/api/deriv/refresh',{method:'POST',
+  headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+  body:'{}',signal:AbortSignal.timeout(16000)});
+ if(!response.ok)throw Error('DEMO_BALANCE_REFRESH_FAILED');
+ const data=await response.json(),r=data.tradeReport||{};
+ if(!data.connected||data.account?.type!=='demo'||!data.demoTradingEnabled)
+   throw Error('DEMO_ACCOUNT_NOT_READY');
+ if(data.demoAutomationRequested)throw Error('DEMO_ANOTHER_AUTOMATION_ACTIVE');
+ if((r.unknownCount||0)>0||(r.openCount||0)>0)
+   throw Error('DEMO_CONTRACT_PENDING_RECONCILIATION');
+ if(!r.risk?.allowed||!Number.isInteger(data.nextManualStakeCents))
+   throw Error('DEMO_RISK_BLOCKED_'+String(r.risk?.reason||'UNVERIFIED').replace(/[^A-Z0-9_]/g,'').slice(0,45));
+ if(![35,50,75,100].includes(data.nextManualStakeCents))
+   throw Error('DEMO_STAKE_INVALID');
+ return data;
+}
+async function runBalancedDemoTrial(){
+ const out=$('demo-balanced-status');
+ let completed=0,wins=0,losses=0,net=0,gross=0,consecutiveLosses=0;
+ const outcomes=[];
+ demoBalancedRunning=true;demoBalancedStop=false;
+ $('demo-balanced-start').disabled=true;
+ $('demo-balanced-stop').disabled=false;
+ const update=(message)=>{
+  out.textContent='Ensayo 5 CALL / 5 PUT · '+completed+'/10 liquidaciones observadas · '+
+   wins+' ganadas, '+losses+' perdidas · neto '+money(net)+
+   ' · apuestas '+money(gross)+' / US$10. '+message;
+ };
+ try{
+  for(let i=0;i<10;i++){
+   // Explicitly never continue from a hidden tab or after the owner pauses.
+   if(demoBalancedStop||document.hidden){update('Detenido por usuario o pestaña oculta.');break;}
+   const direction=i%2===0?'UP':'DOWN';
+   const snap=await trialBrokerSnapshot();
+   const before=snap.tradeReport,stakeCents=snap.nextManualStakeCents;
+   if((before.pilotRemainingPurchases||0)<1||gross+stakeCents>1000){
+    update('Límite de 50 contratos del piloto o US$10 alcanzado.');break;
+   }
+   if((before.brokerBalanceCents??0)<99000){
+    update('Saldo de cuenta DEMO insuficiente para continuar.');break;
+   }
+   update('Contrato '+(i+1)+'/10 '+(direction==='UP'?'CALL':'PUT')+
+      ' por '+money(stakeCents)+'; adquiriendo UNA propuesta DEMO validada.');
+   demoManualApproval=null;
+   const result=await oneBrowserDemoBuy({direction,stakeCents,pilot:'balanced-ten'},out);
+   if(result?.state!=='SETTLED'){
+    update('Detenido: Deriv no confirmó compra y liquidación sin incertidumbre. NO repetir.');
+    break;
+   }
+   const verify=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(8500)});
+   if(!verify.ok)throw Error('DEMO_LEDGER_UNAVAILABLE');
+   const after=(await verify.json()).tradeReport||{};
+   if(after.pilotPurchases!==before.pilotPurchases+1||
+      after.settled!==before.settled+1||
+      after.history?.[0]?.contractId!==result.contractId||
+      (after.unknownCount||0)>0||(after.openCount||0)>0)
+       throw Error('DEMO_LEDGER_MISMATCH_NO_RETRY');
+   completed++;gross+=stakeCents;net+=result.pnlCents;
+   if(result.pnlCents>0){wins++;consecutiveLosses=0;}
+   else if(result.pnlCents<0){losses++;consecutiveLosses++;}
+   outcomes.push({id:result.contractId,direction,stakeCents,pnlCents:result.pnlCents});
+   update('Último contrato '+result.contractId+' '+(result.pnlCents>0?'ganó':result.pnlCents<0?'perdió':'empatado')+
+      ' '+money(result.pnlCents)+'.');
+   // Session-only protective stops, stricter than the global virtual US$100 stop.
+   if(net<=-300){update('Parada: pérdidas netas de US$3 en este ensayo.');break;}
+   if(consecutiveLosses>=3){update('Parada: 3 contratos perdidos consecutivamente.');break;}
+   if(demoBalancedStop||document.hidden){update('Detenido después de liquidar el contrato.');break;}
+   if(i<9)await new Promise(resolve=>setTimeout(resolve,3000));
+  }
+  if(completed===10)update('Finalizado 10/10: cinco CALL y cinco PUT. Exporta el CSV para análisis.');
+  else if(!demoBalancedStop&&outcomes.length===0)update('No se confirmó ningún contrato nuevo.');
+ }catch(error){
+  update('DETENIDO por seguridad: '+(error instanceof Error?error.message:'ERROR')+
+   '. No reiniciar ante una orden sin confirmación.');
+ }finally{
+  demoBalancedRunning=false;demoBalancedStop=false;
+  $('demo-balanced-stop').disabled=true;
+  await loadDemo();
+ }
+}
+
 const reasons={WARMUP:'Espera al menos 30 precios.',HIGH_VOLATILITY:'La volatilidad supera el filtro de 0,45 %.',NO_TREND:'Las medias todavía no muestran una dirección suficiente.',RSI_CONFLICT:'La dirección de las medias y el RSI no coinciden.',TREND_AND_MOMENTUM:'Las medias y el RSI coinciden dentro del filtro de volatilidad.'};
 const feedLabels={stopped:'Detenida',live:'Recibiendo precios',connecting:'Conectando',syncing:'Cargando historial',disconnected:'Desconectada',recovering:'Recuperando'};
 let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0,arbFetched=0;
