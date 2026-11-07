@@ -450,6 +450,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(enabled){
       if(String(this.env.DEMO_AUTO_ENABLED)!=='true'||String(this.env.DEMO_BUY_ENABLED)!=='true')
         throw Error('DEMO_AUTO_DISABLED');
+      // Never launch the 50-trade campaign until a real broker DEMO settlement
+      // from a single owner-approved manual order has been reconciled.
+      if(this.reportDemo().settled<1)throw Error('DEMO_FIRST_SETTLEMENT_REQUIRED');
       await this.verifiedDemoCredentials();
       const next=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
       const snapshot=this.getRiskSnapshot();
