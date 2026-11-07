@@ -1,6 +1,6 @@
 name: Publicar Deriv DEMO en Cloudflare — aprobación manual
 on:
-  # One deployment attempt after the workflow is installed or revised on main.
+  # v1.5: publish only after this workflow itself is explicitly reviewed and updated.
   # Every deployment keeps both broker DEMO buy switches OFF.
   push:
     branches: [main]
