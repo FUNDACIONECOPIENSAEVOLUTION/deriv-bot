@@ -23,12 +23,12 @@ describe('future demo-only order gating',()=>{
     [{socketUrl:'wss://api.derivws.com/trading/v1/options/ws/demo?otp=secret&redirect=evil'},'DEMO_SOCKET_REQUIRED'],
     [{userEnabledDemoExecution:false},'DEMO_EXECUTION_DISABLED'],
     [{signal:'HOLD'},'NO_APPROVED_SIGNAL'],
-    [{signal:'DOWN'},'NO_APPROVED_SIGNAL'],
-    [{hasOpenContract:true},'DEMO_POSITION_UNRESOLVED'],
-    [{unresolvedBuy:true},'DEMO_POSITION_UNRESOLVED'],
-    [{todayTrades:12},'DEMO_TRADE_LIMIT'],
-    [{todayLossCents:30},'DEMO_LOSS_LIMIT'],
-    [{todayLossCents:21},'DEMO_LOSS_LIMIT'],
+    [{signal:'DOWN'},'DEMO_CONTRACT_NOT_ALLOWED'],
+    [{openContracts:10,activeExposureCents:100},'DEMO_MAX_OPEN'],
+    [{unresolvedBuy:true},'DEMO_BUY_OUTCOME_UNKNOWN'],
+    [{dailyNetPnlCents:-10,dailySettled:10,lifetimePnlCents:-10},'DEMO_DAY_NOT_PROFITABLE'],
+    [{dailyNetPnlCents:8,dailySettled:20,haltedToday:true},'DEMO_DAY_HALTED'],
+    [{openContracts:9,activeExposureCents:90,dailyNetPnlCents:-2},'DEMO_DAILY_RISK_FLOOR'],
     [{now:1750000110},'DEMO_QUOTE_STALE'],
     [{quote:{...gate.quote,id:'short'}},'DEMO_PROPOSAL_ID_INVALID'],
     [{quote:{...gate.quote,askPrice:0.11}},'DEMO_PRICE_NOT_ALLOWED'],
@@ -37,6 +37,11 @@ describe('future demo-only order gating',()=>{
     [{quote:{...gate.quote,durationTicks:40}},'DEMO_CONTRACT_NOT_ALLOWED'],
   ] as const)('blocks unsafe input %#',(change,code)=>{
     expect(()=>buildDemoBuyRequest({...gate,...change} as DemoTradeGate)).toThrow(code);
+  });
+  it('accepts an explicit DOWN signal with broker PUT proposal, not a CALL',()=>{
+    const put={...gate,signal:'DOWN' as const,quote:{...gate.quote,contractType:'PUT' as const}};
+    expect(buildDemoBuyRequest(put)).toEqual({buy:proposalId,price:0.10,req_id:2});
+    expect(()=>buildDemoBuyRequest({...put,quote:gate.quote})).toThrow('DEMO_CONTRACT_NOT_ALLOWED');
   });
 });
 describe('buy and payout record parsing',()=>{
@@ -68,24 +73,23 @@ describe('buy and payout record parsing',()=>{
   });
 });
 
-describe('up to three concurrent virtual DEMO contracts under the USD 10 allocation',()=>{
- it('allows second and third DEMO exposures while respecting an aggregate daily risk of USD 0.30',()=>{
-   const second={...gate,hasOpenContract:true,openContracts:1,activeExposureCents:10,
-     lifetimePnlCents:0};
-   expect(buildDemoBuyRequest(second)).toEqual({buy:proposalId,price:0.10,req_id:2});
-   const third={...second,openContracts:2,activeExposureCents:20};
-   expect(buildDemoBuyRequest(third).price).toBe(0.10);
-   expect(()=>buildDemoBuyRequest({...third,openContracts:3,activeExposureCents:30}))
-     .toThrow('DEMO_POSITION_UNRESOLVED');
-   expect(()=>buildDemoBuyRequest({...third,todayLossCents:10}))
-     .toThrow('DEMO_LOSS_LIMIT');
+describe('up to ten concurrent virtual DEMO contracts under USD 10',()=>{
+ it('allows a tenth DEMO contract with USD 1 max total exposure',()=>{
+   const tenth={...gate,openContracts:9,activeExposureCents:90,
+     lifetimePnlCents:0,dailyNetPnlCents:0,dailySettled:0};
+   expect(buildDemoBuyRequest(tenth)).toEqual({buy:proposalId,price:0.10,req_id:2});
+   expect(()=>buildDemoBuyRequest({...tenth,openContracts:10,activeExposureCents:100}))
+     .toThrow('DEMO_MAX_OPEN');
+   expect(()=>buildDemoBuyRequest({...tenth,openContracts:2,activeExposureCents:10}))
+     .toThrow('DEMO_RISK_INVALID');
  });
- it('rejects unknown buys, invalid exposure and an exhausted USD 10 research allocation',()=>{
-   expect(()=>buildDemoBuyRequest({...gate,openContracts:1,activeExposureCents:10,unresolvedBuy:true}))
-     .toThrow('DEMO_POSITION_UNRESOLVED');
-   expect(()=>buildDemoBuyRequest({...gate,openContracts:2,activeExposureCents:10}))
-     .toThrow('DEMO_EXPOSURE_INVALID');
+ it('keeps going after positive demo results, regardless of daily number of wins',()=>{
+   expect(buildDemoBuyRequest({...gate,todayTrades:300,dailySettled:300,
+     dailyNetPnlCents:8,lifetimePnlCents:8}))
+      .toEqual({buy:proposalId,price:0.10,req_id:2});
+ });
+ it('blocks when demo funding allocation is spent',()=>{
    expect(()=>buildDemoBuyRequest({...gate,lifetimePnlCents:-995}))
-     .toThrow('DEMO_ALLOCATION_EXHAUSTED');
+     .toThrow('DEMO_RESEARCH_ALLOCATION');
  });
 });
