@@ -279,9 +279,20 @@ export default {
               ||typeof data.proposalId!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(data.proposalId)
               ||typeof data.askPrice!=='number'||typeof data.payout!=='number')
               return json({error:'Propuesta DEMO inválida'},400);
+            const rawEvidence=data.evidence&&typeof data.evidence==='object'&&!Array.isArray(data.evidence)
+              ?data.evidence as Record<string,unknown>:{};
+            const num=(key:string)=>typeof rawEvidence[key]==='number'&&Number.isFinite(rawEvidence[key])
+              ?rawEvidence[key] as number:null;
+            const evidence={
+              pilot:rawEvidence.pilot==='balanced-ten'?'balanced-ten' as const:'manual' as const,
+              fast:num('fast'),slow:num('slow'),rsi:num('rsi'),
+              volatility:num('volatility'),entryQuote:num('entryQuote'),
+              quoteAgeSeconds:num('quoteAgeSeconds'),
+              reason:typeof rawEvidence.reason==='string'?rawEvidence.reason:'UNVERIFIED'
+            };
             return json(await demo.reserveBrowserPilot({
               nonce,signal:data.signal,stakeCents:data.stakeCents,proposalId:data.proposalId,
-              askPrice:data.askPrice,payout:data.payout
+              askPrice:data.askPrice,payout:data.payout,evidence
             }));
           }
           if(typeof data.id!=='number'||!Number.isSafeInteger(data.id)||data.id<=0
