@@ -21,6 +21,21 @@ assert.ok(panel.includes('BROWSER_OBSERVED_NOT_INDEPENDENTLY_VERIFIED'),'El CSV 
 
 
 for(const script of panel.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(script[1]);
+const paper10Html=readFileSync('ensayo-paper-10.html','utf8');
+const paper10Browser=readFileSync('scripts/paper_ten_browser.mjs','utf8');
+assert.ok(paper10Html.includes('id="start"')&&paper10Html.includes('id="results"'),
+  'Página de PAPER 10 requiere botón y reporte visible');
+assert.ok(paper10Html.includes('scripts/paper_ten_browser.mjs'),'PAPER 10 debe usar un script separado');
+assert.ok(paper10Browser.includes("import {readConfig,initialState,onTick}"),'PAPER 10 debe usar motor original');
+assert.ok(paper10Browser.includes('validatePublicHistory(data.history,{expectedCount:1000})'),
+  'PAPER 10 debe validar identidad y frescura de 1.000 ticks');
+assert.ok(paper10Browser.includes("if(trades.length===10)break;"),'No abrir más de 10 entradas');
+assert.ok(paper10Browser.includes("PAPER_NO_BROKER"),'CSV nunca puede sugerir contratos comprados');
+assert.ok(!paper10Browser.includes('ws/demo')&&!paper10Browser.includes('ws/real'),
+  'PAPER 10 no debe acceder al WebSocket autenticado');
+const homeHtml=readFileSync('index.html','utf8');
+assert.ok(homeHtml.includes('href="./ensayo-paper-10.html"'),'La portada debe enlazar al nuevo laboratorio PAPER');
+
 for(const name of ['index.html','laboratorio.html','operaciones.html','conexion.html']){
  const html=readFileSync(name,'utf8');
  if(name==='index.html'){
