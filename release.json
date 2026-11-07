@@ -1,10 +1,11 @@
 {
-  "version": "3.0",
-  "updatedAt": "2026-11-07T20:21:48.030Z",
-  "summary": "Evaluar límite de riesgo con importe real de la siguiente operación DEMO",
+  "version": "3.1",
+  "updatedAt": "2026-11-07T20:22:23.787Z",
+  "summary": "Validar servidor compra manual DEMO con compuerta probada de 45 segundos",
   "changes": [
-    "Evaluar límite de riesgo con importe real de la siguiente operación DEMO"
+    "Validar servidor compra manual DEMO con compuerta probada de 45 segundos",
+    "Centralizar compuerta de autorización DEMO por preflight exacto y temporal"
   ],
-  "sourceCommit": "99dcfea581cb4e61a5415124bfb4ffa8dc8c0cda",
+  "sourceCommit": "958508a55b7364cb52c3f22e7602205bed8f9b08",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

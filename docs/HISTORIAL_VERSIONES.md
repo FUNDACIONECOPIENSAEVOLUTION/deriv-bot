@@ -21,6 +21,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.1 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:22:23.787Z (UTC).
+- **Commit de origen:** `958508a55b73`.
+- Validar servidor compra manual DEMO con compuerta probada de 45 segundos
+- Centralizar compuerta de autorización DEMO por preflight exacto y temporal
+
 ## v3.0 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:21:48.030Z (UTC).
