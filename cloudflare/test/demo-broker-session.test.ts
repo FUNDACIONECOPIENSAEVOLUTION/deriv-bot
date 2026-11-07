@@ -120,3 +120,27 @@ it('reports unknown buy after connection loss and never retries the broker order
   expect(acks).toBe(0);
   expect(socket.sent.map(x=>x.req_id)).toEqual([1,2]);
 });
+
+it('issues a PUT proposal for a bearish signal and retains the fixed 10-cent virtual stake',async()=>{
+  const sent:Record<string,unknown>[]=[];
+  const broker=new SimulatedBroker(req=>{
+    sent.push(req);
+    if(req.proposal===1)return {msg_type:'proposal',req_id:1,
+      proposal:{id:'P'.repeat(40),ask_price:'0.10',payout:'0.18'}};
+    if(req.buy==='P'.repeat(40))return {msg_type:'buy',req_id:2,
+      buy:{contract_id:8301,buy_price:'0.10',purchase_time:1750000000}};
+    return null;
+  });
+  const out=await buyDemoOverSocket(broker as unknown as WebSocket,{
+    wsUrl:socketUrl,gate:{...gate,signal:'DOWN'},
+    reserve:async quote=>{
+      expect(quote.contractType).toBe('PUT');
+      return 8;
+    },
+    acknowledge:async()=>{}
+  });
+  expect(out.state).toBe('OPEN');
+  expect(sent[0]).toMatchObject({proposal:1,contract_type:'PUT',amount:0.10,duration:20});
+  expect(sent[1]).toMatchObject({buy:'P'.repeat(40),price:0.10});
+  expect(sent).toHaveLength(2);
+});
