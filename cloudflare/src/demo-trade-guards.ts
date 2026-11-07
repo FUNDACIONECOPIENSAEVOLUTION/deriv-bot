@@ -101,7 +101,7 @@ export function parseDemoBuyResponse(raw:unknown):DemoBuyAck {
   return {accepted:true,contractId:id,buyCents:price,purchaseTime:buy.purchase_time};
 }
 
-export type DemoSettlement={contractId:number;sold:true;profitCents:number;buyCents:number;payoutCents:number;outcome:'WIN'|'LOSS'|'FLAT'};
+export type DemoSettlement={contractId:number;sold:true;profitCents:number;buyCents:number;payoutCents:number;outcome:'WIN'|'LOSS'|'FLAT';entrySpot?:number;exitSpot?:number};
 export function parseDemoSettlement(raw:unknown,expectedContractId:number):DemoSettlement|null {
   if(!Number.isSafeInteger(expectedContractId)||expectedContractId<=0)throw Error('DEMO_CONTRACT_INVALID_ID');
   if(!raw||typeof raw!=='object')throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
@@ -113,11 +113,23 @@ export function parseDemoSettlement(raw:unknown,expectedContractId:number):DemoS
   if(data.is_sold===false||data.is_sold===0)return null;
   if(data.is_sold!==true&&data.is_sold!==1)throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
   if(data.currency!==undefined&&data.currency!=='USD')throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
+  if(data.contract_type!==undefined&&data.contract_type!=='CALL')throw Error('DEMO_SETTLEMENT_WRONG_TYPE');
+  if(data.underlying_symbol!==undefined&&data.underlying_symbol!=='R_100')throw Error('DEMO_SETTLEMENT_WRONG_SYMBOL');
   const profit=cents(data.profit),buy=cents(data.buy_price),payout=cents(data.payout);
   if(profit===null||buy!==MAX_STAKE_CENTS||payout===null||payout<0)
     throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
+  const spot=(x:unknown)=>{
+    if(x===null||x===undefined)return undefined;
+    if(typeof x!=='number'&&!(typeof x==='string'&&/^(?:0|[1-9][0-9]*)(?:[.][0-9]{1,12})?$/.test(x)))
+      throw Error('DEMO_SETTLEMENT_INVALID_SPOT');
+    const v=Number(x);if(!Number.isFinite(v)||v<=0)return undefined;
+    return v;
+  };
+  const entrySpot=spot(data.entry_spot),exitSpot=spot(data.exit_spot);
   return {contractId:expectedContractId,sold:true,profitCents:profit,buyCents:buy,
-    payoutCents:payout,outcome:profit>0?'WIN':profit<0?'LOSS':'FLAT'};
+    payoutCents:payout,outcome:profit>0?'WIN':profit<0?'LOSS':'FLAT',
+    ...(entrySpot===undefined?{}:{entrySpot}),
+    ...(exitSpot===undefined?{}:{exitSpot})};
 }
 
 export function demoPerformance(settlements:readonly DemoSettlement[]) {
