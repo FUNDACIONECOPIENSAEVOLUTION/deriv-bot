@@ -13,37 +13,37 @@ it('keeps the validated OTP URL limited to the Deriv DEMO socket',()=>{
 });
 it('takes an internal proposal ID but never returns it from the public quote route',()=>{
   const quote=parseDemoProposalForBuy({msg_type:'proposal',req_id:1,proposal:{
-    id:'A'.repeat(48),ask_price:'0.10',payout:'0.19'
+    id:'A'.repeat(48),ask_price:'1.00',payout:'1.90'
   }},1750000100);
   expect(quote).toEqual({
-    id:'A'.repeat(48),askPrice:0.10,payout:0.19,quotedAt:1750000100,
-    symbol:'R_100',contractType:'CALL',durationTicks:20,stake:0.10
+    id:'A'.repeat(48),askPrice:1,payout:1.90,quotedAt:1750000100,
+    symbol:'R_100',contractType:'CALL',durationTicks:20,stake:1
   });
   expect(buildDemoBuyRequest({
     quote,accountType:'demo',currency:'USD',
     socketUrl:'wss://api.derivws.com/trading/v1/options/ws/demo?otp=test',
     userEnabledDemoExecution:true,signal:'UP',now:1750000100,todayTrades:0,todayLossCents:0,
     hasOpenContract:false,unresolvedBuy:false
-  })).toEqual({buy:'A'.repeat(48),price:0.10,req_id:2});
+  })).toEqual({buy:'A'.repeat(48),price:1,req_id:2});
 });
 it('rejects a broker proposal missing a buyable id, without guessing or increasing stake',()=>{
   expect(()=>parseDemoProposalForBuy({msg_type:'proposal',req_id:1,
-    proposal:{ask_price:0.10,payout:0.18}},1750000100)).toThrow('DEMO_PROPOSAL_ID_INVALID');
+    proposal:{ask_price:1,payout:1.80}},1750000100)).toThrow('DEMO_PROPOSAL_ID_INVALID');
   expect(()=>parseDemoProposalForBuy({msg_type:'proposal',req_id:1,
     error:{code:'StakeTooSmall',message:'raise the stake'}},1750000100)).toThrow('DEMO_PROPOSAL_REJECTED');
 });
 it('settles only a matching contract in USD, with broker supplied gain/loss',()=>{
   const raw={msg_type:'proposal_open_contract',req_id:3,
     proposal_open_contract:{contract_id:171717,contract_type:'CALL',currency:'USD',
-      buy_price:'0.10',payout:'0.18',profit:'0.08',is_sold:1}};
-  expect(parseDemoSettlement(raw,171717)?.profitCents).toBe(8);
+      buy_price:'1.00',payout:'1.80',profit:'0.80',is_sold:1}};
+  expect(parseDemoSettlement(raw,171717)?.profitCents).toBe(80);
   expect(()=>parseDemoSettlement({...raw,proposal_open_contract:{
     ...raw.proposal_open_contract,currency:'EUR'}},171717)).toThrow('DEMO_SETTLEMENT_INVALID_RESPONSE');
   expect(()=>parseDemoSettlement({...raw,proposal_open_contract:{
     ...raw.proposal_open_contract,contract_id:99999}},171717)).toThrow('DEMO_CONTRACT_ID_MISMATCH');
   expect(()=>parseDemoSettlement(raw,171717,'PUT')).toThrow('DEMO_SETTLEMENT_WRONG_TYPE');
   expect(parseDemoSettlement({...raw,proposal_open_contract:{...raw.proposal_open_contract,contract_type:'PUT'}},
-    171717,'PUT')?.profitCents).toBe(8);
+    171717,'PUT')?.profitCents).toBe(80);
 });
 
 class SimulatedBroker extends EventTarget {
@@ -63,14 +63,14 @@ const gate:DemoBuySessionArgs['gate']={
   signal:'UP',todayTrades:0,todayLossCents:0,hasOpenContract:false,unresolvedBuy:false
 };
 const socketUrl='wss://api.derivws.com/trading/v1/options/ws/demo?otp=test';
-const proposal={msg_type:'proposal',req_id:1,proposal:{id:'Z'.repeat(40),ask_price:'0.10',payout:'0.18'}};
+const proposal={msg_type:'proposal',req_id:1,proposal:{id:'Z'.repeat(40),ask_price:'1.00',payout:'1.80'}};
 
 it('reserves the unknown-buy state BEFORE sending exactly one virtual DEMO buy',async()=>{
   const events:string[]=[];
   const socket=new SimulatedBroker(req=>{
     if(req.proposal===1)return proposal;
     if(req.buy==='Z'.repeat(40)){events.push('broker-buy');return {
-      msg_type:'buy',req_id:2,buy:{contract_id:4567,buy_price:'0.10',purchase_time:1750000000}
+      msg_type:'buy',req_id:2,buy:{contract_id:4567,buy_price:'1.00',purchase_time:1750000000}
     };}
     throw Error('unexpected order');
   });
@@ -78,12 +78,12 @@ it('reserves the unknown-buy state BEFORE sending exactly one virtual DEMO buy',
     wsUrl:socketUrl,gate,reserve:async()=>{events.push('reserved');return 1;},
     acknowledge:async(_id,ack)=>{events.push(ack.accepted?'confirmed':'rejected');}
   });
-  expect(output).toEqual({state:'OPEN',contractId:4567,buyCents:10,purchaseTime:1750000000});
+  expect(output).toEqual({state:'OPEN',contractId:4567,buyCents:100,purchaseTime:1750000000});
   expect(socket.sent.map(x=>x.req_id)).toEqual([1,2]);
   expect(events).toEqual(['reserved','broker-buy','confirmed']);
 });
 
-it('does not send buy when the broker rejects a 10-cent proposal',async()=>{
+it('does not send buy when the broker rejects a one-dollar proposal',async()=>{
   let reserved=false;
   const socket=new SimulatedBroker(req=>req.proposal===1?
     {req_id:1,error:{code:'StakeTooSmall',message:'Raise stake'}}:null);
@@ -94,7 +94,7 @@ it('does not send buy when the broker rejects a 10-cent proposal',async()=>{
   expect(result).toEqual({state:'REJECTED',code:'StakeTooSmall'});
   expect(reserved).toBe(false);
   expect(socket.sent).toHaveLength(1);
-  expect(socket.sent[0]).toMatchObject({proposal:1,amount:0.10,duration:20});
+  expect(socket.sent[0]).toMatchObject({proposal:1,amount:1,duration:20});
 });
 
 it('cannot send buy if durable reservation fails or real-account gate is given',async()=>{
@@ -124,14 +124,14 @@ it('reports unknown buy after connection loss and never retries the broker order
   expect(socket.sent.map(x=>x.req_id)).toEqual([1,2]);
 });
 
-it('issues a PUT proposal for a bearish signal and retains the fixed 10-cent virtual stake',async()=>{
+it('issues a PUT proposal for a bearish signal and retains the fixed one-dollar virtual stake',async()=>{
   const sent:Record<string,unknown>[]=[];
   const broker=new SimulatedBroker(req=>{
     sent.push(req);
     if(req.proposal===1)return {msg_type:'proposal',req_id:1,
-      proposal:{id:'P'.repeat(40),ask_price:'0.10',payout:'0.18'}};
+      proposal:{id:'P'.repeat(40),ask_price:'1.00',payout:'1.80'}};
     if(req.buy==='P'.repeat(40))return {msg_type:'buy',req_id:2,
-      buy:{contract_id:8301,buy_price:'0.10',purchase_time:1750000000}};
+      buy:{contract_id:8301,buy_price:'1.00',purchase_time:1750000000}};
     return null;
   });
   const out=await buyDemoOverSocket(broker as unknown as WebSocket,{
@@ -143,7 +143,7 @@ it('issues a PUT proposal for a bearish signal and retains the fixed 10-cent vir
     acknowledge:async()=>{}
   });
   expect(out.state).toBe('OPEN');
-  expect(sent[0]).toMatchObject({proposal:1,contract_type:'PUT',amount:0.10,duration:20});
-  expect(sent[1]).toMatchObject({buy:'P'.repeat(40),price:0.10});
+  expect(sent[0]).toMatchObject({proposal:1,contract_type:'PUT',amount:1,duration:20});
+  expect(sent[1]).toMatchObject({buy:'P'.repeat(40),price:1});
   expect(sent).toHaveLength(2);
 });
