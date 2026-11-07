@@ -1,5 +1,5 @@
 import { dayAt } from '../../runtime/core.mjs';
-import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement } from './demo-risk-policy';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
@@ -508,10 +508,10 @@ export class DerivDemoConnection extends DurableObject<Env> {
       this.write('demo-manual-preflight',null);
       const planned=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
       const current=this.getRiskSnapshot();
-      if(!approval||approval.at>epoch()||epoch()-approval.at>45
-        ||approval.signal!==paperSignal||approval.stakeCents!==planned
-        ||approval.accountId!==creds.accountId||approval.purchases!==current.pilotPurchases)
-        throw Error('DEMO_FRESH_APPROVED_QUOTE_REQUIRED');
+      if(!validManualDemoApproval(approval,{
+        now:epoch(),signal:paperSignal,stakeCents:planned,
+        accountId:creds.accountId,purchases:current.pilotPurchases
+      }))throw Error('DEMO_FRESH_APPROVED_QUOTE_REQUIRED');
     }
     const index=this.read<number>('demo-stake-index')||0;
     const stakeCents=pickDemoStakeCents(index);
