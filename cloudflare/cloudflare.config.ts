@@ -29,8 +29,8 @@ export default defineConfig({
 		...paperWorker,
 		env: {
 			...paperWorker.env,
-			PAPER: bindings.durableObject({ worker: paperWorker, exportName: "PaperExperiment" }),
-			DERIV_DEMO: bindings.durableObject({ worker: paperWorker, exportName: "DerivDemoConnection" }),
+			PAPER: bindings.durableObject<typeof paperWorker, "PaperExperiment">({ worker: paperWorker, exportName: "PaperExperiment" }),
+			DERIV_DEMO: bindings.durableObject<typeof paperWorker, "DerivDemoConnection">({ worker: paperWorker, exportName: "DerivDemoConnection" }),
 		},
 	},
 });
