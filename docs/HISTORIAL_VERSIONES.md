@@ -19,6 +19,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.9 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:21:13.052Z (UTC).
+- **Commit de origen:** `0937f1d00e9b`.
+- Bloquear compra DEMO ante cotización rechazada; exigir propuesta aceptada de mismo stake y señal con 45s de validez
+
 ## v2.8 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:20:36.530Z (UTC).

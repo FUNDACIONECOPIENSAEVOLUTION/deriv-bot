@@ -1,11 +1,10 @@
 {
-  "version": "2.8",
-  "updatedAt": "2026-11-07T20:20:36.530Z",
-  "summary": "Distinguir cron DEMO autorizado de compra manual con cotización previa, sin ruta real",
+  "version": "2.9",
+  "updatedAt": "2026-11-07T20:21:13.052Z",
+  "summary": "Bloquear compra DEMO ante cotización rechazada; exigir propuesta aceptada de mismo stake y señal con 45s de validez",
   "changes": [
-    "Distinguir cron DEMO autorizado de compra manual con cotización previa, sin ruta real",
-    "No permitir compra manual DEMO sin propuesta oficial aceptada y reciente para señal e importe exactos"
+    "Bloquear compra DEMO ante cotización rechazada; exigir propuesta aceptada de mismo stake y señal con 45s de validez"
   ],
-  "sourceCommit": "9e84213f07c893c7ba01075e6a4e44d694b3ba5b",
+  "sourceCommit": "0937f1d00e9bca817cbd847d6759f6f3533d3f73",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
