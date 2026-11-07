@@ -23,6 +23,16 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
    expect(evaluateDemoRisk({...base,brokerBalanceCents:991_200,openContracts:9,exposureCents:900,stakeCents:100})
      .allowed).toBe(true);
  });
+ it('enforces a user-configured simultaneous DEMO limit from one through ten',()=>{
+   expect(evaluateDemoRisk({...base,maxConcurrent:1,openContracts:1,exposureCents:10}).reason)
+      .toBe('DEMO_MAX_OPEN');
+   expect(evaluateDemoRisk({...base,maxConcurrent:3,openContracts:2,exposureCents:20}).allowed)
+      .toBe(true);
+   expect(evaluateDemoRisk({...base,maxConcurrent:3,openContracts:3,exposureCents:30}).reason)
+      .toBe('DEMO_MAX_OPEN');
+   expect(()=>evaluateDemoRisk({...base,maxConcurrent:11})).toThrow('DEMO_RISK_INVALID');
+   expect(()=>evaluateDemoRisk({...base,maxConcurrent:0})).toThrow('DEMO_RISK_INVALID');
+ });
  it('allows at most ten concurrent contracts',()=>{
    expect(DEMO_MAX_OPEN).toBe(10);
    expect(evaluateDemoRisk({...base,openContracts:9,exposureCents:900,stakeCents:100}).allowed).toBe(true);
