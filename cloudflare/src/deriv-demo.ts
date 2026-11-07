@@ -334,6 +334,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       demoAutomationAvailable:String(this.env.DEMO_AUTO_ENABLED)==='true',
       demoAutomationRequested:this.read<boolean>('demo-auto')===true,
       demoMaxConcurrent:this.chosenMaxConcurrent(),
+      nextManualStakeCents:pickDemoStakeCents(this.read<number>('demo-stake-index')||0),
       demoLossAlert:this.read<boolean>('demo-loss-halt')===true,
       tradeReport:this.reportDemo()};
   }
@@ -359,17 +360,31 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * authenticated quote; it NEVER issues buy/sell or changes execution flags.
    */
   async preflightDemo(signal:'UP'|'DOWN'='UP',stakeCents=100){
+    // One-use, short-lived permission to attempt a MANUAL demo buy only.
+    // A rejected/failed quote must never leave the buy button or server gate open.
+    this.write('demo-manual-preflight',null);
     const quote=await this.quote(signal,stakeCents);
     const risk=this.riskFor(stakeCents);
     const status=this.status();
+    const nextStakeCents=status.nextManualStakeCents;
+    const manualApproved=quote.accepted===true&&risk.allowed===true
+      &&status.demoTradingEnabled===true&&stakeCents===nextStakeCents;
+    if(manualApproved){
+      const saved=this.read<{account:DemoAccount}>('snapshot');
+      if(saved)this.write('demo-manual-preflight',{
+        at:epoch(),signal,stakeCents,
+        accountId:saved.account.account_id,purchases:risk.pilotPurchases
+      });
+    }
     return {
       mode:'DERIV_DEMO_PREFLIGHT',noOrders:true,accountType:'demo',
       account:status.account,brokerBalanceCents:risk.brokerBalanceCents,
-      stakeCents,signal,quote,risk,
+      stakeCents,signal,quote,risk,nextManualStakeCents:nextStakeCents,manualApproved,
       executionConfigured:status.demoTradingEnabled,
       automationConfigured:status.demoAutomationAvailable,
       recommendedNextStep:!quote.accepted?'DERIV_QUOTE_REJECTED'
         :!risk.allowed?risk.reason
+        :stakeCents!==nextStakeCents?'DEMO_QUOTE_WRONG_NEXT_STAKE'
         :!status.demoTradingEnabled?'ENABLE_DEMO_BUY_AFTER_REVIEW'
         :'READY_FOR_FIRST_VIRTUAL_BUY'
     };
@@ -480,10 +495,22 @@ export class DerivDemoConnection extends DurableObject<Env> {
   async buyDemoOnce(paperSignal:'UP'|'DOWN'|'HOLD',evidence?:{
     reason?:string;fast?:number|null;slow?:number|null;rsi?:number|null;
     volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
-  }) {
+  },source:'manual'|'auto'='manual') {
     if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
     if(paperSignal!=='UP'&&paperSignal!=='DOWN')throw Error('NO_APPROVED_SIGNAL');
     const creds=await this.verifiedDemoCredentials();
+    if(source==='manual'){
+      const approval=this.read<{at:number;signal:string;stakeCents:number;
+        accountId:string;purchases:number}>('demo-manual-preflight');
+      // Consume before sending any proposal, even when it fails.
+      this.write('demo-manual-preflight',null);
+      const planned=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
+      const current=this.getRiskSnapshot();
+      if(!approval||approval.at>epoch()||epoch()-approval.at>45
+        ||approval.signal!==paperSignal||approval.stakeCents!==planned
+        ||approval.accountId!==creds.accountId||approval.purchases!==current.pilotPurchases)
+        throw Error('DEMO_FRESH_APPROVED_QUOTE_REQUIRED');
+    }
     const index=this.read<number>('demo-stake-index')||0;
     const stakeCents=pickDemoStakeCents(index);
     const firstRisk=this.riskFor(stakeCents);
