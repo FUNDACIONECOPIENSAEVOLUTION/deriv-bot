@@ -43,7 +43,7 @@
 <p id="demo-quote" class="note" role="status">Solo se consultará un precio al broker. No se comprará ningún contrato y no se incrementará el importe si Deriv lo rechaza.</p>
 <div class="divider"></div>
 <h2>Prueba con operaciones reales en la cuenta DEMO (saldo virtual)</h2>
-<p class="note">Entrenamiento ampliado: cinco tandas de diez contratos DEMO (50 en total), con máximo US$10 virtuales por tanda y US$50 de compras acumuladas. Importes individuales US$0,10, US$0,25, US$0,50 y US$1. Configura de 1 a 10 posiciones simultáneas. El bot espera que los diez contratos de cada tanda queden liquidados por Deriv antes de iniciar la siguiente. Parada adicional al llegar a US$9.900 de saldo oficial o ante operaciones sin confirmación. Cuenta real permanentemente excluida.</p>
+<p class="note">Entrenamiento ampliado: cinco tandas de diez contratos DEMO (50 en total), con máximo US$10 virtuales por tanda y US$50 de compras acumuladas. Importes individuales US$0,10, US$0,25, US$0,50 y US$1. Configura de 1 a 10 posiciones simultáneas. La primera compra DEMO debe hacerse manualmente y su liquidación debe verificarse antes de activar el resto automáticamente. El bot espera que los diez contratos de cada tanda queden liquidados por Deriv antes de iniciar la siguiente. Parada adicional al llegar a US$9.900 de saldo oficial o ante operaciones sin confirmación. Cuenta real permanentemente excluida.</p>
 <div class="tools">
   <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
   <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
@@ -201,7 +201,7 @@ function renderDemo(data){
     &&Number(report.pilotRemainingPurchases)>0&&Number(report.pilotRemainingBudgetCents)>=10;
   $('demo-buy-once').disabled=!canBuy;
   $('demo-auto-start').disabled=!(data.connected&&data.demoAutomationAvailable
-    &&data.demoTradingEnabled&&daily.allowed===true&&
+    &&data.demoTradingEnabled&&daily.allowed===true&&(report.settled||0)>=1&&
     !data.demoAutomationRequested);
   $('demo-auto-stop').disabled=!(data.connected&&data.demoAutomationRequested);
   $('demo-check').disabled=!(data.connected&&(report.openCount||0)>0);
@@ -224,6 +224,8 @@ function renderDemo(data){
     :eligible?'Señal válida '+(state.decision.direction===1?'CALL ↑':'PUT ↓')+
       (data.demoAutomationRequested?' · modo automático solicitado.':' · puedes enviar una operación DEMO.')
     :'Sin señal reciente verificable: no se permite comprar.';
+  if(data.demoTradingEnabled&&(report.settled||0)<1&&!data.demoAutomationRequested)
+    $('demo-trade-status').textContent+=' · Primero confirma y liquida una compra DEMO manual para habilitar la automatización.';
   $('demo-daily-risk').textContent='Cinco tandas: '+(report.pilotRemainingPurchases??50)+' contratos por comprar, presupuesto de cada tanda US$10 virtuales, total máximo US$50. Al completar diez compras se espera su liquidación y se calcula el rendimiento antes del siguiente bloque. Parada adicional si el saldo oficial cae US$100 desde US$10.000, contando exposición. Automatización: '+(data.demoAutomationRequested?'solicitada':'detenida')+'.';
   const batchSummary=report.batches||[];
   $('demo-batch-stats').textContent=batchSummary.length
