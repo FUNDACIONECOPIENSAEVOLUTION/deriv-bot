@@ -29,6 +29,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.9 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:52:14.316Z (UTC).
+- **Commit de origen:** `c0fb01165779`.
+- Corregir fixtures de pruebas de stakes 100c sin coincidencias parciales con 35c
+- Corregir Deriv DEMO según API real: 5 ticks y apuestas válidas 0.35/0.50/0.75/1 USD; pruebas y UI alineadas
+
 ## v3.8 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:47:06.840Z (UTC).

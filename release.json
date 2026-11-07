@@ -1,10 +1,11 @@
 {
-  "version": "3.8",
-  "updatedAt": "2026-11-07T20:47:06.840Z",
-  "summary": "Confirmar mediante propuestas públicas mínimas US$0.35/0.50/0.75/1 y 5 ticks antes de modificar bot",
+  "version": "3.9",
+  "updatedAt": "2026-11-07T20:52:14.316Z",
+  "summary": "Corregir fixtures de pruebas de stakes 100c sin coincidencias parciales con 35c",
   "changes": [
-    "Confirmar mediante propuestas públicas mínimas US$0.35/0.50/0.75/1 y 5 ticks antes de modificar bot"
+    "Corregir fixtures de pruebas de stakes 100c sin coincidencias parciales con 35c",
+    "Corregir Deriv DEMO según API real: 5 ticks y apuestas válidas 0.35/0.50/0.75/1 USD; pruebas y UI alineadas"
   ],
-  "sourceCommit": "bd4abbd1b5ddc60f923cf682424f95147052ab76",
+  "sourceCommit": "c0fb0116577982116e40e39e0cb559391ce6c055",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
