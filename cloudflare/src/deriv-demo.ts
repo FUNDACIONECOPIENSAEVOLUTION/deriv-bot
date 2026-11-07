@@ -4,6 +4,7 @@ import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
 import { DurableObject } from 'cloudflare:workers';
+import { openDerivSocket } from './deriv-websocket';
 
 const API='https://api.derivws.com/trading/v1/options/accounts';
 const AUTH='https://auth.deriv.com/oauth2/';
@@ -89,12 +90,7 @@ export function demoSocketUrl(payload:unknown):string {
 
 /** Fetch an exact demo-account quote, no buy/sell ever. */
 async function requestDemoQuote(wsUrl:string,signal:'UP'|'DOWN'='UP',stakeCents=100):Promise<ReturnType<typeof parseDemoQuote>> {
-  const response=await fetch(wsUrl.replace(/^wss:/,'https:'),{
-    headers:{Upgrade:'websocket'},redirect:'manual',signal:AbortSignal.timeout(8000)
-  });
-  const socket=response.webSocket;
-  if(response.status!==101||!socket){await response.body?.cancel();throw Error('DERIV_QUOTE_UPGRADE_FAILED');}
-  socket.accept();
+  const socket=await openDerivSocket(wsUrl,'demo',8000);
   return new Promise((resolve,reject)=>{
     let settled=false;
     const finish=(error?:Error,value?:ReturnType<typeof parseDemoQuote>)=>{
