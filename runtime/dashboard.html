@@ -283,17 +283,27 @@ $('deriv-quote').onclick=async()=>{
       headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
       body:JSON.stringify({direction:$('demo-quote-direction').value,stakeCents:Number($('demo-quote-stake').value)}),signal:AbortSignal.timeout(28000)});
     if(!response.ok)throw Error('QUOTE_UNAVAILABLE');
-    const quote=await response.json();
+    const preflight=await response.json();
+    if(preflight.mode!=='DERIV_DEMO_PREFLIGHT'||preflight.noOrders!==true
+      ||preflight.accountType!=='demo')throw Error('PREFLIGHT_INVALID');
+    const quote=preflight.quote;
+    const balance=Number.isInteger(preflight.brokerBalanceCents)
+      ?money(preflight.brokerBalanceCents):'sin verificar';
+    const risk=preflight.risk||{};
+    const note=' · Saldo oficial DEMO verificado: '+balance
+      +' · Límite del primer lote: 10 compras / US$10 virtuales'
+      +' · Estado de seguridad: '+(risk.allowed?'apto para continuar con validación':'bloqueado '+String(risk.reason||'sin información'))
+      +' · Compras realizadas en esta consulta: 0.';
     if(quote.accepted===false){
-      out.textContent='Deriv rechazó '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · US$'+quote.stake+' (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.';
+      out.textContent='Deriv rechazó '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · US$'+quote.stake+' (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.'+note;
     }else if(quote.accepted===true&&Number.isFinite(quote.askPrice)&&Number.isFinite(quote.payout)){
-      out.textContent='Cotización DEMO, sin compra · '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · Importe solicitado US$'+quote.stake+' · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.';
+      out.textContent='Cotización DEMO, sin compra · '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · Importe solicitado US$'+quote.stake+' · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.'+note;
     }else throw Error('QUOTE_INVALID');
   }catch{out.textContent='No se pudo obtener una cotización DEMO verificable. No se realizó ninguna compra y no se aumentó el importe.';}
   finally{btn.disabled=false;}
 };
 $('demo-buy-once').onclick=async()=>{
-  if(!window.confirm('Confirmar una ÚNICA compra con dinero virtual en la cuenta DEMO de Deriv, máximo USD 1, 20 ticks. No se usa dinero real. ¿Continuar?'))return;
+  if(!window.confirm('Confirmar UNA compra de US$0,10 a US$1 virtual (importe rotativo), duración 20 ticks, dentro de la primera tanda de 10 contratos y US$10 de presupuesto total. No se usará dinero real. ¿Continuar?'))return;
   const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
   msg.textContent='Solicitando una sola operación en DEMO. Si se pierde la confirmación, el bot bloqueará nuevas compras.';
   try{
@@ -304,7 +314,7 @@ $('demo-buy-once').onclick=async()=>{
     if(!r.ok)throw Error('No autorizado o sin cotización válida');
     const result=await r.json();
     msg.textContent=result.state==='OPEN'
-      ?'Contrato DEMO confirmado: '+result.contractId+'. Aún falta su liquidación; no se realizará otra compra mientras siga abierto.'
+      ?'Contrato DEMO confirmado: '+result.contractId+' · importe virtual: '+money(result.buyCents||0)+'. Falta su liquidación. Puedes abrir otras posiciones hasta el límite configurado.'
       :'Deriv rechazó la propuesta o compra DEMO. No se incrementó el importe.';
   }catch{
     msg.textContent='No se pudo confirmar la operación DEMO. Revisa el historial y el estado del broker antes de otro intento.';
