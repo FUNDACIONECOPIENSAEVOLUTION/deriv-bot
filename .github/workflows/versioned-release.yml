@@ -46,21 +46,39 @@ jobs:
       - name: Aumentar exactamente 0,1 y registrar mejoras desde git
         id: bump
         run: |
-          node scripts/bump_release.mjs
-          node scripts/bump_release.mjs --verify
-          node tests/test_html.mjs
-          git add release.json docs/HISTORIAL_VERSIONES.md package.json
-          if git diff --cached --quiet; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No hay cambios nuevos desde la última versión."
-          else
+          set -e
+          # Changes may arrive while CI runs; refresh and retry rather than
+          # overwriting another contributor or publishing a stale version.
+          pushed=false
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            node scripts/bump_release.mjs --verify
+            node tests/test_html.mjs
+            node scripts/bump_release.mjs
+            node scripts/bump_release.mjs --verify
+            git add release.json docs/HISTORIAL_VERSIONES.md package.json
+            if git diff --cached --quiet; then
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+              echo "No hay cambios desde el último manifiesto."
+              pushed=true
+              break
+            fi
             VERSION=$(node -p "require('./release.json').version")
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git commit -m "[auto-version] Publicación v$VERSION (+0,1) con historial de mejoras"
-            git push origin HEAD:main
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            if git push origin HEAD:main; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+              pushed=true
+              break
+            fi
+            echo "La rama cambió simultáneamente; reintentando sobre main actual."
+          done
+          if [ "$pushed" != true ]; then
+            echo "::error::No se pudo actualizar main sin conflicto. No publicar una versión obsoleta."
+            exit 1
           fi
       - name: Compilar el Worker con la versión del mismo manifiesto
         run: |
