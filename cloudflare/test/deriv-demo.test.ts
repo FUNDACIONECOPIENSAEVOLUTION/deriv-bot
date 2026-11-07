@@ -171,42 +171,36 @@ it('does not enable unsupervised DEMO execution when server switches are off',as
   expect(await stub.isDemoAutoEnabled()).toBe(false);
   expect(calls).toEqual([]);
 });
-it('stops the day when ten verified DEMO settlements have nonpositive net P&L',async()=>{
-  const date=dayAt(Math.floor(Date.now()/1000));
-  const generate=async(id:string,wins:number,losses:number)=>{
-    const stub=env.DERIV_DEMO.getByName(id);
-    await runInDurableObject(stub,(_instance,ctx)=>{
-      ctx.storage.transactionSync(()=>{
-        for(let i=0;i<wins+losses;i++){
-          const pnl=i<wins?80:-100,contractId=i+1000;
-          ctx.storage.sql.exec(
-            "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,?,'SETTLED',?,100,?,?)",
-            date,Math.floor(Date.now()/1000)+i,contractId,pnl>0?180:0,pnl
-          );
-        }
-      });
-    });
-    return stub.status();
-  };
-  const profitable=await generate('demo-six-four',6,4);
-  expect(profitable.tradeReport.dayRisk).toMatchObject({
-    settled:10,netCents:80,allowed:false,reason:'DEMO_FIRST_BATCH_COMPLETE'
-  });
-  const loss=await generate('demo-five-five',5,5);
-  expect(loss.tradeReport.dayRisk).toMatchObject({
-    settled:10,netCents:-100,allowed:false,reason:'DEMO_FIRST_BATCH_COMPLETE'
-  });
+
+it('keeps demo account risk unverified until an official balance is received',async()=>{
+  const stub=env.DERIV_DEMO.getByName('risk-not-authorized');
+  const report=(await stub.status()).tradeReport;
+  expect(report.brokerBalanceCents).toBeNull();
+  expect(report.risk).toBeNull();
+  expect(report.lossHalt).toBe(false);
+  expect(report.quoteAcceptance).toEqual([]);
 });
-it('preserves a sticky day-stop even if subsequently reconciled trades make that day profitable',async()=>{
-  const stub=env.DERIV_DEMO.getByName('sticky-demo-day');
-  const date=dayAt(Math.floor(Date.now()/1000));
+it('records virtual results separately by the four stakes without fabricating account balances',async()=>{
+  const stub=env.DERIV_DEMO.getByName('stake-report');
   await runInDurableObject(stub,(_instance,ctx)=>{
-    ctx.storage.sql.exec("INSERT INTO demo_day_halts(date,reason,stopped_at) VALUES(?,'DAY_NET_NONPOSITIVE_AFTER_TEN',?)",date,Math.floor(Date.now()/1000));
-    ctx.storage.sql.exec(
-      "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,100,'SETTLED',451,100,120,20)",date
-    );
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',100,'SETTLED',21,10,18,8)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',101,'SETTLED',22,25,0,-25)");
+    ctx.storage.sql.exec("INSERT INTO demo_quote_checks(at,stake_cents,contract_type,accepted,code) VALUES(102,10,'CALL',0,'StakeTooSmall')");
   });
-  expect((await stub.status()).tradeReport.dayRisk).toMatchObject({
-    halted:true,allowed:false,reason:'DEMO_DAY_HALTED'
-  });
+  const report=(await stub.status()).tradeReport;
+  expect(report).toMatchObject({settled:2,wins:1,losses:1,pnlCents:-17});
+  expect(report.byStake).toEqual([
+    {stakeCents:10,settled:1,wins:1,netCents:8,winRatePct:100},
+    {stakeCents:25,settled:1,wins:0,netCents:-25,winRatePct:0}
+  ]);
+  expect(report.quoteAcceptance[0]).toMatchObject({stakeCents:10,rejections:1});
+  expect(report.brokerBalanceCents).toBeNull();
+});
+it('supports all experimental quote values without purchasing',()=>{
+ for(const stakeCents of [10,25,50,100]){
+   const q=demoQuoteRequest('DOWN',stakeCents);
+   expect(q).toMatchObject({proposal:1,contract_type:'PUT',amount:stakeCents/100});
+   expect(q).not.toHaveProperty('buy');
+ }
+ expect(()=>demoQuoteRequest('UP',200)).toThrow('DEMO_STAKE_INVALID');
 });
