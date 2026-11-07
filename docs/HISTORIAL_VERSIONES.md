@@ -47,6 +47,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.7 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:46:59.599Z (UTC).
+- **Commit de origen:** `1d1d771ae3ee`.
+- Permitir solo indicadores de investigación validados en registro de contrato DEMO
+- Registrar señales SMA RSI y volatilidad para auditoría de compras DEMO del navegador
+
 ## v5.6 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:46:28.720Z (UTC).
