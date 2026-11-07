@@ -4,7 +4,7 @@ import { setupNetwork } from '@msw/cloudflare';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, afterAll, expect, it } from 'vitest';
 import worker from '../src/index';
-import { selectDemo, DerivDemoConnection } from '../src/deriv-demo';
+import { selectDemo, DerivDemoConnection, DEMO_QUOTE_REQUEST, parseDemoQuote, demoSocketUrl } from '../src/deriv-demo';
 
 const token='test-only-token-with-at-least-32-characters';
 const headers={Authorization:'Bearer '+token,'Content-Type':'application/json','X-Paper-Control':'1'};
@@ -87,4 +87,43 @@ it('bounds request bodies and refuses invalid ids, overwritten state and arbitra
   expect(await errorFrom(stub,instance=>instance.begin('app-123','http://paper.example'))).toBe('DERIV_INVALID_ORIGIN');
   const first=await stub.begin('app-123','https://paper.example');await stub.begin('app-123','https://paper.example');
   expect(await errorFrom(stub,instance=>instance.complete(first.state,'fixture-code'))).toBe('DERIV_OAUTH_STATE_INVALID');expect(calls).toEqual([]);
+});
+
+
+it('keeps the DEMO proposal fixed at USD 0.10 for CALL R_100 at 20 ticks and never sends buy',()=>{
+  expect(DEMO_QUOTE_REQUEST).toEqual({proposal:1,amount:0.10,basis:'stake',contract_type:'CALL',
+    currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1});
+  expect(JSON.stringify(DEMO_QUOTE_REQUEST)).not.toContain('"buy"');
+  expect(JSON.stringify(DEMO_QUOTE_REQUEST)).not.toContain('"sell"');
+});
+it('parses only valid broker quotes, omits the actionable proposal id and never increases rejected stakes',()=>{
+  const accepted=parseDemoQuote({msg_type:'proposal',req_id:1,
+    proposal:{id:'do-not-expose-this-id',ask_price:'0.10',payout:0.18}});
+  expect(accepted).toMatchObject({accepted:true,stake:0.10,durationTicks:20,askPrice:0.10,payout:0.18,potentialProfit:0.08});
+  expect(JSON.stringify(accepted)).not.toContain('do-not-expose-this-id');
+  const denied=parseDemoQuote({msg_type:'proposal',req_id:1,error:{code:'ContractTooSmall',message:'Raise amount'}});
+  expect(denied).toEqual({accepted:false,code:'ContractTooSmall',stake:0.10,durationTicks:20,symbol:'R_100',contractType:'CALL'});
+  expect(JSON.stringify(denied)).not.toContain('Raise amount');
+  for(const price of ['NaN','1e5','0.000000001',-1,null]) {
+    expect(()=>parseDemoQuote({msg_type:'proposal',proposal:{ask_price:price,payout:0.2}})).toThrow('DERIV_QUOTE_INVALID_RESPONSE');
+  }
+  expect(()=>parseDemoQuote({msg_type:'proposal',req_id:2,proposal:{ask_price:0.1,payout:0.2}})).toThrow('DERIV_QUOTE_WRONG_REQUEST');
+});
+it('accepts OTP WebSocket URLs only for the official demo endpoint, never for real or unrelated hosts',()=>{
+  expect(demoSocketUrl({data:{url:'wss://api.derivws.com/trading/v1/options/ws/demo?otp=example-otp'}}))
+    .toBe('wss://api.derivws.com/trading/v1/options/ws/demo?otp=example-otp');
+  for(const url of ['wss://api.derivws.com/trading/v1/options/ws/real?otp=xxx',
+    'wss://evil.example/trading/v1/options/ws/demo?otp=xxx','https://api.derivws.com/trading/v1/options/ws/demo?otp=xxx',
+    'wss://api.derivws.com/trading/v1/options/ws/demo?otp=xxx&redirect=evil',
+    'wss://api.derivws.com/trading/v1/options/ws/demo']) {
+    expect(()=>demoSocketUrl({data:{url}})).toThrow();
+  }
+});
+it('allows quote requests only to the owner and never quotes without a connected demo',async()=>{
+  expect((await request('/api/deriv/quote')).r.status).toBe(401);
+  expect((await request('/api/deriv/quote',{method:'GET',headers})).r.status).toBe(404);
+  expect((await request('/api/deriv/quote',{method:'POST',headers:{...headers,Origin:'https://evil.example'},body:'{}'})).r.status).toBe(403);
+  const isolated=env.DERIV_DEMO.getByName('quote-not-connected');
+  expect(await errorFrom(isolated,instance=>instance.quote())).toBe('DERIV_DEMO_REQUIRED');
+  expect(calls).toEqual([]);
 });
