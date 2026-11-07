@@ -4,6 +4,7 @@ import { addCandleTick, mergeCandleHistory, validateCandles, publicMarketSnapsho
 import { PublicFeed, type MarketStatus } from '../../runtime/feed.mjs';
 import dashboard from '../../runtime/dashboard.html?raw';
 import { PublicSocket } from './public-socket';
+import { readPublicArbitrageSnapshot } from '../../runtime/cross-exchange.mjs';
 export { DerivDemoConnection } from './deriv-demo';
 
 type EngineState = ReturnType<typeof initialState>;
@@ -32,6 +33,7 @@ export class PaperExperiment extends DurableObject<Env> {
       sql.exec('CREATE TABLE IF NOT EXISTS experiment (id INTEGER PRIMARY KEY CHECK(id=1), fingerprint TEXT NOT NULL, data TEXT NOT NULL)');
       sql.exec('CREATE TABLE IF NOT EXISTS trades (id TEXT PRIMARY KEY, entry_epoch INTEGER NOT NULL, data TEXT NOT NULL)');
       sql.exec('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, epoch INTEGER NOT NULL, data TEXT NOT NULL)');
+      sql.exec('CREATE TABLE IF NOT EXISTS arb_observations (id INTEGER PRIMARY KEY AUTOINCREMENT, captured_at INTEGER NOT NULL, payload TEXT NOT NULL)');
       const saved=sql.exec<{fingerprint:string;data:string}>('SELECT fingerprint,data FROM experiment WHERE id=1').toArray()[0];
       if(saved) {
         if(saved.fingerprint!==JSON.stringify(this.config))throw Error('EXPERIMENT_CONFIG_CHANGED');
@@ -117,6 +119,32 @@ export class PaperExperiment extends DurableObject<Env> {
       trades,
       events:this.ctx.storage.sql.exec<{data:string}>('SELECT data FROM events ORDER BY id DESC LIMIT 20').toArray().map(row=>JSON.parse(row.data))};
   }
+  recordArbitrage(snapshot:unknown){
+    if(!snapshot||typeof snapshot!=='object'||(snapshot as {status?:string}).status!=='RESEARCH_ONLY'
+      ||JSON.stringify(snapshot).length>15000)throw Error('ARB_RECORD_INVALID');
+    const body=JSON.stringify(snapshot),recordedAt=now();
+    this.ctx.storage.transactionSync(()=>{
+      const sql=this.ctx.storage.sql;
+      sql.exec('INSERT INTO arb_observations(captured_at,payload) VALUES(?,?)',recordedAt,body);
+      sql.exec('DELETE FROM arb_observations WHERE id < (SELECT COALESCE(MAX(id),0)-6000 FROM arb_observations)');
+    });
+    return this.arbitrageStatus();
+  }
+  arbitrageStatus(){
+    const rows=this.ctx.storage.sql.exec<{captured_at:number;payload:string}>(
+      'SELECT captured_at,payload FROM arb_observations ORDER BY id DESC LIMIT 50'
+    ).toArray();
+    const latest=rows[0]?JSON.parse(rows[0].payload):null;
+    const history=rows.map(r=>{
+      const p=JSON.parse(r.payload),a=p.estimates as Array<{route:string;estimatedNetBps:number;grossBps:number}>;
+      return {capturedAt:r.captured_at,binanceToCoinbaseNetBps:a[0]?.estimatedNetBps??null,
+        coinbaseToBinanceNetBps:a[1]?.estimatedNetBps??null};
+    });
+    return {mode:'READ_ONLY_RESEARCH',hasData:!!latest,
+      latestCapturedAt:rows[0]?.captured_at??null,snapshot:latest,
+      history,observationsShown:rows.length,intervalHint:'scheduled every 5 minutes; not high-frequency'};
+  }
+
   exportPage(after:string|null=null):ExportPage {
     const sql=this.ctx.storage.sql;
     const rows=after===null?sql.exec<{id:string;data:string}>('SELECT id,data FROM trades ORDER BY id LIMIT 200').toArray()
@@ -152,8 +180,8 @@ export default {
     if(url.pathname==='/api/health'&&request.method==='GET')return json({status:'ok',mode:'PAPER'});
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
-    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/demo/buy-once','/api/deriv/demo/check'].includes(url.pathname);
+    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/demo/buy-once','/api/deriv/demo/check'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -193,6 +221,11 @@ export default {
         await demo.complete(state,code);
         return new Response(null,{status:303,headers:{...security,Location:url.origin+'/',
           'Set-Cookie':'ecopiensa_deriv_state=; Path=/api/deriv; Secure; HttpOnly; SameSite=Lax; Max-Age=0'}});
+      }
+      if(url.pathname==='/api/arbitrage')return json(await env.PAPER.getByName(EXPERIMENT).arbitrageStatus());
+      if(url.pathname==='/api/arbitrage/refresh'){
+        const snapshot=await readPublicArbitrageSnapshot({budgetUsd:10});
+        return json(await env.PAPER.getByName(EXPERIMENT).recordArbitrage(snapshot));
       }
       if(url.pathname==='/api/market'){
         const provider=url.searchParams.get('provider');
@@ -240,5 +273,9 @@ export default {
     // when the browser is closed. There is NEVER a scheduled buy.
     try{await env.DERIV_DEMO.getByName('owner-deriv-demo-v1').reconcileOpenDemoOnly();}
     catch{console.log(JSON.stringify({type:'demo_settlement_check_pending'}));}
+    try{
+      const snapshot=await readPublicArbitrageSnapshot({budgetUsd:10});
+      await env.PAPER.getByName(EXPERIMENT).recordArbitrage(snapshot);
+    }catch{console.log(JSON.stringify({type:'cross_exchange_observation_unavailable'}));}
   },
 } satisfies ExportedHandler<Env>;
