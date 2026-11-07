@@ -26,7 +26,10 @@
 <section id="demo-connection" class="card section-gap" hidden><header><h2>Conexión con la demo oficial de Deriv</h2><span class="chip" id="demo-state">Sin conectar</span></header>
 <p>Este saldo pertenece a la cuenta demo de Deriv y se muestra por separado de la simulación de USD 10. Esta conexión verifica la cuenta; la ejecución de contratos y la IA todavía no están activadas.</p>
 <div class="tools"><label>Identificador público de la aplicación <input id="deriv-client" maxlength="128" autocomplete="off" spellcheck="false" placeholder="App ID de Deriv"></label><button id="deriv-connect">Autorizar conexión con Deriv</button><button id="deriv-refresh" disabled>Actualizar saldo demo</button></div>
-<p id="demo-balance">Saldo demo oficial: pendiente de conexión.</p><p id="demo-feedback" role="status"></p><p class="note">Registra una aplicación web con permiso Trade y recargo de 0 %. Dirección de retorno: <code id="deriv-callback"></code>. No escribas contraseñas ni tokens en este campo.</p>
+<p id="demo-balance">Saldo demo oficial: pendiente de conexión.</p>
+<div class="tools"><button id="deriv-quote" disabled>Consultar precio DEMO: USD 0,10 · CALL · 20 ticks</button></div>
+<p id="demo-quote" class="note" role="status">Solo se consultará un precio al broker. No se comprará ningún contrato y no se incrementará el importe si Deriv lo rechaza.</p>
+<p id="demo-feedback" role="status"></p><p class="note">Registra una aplicación web con permiso Trade y recargo de 0 %. Dirección de retorno: <code id="deriv-callback"></code>. No escribas contraseñas ni tokens en este campo.</p>
 <p class="note">OpenAI: sin conexión activa. Las decisiones actuales siguen siendo reglas SMA/RSI. Practicar y revisar resultados no reentrena automáticamente a ChatGPT.</p></section>
 <footer>Deriv: actualización del panel cada 5 segundos mientras está visible. Binance y Coinbase: consulta pública de velas cada 30 segundos, sin motor de operaciones. El rendimiento hipotético no representa contratos Deriv ni operaciones spot de criptomonedas. No se acredita disponibilidad continua hasta completar su medición.</footer>
 <script nonce="__NONCE__">
@@ -126,11 +129,12 @@ for(const action of ['start','stop'])$('paper-'+action).onclick=async()=>{const 
 function renderDemo(data){
   chip('demo-state',data.connected?'Demo verificada':'Sin conexión demo',data.connected?'live':'warn');
   $('deriv-refresh').disabled=!data.connected;
+  $('deriv-quote').disabled=!data.connected;
   if(document.activeElement!==$('deriv-client')&&data.clientId)$('deriv-client').value=data.clientId;
   $('demo-balance').textContent=data.account?'Saldo demo oficial: '+money(Math.round(data.account.balance*100))+' · '+data.account.label+' · Consultado '+date(data.account.checkedAt):'Saldo demo oficial: pendiente de conexión. Los USD 10 de arriba pertenecen a otra simulación.';
   if(!data.connected&&data.discovery){const d=data.discovery,migration={pending:'en curso',complete:'completa',failed:'fallida',not_applicable:'no aplica',unavailable:'no disponible',unknown:'sin confirmar',not_checked:'sin consultar'}[d.migration]||'sin confirmar';$('demo-feedback').textContent='La aplicación fue autorizada, pero la API no permitió verificar una cuenta demo activa en USD. Demo/USD activas informadas: '+d.activeDemoUsd+'. Migración de plataforma: '+migration+'.';}
 }
-async function loadDemo(){demoFetched=Date.now();try{const r=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(4500)});if(!r.ok)throw Error();renderDemo(await r.json());}catch{chip('demo-state','Estado demo sin confirmar','offline');$('deriv-refresh').disabled=true;}}
+async function loadDemo(){demoFetched=Date.now();try{const r=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(4500)});if(!r.ok)throw Error();renderDemo(await r.json());}catch{chip('demo-state','Estado demo sin confirmar','offline');$('deriv-refresh').disabled=true;$('deriv-quote').disabled=true;}}
 $('deriv-callback').textContent=location.origin+'/api/deriv/callback';
 $('deriv-connect').onclick=async()=>{
   const clientId=$('deriv-client').value.trim(),out=$('demo-feedback');if(!/^[A-Za-z0-9_-]{1,128}$/.test(clientId)){out.textContent='Escribe el identificador público de tu aplicación de Deriv.';return;}
@@ -139,6 +143,23 @@ $('deriv-connect').onclick=async()=>{
   catch{out.textContent='No se pudo iniciar la autorización. Conserva el identificador y vuelve a intentarlo.';$('deriv-connect').disabled=false;}
 };
 $('deriv-refresh').onclick=async()=>{const out=$('demo-feedback');$('deriv-refresh').disabled=true;try{const r=await fetch('/api/deriv/refresh',{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error();renderDemo(await r.json());out.textContent='Saldo demo verificado en Deriv. La ejecución de contratos sigue desactivada.';}catch{out.textContent='No se pudo actualizar la cuenta demo. Puede ser necesario autorizarla nuevamente.';await loadDemo();}};
+$('deriv-quote').onclick=async()=>{
+  const btn=$('deriv-quote'),out=$('demo-quote');btn.disabled=true;
+  out.textContent='Consultando exclusivamente una cotización en la cuenta DEMO. No se realizará ninguna compra.';
+  try{
+    const response=await fetch('/api/deriv/quote',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+      body:'{}',signal:AbortSignal.timeout(28000)});
+    if(!response.ok)throw Error('QUOTE_UNAVAILABLE');
+    const quote=await response.json();
+    if(quote.accepted===false){
+      out.textContent='Deriv rechazó CALL · R_100 · 20 ticks · USD 0,10 (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.';
+    }else if(quote.accepted===true&&Number.isFinite(quote.askPrice)&&Number.isFinite(quote.payout)){
+      out.textContent='Cotización DEMO, sin compra · CALL · R_100 · 20 ticks · Importe solicitado USD 0,10 · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.';
+    }else throw Error('QUOTE_INVALID');
+  }catch{out.textContent='No se pudo obtener una cotización DEMO verificable. El importe sigue en USD 0,10 y no se realizó ninguna compra.';}
+  finally{btn.disabled=false;}
+};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});refresh();
 $('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
 </script></main></body></html>
