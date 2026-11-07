@@ -1,10 +1,10 @@
 {
-  "version": "5.9",
-  "updatedAt": "2026-11-07T23:48:43.076Z",
-  "summary": "Crear ejecución secuencial controlada de 10 contratos DEMO 5 CALL y 5 PUT con paradas de seguridad",
+  "version": "6.0",
+  "updatedAt": "2026-11-07T23:49:20.624Z",
+  "summary": "Activar ensayo DEMO autorizado de 10 compras, parada segura y exportación CSV",
   "changes": [
-    "Crear ejecución secuencial controlada de 10 contratos DEMO 5 CALL y 5 PUT con paradas de seguridad"
+    "Activar ensayo DEMO autorizado de 10 compras, parada segura y exportación CSV"
   ],
-  "sourceCommit": "3ad723015068a9314896318510391c45843e372b",
+  "sourceCommit": "530ba88ab39891fedc29926bbea9bdd248f63453",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

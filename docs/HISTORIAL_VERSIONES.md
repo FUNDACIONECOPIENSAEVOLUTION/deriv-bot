@@ -50,6 +50,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.0 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:49:20.624Z (UTC).
+- **Commit de origen:** `530ba88ab398`.
+- Activar ensayo DEMO autorizado de 10 compras, parada segura y exportación CSV
+
 ## v5.9 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:48:43.076Z (UTC).
