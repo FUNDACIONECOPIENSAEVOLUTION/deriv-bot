@@ -12,6 +12,8 @@ import asyncio
 import json
 import math
 import os
+import shutil
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
 
@@ -242,6 +244,54 @@ async def compare_research_strategies(
         "caution": "No ejecución en Deriv. Seleccionar la mejor estrategia a posteriori sesga la comparación. Los pagos reales son distintos y variables. No garantiza retornos.",
         "executed_orders": 0,
     }
+
+
+@server.tool()
+async def simulate_ten_bot_paper_trades(symbol: str = "R_100") -> dict[str, Any]:
+    """Simular diez operaciones hipotéticas con el MISMO motor de señales Node del bot.
+
+    Descarga 1000 ticks públicos recientes y pasa el historial cronológico al
+    motor PAPER del repositorio. Decide CALL/PUT/HOLD con SMA/RSI y volatilidad.
+    NO se conecta a cuentas, no compra contratos ni envía órdenes a Deriv.
+    Requiere Node.js 24+ instalado junto a este servidor de investigación.
+    """
+    if symbol != "R_100":
+        raise ValueError("Solo R_100 está autorizado para el ensayo PAPER de diez")
+    prices, times = await _market_data("R_100", 1000)
+    node = shutil.which("node")
+    if node is None:
+        raise RuntimeError("Node.js es obligatorio para reutilizar el motor PAPER del bot")
+    script = Path(__file__).resolve().parent / "scripts" / "paper_ten_replay.mjs"
+    if not script.is_file():
+        raise RuntimeError("El motor PAPER del repositorio no está disponible")
+    input_data = json.dumps({"prices": prices, "times": times}, separators=(",", ":")).encode("utf-8")
+    if len(input_data) > 800_000:
+        raise ValueError("Historial público demasiado grande")
+    proc = await asyncio.create_subprocess_exec(
+        node, str(script), "--stdin",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(script.parent.parent),
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(input_data), timeout=18)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError("Motor PAPER fuera de tiempo")
+    if proc.returncode != 0 or len(stdout) > 100_000:
+        # Never echo subprocess stderr, potentially containing user environment.
+        raise RuntimeError("El motor PAPER no devolvió un resultado válido")
+    marker = "PAPER_TEN_REPORT "
+    line = next((line for line in stdout.decode("utf-8").splitlines()
+                 if line.startswith(marker)), None)
+    if line is None:
+        raise RuntimeError("No se recibió el informe PAPER")
+    report = json.loads(line[len(marker):])
+    if report.get("mode") != "PAPER_REPLAY_PUBLIC_HISTORY" or report.get("brokerOrdersExecuted") != 0:
+        raise RuntimeError("El informe no conserva la prohibición de compras al broker")
+    return report
 
 
 if __name__ == "__main__":
