@@ -250,10 +250,10 @@ function renderDemo(data){
       directionSelect.value=manualDirection;
   }
   const quoteApproved=demoManualApproval!==null&&Date.now()-demoManualApproval.at<45000
-    &&demoManualApproval.direction===manualDirection
+    &&demoManualApproval.direction===$('demo-quote-direction').value
     &&demoManualApproval.stakeCents===data.nextManualStakeCents
     &&demoManualApproval.purchases===(report.pilotPurchases||0);
-  const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&eligible&&quoteApproved
+  const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&quoteApproved
     &&daily.allowed===true&&(report.openCount||0)<selectedConcurrent
     &&Number(report.pilotRemainingPurchases)>0&&Number(report.pilotRemainingBudgetCents)>=35;
   $('demo-buy-once').disabled=!canBuy;
@@ -280,7 +280,7 @@ function renderDemo(data){
     :(report.openCount||0)>=selectedConcurrent?'Se alcanzó el máximo configurado de contratos DEMO abiertos; esperando liquidaciones.'
     :eligible?'Señal válida '+(state.decision.direction===1?'CALL ↑':'PUT ↓')+
       (data.demoAutomationRequested?' · modo automático solicitado.':' · puedes enviar una operación DEMO.')
-    :'Sin señal reciente verificable: no se permite comprar.';
+    :'Sin señal reciente para automatización. La primera compra manual DEMO puede probarse tras una cotización aceptada y aprobación expresa.';
   if(data.demoTradingEnabled&&!quoteApproved)
     $('demo-trade-status').textContent+=' · Compra manual bloqueada: consulta y obtén primero una propuesta aceptada de '
       +money(data.nextManualStakeCents||35)+' para la señal actual, y compra dentro de 45 segundos.';
