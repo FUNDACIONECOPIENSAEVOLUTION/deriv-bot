@@ -33,18 +33,24 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
    expect(()=>evaluateDemoRisk({...base,maxConcurrent:11})).toThrow('DEMO_RISK_INVALID');
    expect(()=>evaluateDemoRisk({...base,maxConcurrent:0})).toThrow('DEMO_RISK_INVALID');
  });
- it('first 10 virtual operations consume a shared US$10 pilot budget and then stop',()=>{
-   const near={...base,pilotPurchases:9,pilotCommittedCents:900,stakeCents:100};
-   expect(evaluateDemoRisk(near).allowed).toBe(true);
-   const full=evaluateDemoRisk({...near,pilotPurchases:10,pilotCommittedCents:1000});
-   expect(full.allowed).toBe(false);
-   expect(full.reason).toBe('DEMO_PILOT_COMPLETE');
-   expect(full.pilotRemainingPurchases).toBe(0);
-   expect(full.pilotRemainingBudgetCents).toBe(0);
-   expect(evaluateDemoRisk({...base,pilotPurchases:8,pilotCommittedCents:950,stakeCents:100}).reason)
-     .toBe('DEMO_PILOT_BUDGET');
-   expect(evaluateDemoRisk({...base,pilotPurchases:8,pilotCommittedCents:950,stakeCents:10}).allowed)
-     .toBe(true);
+ it('runs five blocks of ten with US$10 maximum per block and 50 purchases overall',()=>{
+   expect(evaluateDemoRisk({...base,pilotPurchases:9,pilotCommittedCents:900,batchCommittedCents:900,stakeCents:100}).allowed)
+      .toBe(true);
+   const boundary={...base,pilotPurchases:10,pilotCommittedCents:1000,batchCommittedCents:0};
+   expect(evaluateDemoRisk({...boundary,batchSettlementPending:true}).reason)
+      .toBe('DEMO_BATCH_SETTLEMENT_PENDING');
+   const following=evaluateDemoRisk({...boundary,batchSettlementPending:false});
+   expect(following.allowed).toBe(true);
+   expect(following.batchNumber).toBe(2);
+   expect(following.pilotRemainingPurchases).toBe(40);
+   expect(evaluateDemoRisk({...base,pilotPurchases:18,pilotCommittedCents:1900,batchCommittedCents:900,stakeCents:100})
+      .allowed).toBe(true);
+   expect(evaluateDemoRisk({...base,pilotPurchases:18,pilotCommittedCents:1950,batchCommittedCents:950,stakeCents:100})
+      .reason).toBe('DEMO_BATCH_BUDGET');
+   const finish=evaluateDemoRisk({...base,pilotPurchases:50,pilotCommittedCents:5000,batchCommittedCents:0});
+   expect(finish.reason).toBe('DEMO_PILOT_COMPLETE');
+   expect(finish.pilotRemainingPurchases).toBe(0);
+   expect(finish.pilotRemainingBudgetCents).toBe(0);
  });
  it('allows at most ten concurrent contracts',()=>{
    expect(DEMO_MAX_OPEN).toBe(10);
