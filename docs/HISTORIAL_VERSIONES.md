@@ -13,6 +13,15 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.3 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:03:28.052Z (UTC).
+- **Commit de origen:** `b3c63f0f2c9b`.
+- Validar automatización DEMO exclusivamente opt-in y previa liquidación
+- Permitir control de 50 operaciones DEMO por botón, después de validar compra inicial
+- Restringir botón de automatización hasta comprobar un contrato DEMO liquidado
+
 ## v2.2 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:02:54.658Z (UTC).
