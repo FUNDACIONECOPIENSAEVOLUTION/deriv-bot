@@ -17,6 +17,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.7 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:05:38.950Z (UTC).
+- **Commit de origen:** `39e7af1271b8`.
+- Documentar arranque de 50 compras DEMO tras primera validación y activación privada, sin dinero real
+
 ## v2.6 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:05:02.987Z (UTC).

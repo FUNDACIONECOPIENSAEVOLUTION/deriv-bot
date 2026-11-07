@@ -1,10 +1,10 @@
 {
-  "version": "2.6",
-  "updatedAt": "2026-11-07T20:05:02.987Z",
-  "summary": "Probar bloqueo de automatización hasta primera liquidación DEMO real",
+  "version": "2.7",
+  "updatedAt": "2026-11-07T20:05:38.950Z",
+  "summary": "Documentar arranque de 50 compras DEMO tras primera validación y activación privada, sin dinero real",
   "changes": [
-    "Probar bloqueo de automatización hasta primera liquidación DEMO real"
+    "Documentar arranque de 50 compras DEMO tras primera validación y activación privada, sin dinero real"
   ],
-  "sourceCommit": "237005b3fc06efeeea515e5ec33505f318525fcc",
+  "sourceCommit": "39e7af1271b8277c779fcc6f65ed1044a5fbf6f0",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
