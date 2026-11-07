@@ -116,6 +116,32 @@ class RiskFreeResearchTests(unittest.TestCase):
 
 
 class AsyncResearchTests(unittest.IsolatedAsyncioTestCase):
+    async def test_new_paper_mcp_tool_calls_bot_engine_without_deriv_orders(self):
+        import time
+        delta = [0.025, -0.017, 0.020, -0.014, 0.019, -0.012, 0.018]
+        p = []
+        value = 550.0
+        for i in range(1000):
+            value += delta[i % len(delta)]
+            p.append(round(value, 5))
+        now = int(time.time())
+        t = [now - 999 + i for i in range(1000)]
+        async def fake(symbol, count):
+            self.assertEqual((symbol, count), ("R_100", 1000))
+            return p, t
+        with patch.object(lab, "_market_data", fake):
+            report = await lab.simulate_ten_bot_paper_trades()
+        self.assertEqual(report["mode"], "PAPER_REPLAY_PUBLIC_HISTORY")
+        self.assertEqual(report["brokerOrdersExecuted"], 0)
+        self.assertEqual(report["summary"]["trades"], 10)
+        self.assertEqual(report["summary"]["callTrades"] + report["summary"]["putTrades"], 10)
+        self.assertEqual(report["summary"]["endBalanceCents"],
+                         report["summary"]["startBalanceCents"] + report["summary"]["pnlCents"])
+
+    async def test_paper_mcp_blocks_other_symbols_before_network(self):
+        with self.assertRaises(ValueError):
+            await lab.simulate_ten_bot_paper_trades("R_75")
+
     async def test_comparison_uses_temporal_split(self):
         prices = [100 + 0.02 * i + 0.12 * math.sin(i / 3) for i in range(450)]
         times = [1800000000 + i for i in range(450)]
