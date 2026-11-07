@@ -57,6 +57,15 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.7 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:59:57.335Z (UTC).
+- **Commit de origen:** `0b4f7dca3b5f`.
+- Probar acceso a página PAPER 10, validación de ticks y bloqueo de canales autenticados
+- Conectar ensayo PAPER 10 con navegación y acceso visible desde la portada del bot
+- Implementar botón PAPER 10 en navegador con señales SMA/RSI idénticas al núcleo del bot
+
 ## v6.6 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:59:25.719Z (UTC).
