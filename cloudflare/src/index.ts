@@ -202,7 +202,12 @@ export default {
             &&paper.config.symbol==='R_100'&&paper.decision.direction===1
             &&typeof paper.quoteAgeSeconds==='number'
             &&paper.quoteAgeSeconds>=0&&paper.quoteAgeSeconds<=10;
-          return json(await demo.buyDemoOnce(ready?'UP':'HOLD'));
+          return json(await demo.buyDemoOnce(ready?'UP':'HOLD',{
+            reason:paper.decision.reason,
+            fast:paper.decision.fast,slow:paper.decision.slow,
+            rsi:paper.decision.rsi,volatility:paper.decision.volatility,
+            entryQuote:paper.lastQuote,quoteAgeSeconds:paper.quoteAgeSeconds
+          }));
         }
         if(url.pathname==='/api/deriv/demo/check')return json(await demo.checkDemoSettlement());
         if(url.pathname==='/api/deriv/connect'){
