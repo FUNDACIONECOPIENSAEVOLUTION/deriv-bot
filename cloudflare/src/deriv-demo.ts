@@ -1,5 +1,5 @@
 import { dayAt } from '../../runtime/core.mjs';
-import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS } from './demo-risk-policy';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
@@ -210,13 +210,19 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const pending=this.ctx.storage.sql.exec<{state:string;buy_cents:number|null}>(
       "SELECT state,buy_cents FROM demo_trades WHERE state IN ('OPEN','UNKNOWN')"
     ).toArray();
+    // Count all broker-confirmed or unresolved purchases for the FIRST ten-trade pilot.
+    // Rejections do not consume the virtual pilot budget.
+    const pilot=this.ctx.storage.sql.exec<{trades:number;spent:number}>(
+      "SELECT COUNT(*) AS trades, COALESCE(SUM(buy_cents),0) AS spent FROM demo_trades WHERE state IN ('OPEN','UNKNOWN','SETTLED')"
+    ).one();
     return {brokerBalanceCents:currentBalance??null,
       baselineBalanceCents:DEMO_BASELINE_EXPECTED_CENTS,
       halted:this.read<boolean>('demo-loss-halt')===true,
       lifetimeNetCents:ledger,
       openContracts:pending.filter(p=>p.state==='OPEN').length,
       unknownCount:pending.filter(p=>p.state==='UNKNOWN').length,
-      exposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||100),0)};
+      exposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||100),0),
+      pilotPurchases:pilot.trades,pilotCommittedCents:pilot.spent};
   }
   private chosenMaxConcurrent(){
     const value=this.read<number>('demo-max-concurrent')??10;
@@ -265,7 +271,13 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const lastChecked=this.read<number>('demo-last-balance-at')||null;
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.net,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
-      virtualResearchAllocationCents:DEMO_MAX_LOSS_CENTS,
+      virtualResearchAllocationCents:DEMO_PILOT_BUDGET_CENTS,
+      pilotMaxPurchases:DEMO_PILOT_MAX_PURCHASES,
+      pilotPurchases:raw.pilotPurchases,
+      pilotRemainingPurchases:Math.max(0,DEMO_PILOT_MAX_PURCHASES-raw.pilotPurchases),
+      pilotCommittedCents:raw.pilotCommittedCents,
+      pilotRemainingBudgetCents:Math.max(0,DEMO_PILOT_BUDGET_CENTS-raw.pilotCommittedCents),
+      hardAccountLossStopCents:DEMO_MAX_LOSS_CENTS,
       virtualResearchRemainingCents:raw.brokerBalanceCents===null?null:
         Math.max(0,raw.brokerBalanceCents-(DEMO_BASELINE_EXPECTED_CENTS-DEMO_MAX_LOSS_CENTS)-raw.exposureCents),
       maxParallel:DEMO_MAX_OPEN,openCount:raw.openContracts,unknownCount:raw.unknownCount,
@@ -451,7 +463,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
           unknownCount:risk.unknownCount,exposureCents:risk.exposureCents,
           lifetimeNetCents:risk.lifetimeNetCents,brokerBalanceCents:risk.brokerBalanceCents,
           baselineBalanceCents:risk.baselineBalanceCents,halted:risk.halted,
-          maxConcurrent:this.chosenMaxConcurrent()
+          maxConcurrent:this.chosenMaxConcurrent(),
+          pilotPurchases:risk.pilotPurchases,pilotCommittedCents:risk.pilotCommittedCents
         });
         if(answer.price!==stakeCents/100)throw Error('DEMO_STAKE_CHANGED');
         this.ctx.storage.sql.exec(
@@ -482,7 +495,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
         signal:paperSignal,openContracts:current.openContracts,unknownCount:current.unknownCount,
         exposureCents:current.exposureCents,lifetimeNetCents:current.lifetimeNetCents,
         brokerBalanceCents:current.brokerBalanceCents,baselineBalanceCents:current.baselineBalanceCents,
-        halted:current.halted,maxConcurrent:this.chosenMaxConcurrent()
+        halted:current.halted,maxConcurrent:this.chosenMaxConcurrent(),
+        pilotPurchases:current.pilotPurchases,pilotCommittedCents:current.pilotCommittedCents
       },reserve,acknowledge
     });
     this.ctx.storage.sql.exec(
