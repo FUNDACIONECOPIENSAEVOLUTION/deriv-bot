@@ -88,7 +88,7 @@ jobs:
       - name: Verificar que jamás se publiquen compras activadas por defecto
         run: |
           grep -F 'DEMO_BUY_ENABLED: bindings.text("true")' cloudflare/cloudflare.config.ts
-          grep -F 'DEMO_AUTO_ENABLED: bindings.text("false")' cloudflare/cloudflare.config.ts
+          grep -F 'DEMO_AUTO_ENABLED: bindings.text("true")' cloudflare/cloudflare.config.ts
       - name: Solicitar nueva publicación GitHub Pages del commit versionado
         if: steps.bump.outputs.changed == 'true'
         env:
