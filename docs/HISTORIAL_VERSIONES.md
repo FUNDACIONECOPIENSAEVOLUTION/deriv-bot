@@ -22,6 +22,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.2 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:22:57.264Z (UTC).
+- **Commit de origen:** `148d61a29ced`.
+- Probar bloqueos de cotización rechazada, vencida o con importe/señal distintos antes de comprar DEMO
+
 ## v3.1 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:22:23.787Z (UTC).
