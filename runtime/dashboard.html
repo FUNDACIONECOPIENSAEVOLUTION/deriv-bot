@@ -23,6 +23,15 @@
 </section><aside class="card side"><div><h2>Qué está haciendo el motor</h2><div id="decision" class="decision">Esperando el primer estado</div><p id="decision-note">Las decisiones aparecerán cuando el motor reciba precios.</p><div class="indicators"><div><small>SMA · 8 ticks</small><strong id="fast">—</strong></div><div><small>SMA · 21 ticks</small><strong id="slow">—</strong></div><div><small>RSI · 14 cambios</small><strong id="rsi">—</strong></div><div><small>Volatilidad · 30 ticks</small><strong id="vol">—</strong></div></div><div class="line"><span>Posición virtual</span><strong id="position">Sin datos</strong></div><div class="line"><span>Conexión de Deriv</span><strong id="feed">—</strong></div><div class="line"><span>Ticks procesados</span><strong id="ticks">—</strong></div><div class="controls" id="controls" hidden><button class="primary" id="paper-start" disabled>Iniciar simulación</button> <button id="paper-stop">Pausar Deriv</button><p id="paper-control-status" role="status"></p></div></div><div><div class="divider"></div><h2>Límites del experimento</h2><div class="line"><span>Por simulación</span><strong id="stake">—</strong></div><div class="line"><span>Pérdida máxima diaria</span><strong id="budget">—</strong></div><div class="line"><span>Pérdidas de hoy</span><strong id="loss">—</strong></div><div class="line"><span>Pago neto supuesto</span><strong id="payout">—</strong></div><p id="cost"></p><p>El motor abre como máximo 12 simulaciones por día con el perfil actual. Los límites no aseguran ganancias.</p><a id="platform-link" href="https://app.deriv.com/" target="_blank" rel="noopener noreferrer">Abrir plataforma Deriv ↗</a></div></aside></div>
 <section class="card equity"><header><h2>Cómo cambia el saldo virtual</h2><small>Últimas 30 operaciones del registro</small></header><svg id="equity" viewBox="0 0 1100 150" role="img" aria-label="Curva del saldo virtual tras cada simulación liquidada"></svg><p id="equity-note" class="note">La curva aparecerá después de la primera liquidación.</p></section>
 <section class="card section-gap"><header><h2>Entradas y salidas · Deriv</h2><a href="/api/trades.csv">Descargar historial completo CSV</a></header><p class="note">Selecciona una fila para ubicar su entrada en el gráfico. Una salida V / VOID no suma ganancia ni pérdida. Los eventos anteriores a la ventana de velas permanecen en el registro.</p><div class="table-scroll"><table><thead><tr><th>Entrada · Colombia</th><th>Salida · Colombia</th><th>Estado</th><th>Dirección</th><th>Precio E → X</th><th>Resultado virtual</th><th>Decisión registrada</th></tr></thead><tbody id="trades"></tbody></table></div></section>
+<section id="arb-research" class="card section-gap">
+<header><div><h2>Laboratorio de arbitraje · Binance / Coinbase</h2><p class="note">BTC/USDT en Binance, BTC/USD y USDT/USD en Coinbase. Se usan libros de órdenes bid/ask y conversión real de cotización; no es arbitraje ejecutable.</p></div><span class="chip" id="arb-state">Investigación sin órdenes</span></header>
+<p class="note">Presupuesto hipotético máximo: USD 10. Los cálculos descuentan comisiones y deslizamiento supuestos, NO tus costos confirmados ni una ejecución real. No hay cuentas de Binance o Coinbase vinculadas.</p>
+<div class="tools"><button id="arb-refresh">Consultar precios públicos y comparar</button><small id="arb-time">Sin muestras disponibles</small></div>
+<p id="arb-feedback" role="status" class="note">El laboratorio recopila una muestra cada cinco minutos si el servicio puede acceder a los mercados. Los precios pueden cambiar más rápido de lo que el sistema consulta.</p>
+<div class="table-scroll"><table><thead><tr><th>Ruta teórica</th><th>Compra (USD/BTC)</th><th>Venta (USD/BTC)</th><th>Margen bruto</th><th>Margen tras costos estimados</th><th>Ganancia/pérdida estimada con ≤ US$10</th></tr></thead><tbody id="arb-comparisons"></tbody></table></div>
+<p id="arb-costs" class="note"></p>
+<p id="arb-samples" class="note"></p>
+</section>
 <section id="demo-connection" class="card section-gap" hidden><header><h2>Conexión con la demo oficial de Deriv</h2><span class="chip" id="demo-state">Sin conectar</span></header>
 <p>Este saldo pertenece a la cuenta demo de Deriv y se muestra por separado de la simulación de USD 10. Esta conexión verifica la cuenta; la ejecución de contratos y la IA todavía no están activadas.</p>
 <div class="tools"><label>Identificador público de la aplicación <input id="deriv-client" maxlength="128" autocomplete="off" spellcheck="false" placeholder="App ID de Deriv"></label><button id="deriv-connect">Autorizar conexión con Deriv</button><button id="deriv-refresh" disabled>Actualizar saldo demo</button></div>
@@ -52,7 +61,7 @@ const date=t=>t?new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',day:'
 const labels={PAUSED:'En pausa',COLLECTION_ONLY:'Solo recopila datos',POSITION_OPEN:'Evalúa una posición',WARMUP:'Reuniendo historial',INSUFFICIENT_VIRTUAL_BALANCE:'Saldo virtual insuficiente',DAILY_LOSS_BUDGET:'Se alcanzó el límite de pérdidas',DAILY_TRADE_LIMIT:'Se alcanzó el máximo diario',COOLDOWN:'Espera entre entradas'};
 const reasons={WARMUP:'Espera al menos 30 precios.',HIGH_VOLATILITY:'La volatilidad supera el filtro de 0,45 %.',NO_TREND:'Las medias todavía no muestran una dirección suficiente.',RSI_CONFLICT:'La dirección de las medias y el RSI no coinciden.',TREND_AND_MOMENTUM:'Las medias y el RSI coinciden dentro del filtro de volatilidad.'};
 const feedLabels={stopped:'Detenida',live:'Recibiendo precios',connecting:'Conectando',syncing:'Cargando historial',disconnected:'Desconectada',recovering:'Recuperando'};
-let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0;
+let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0,arbFetched=0;
 function svg(parent,name,attrs={},text){const el=document.createElementNS(ns,name);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,String(v));if(text!==undefined)el.textContent=text;parent.appendChild(el);return el;}
 function chip(id,text,tone=''){const el=$(id);el.textContent=text;el.className='chip '+tone;}
 function showBar(bar){$('ohlc').textContent=date(bar.time)+' · Apertura '+price(bar.open)+' · Máximo '+price(bar.high)+' · Mínimo '+price(bar.low)+' · Cierre '+price(bar.close)+(bar.partial?' · Vela parcial':'');}
@@ -130,7 +139,7 @@ async function loadMarket(force=false){
 }
 async function refresh(){
   clearTimeout(timer);if(busy)return;if(document.hidden){timer=setTimeout(refresh,5000);return;}busy=true;
-  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500)}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();$('demo-connection').hidden=!state.serverManaged;if(state.serverManaged&&Date.now()-demoFetched>60000)await loadDemo();}
+  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500)}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();$('demo-connection').hidden=!state.serverManaged;if(state.serverManaged&&Date.now()-demoFetched>60000)await loadDemo();if(Date.now()-arbFetched>60000)await loadArbitrage();}
   catch{$('error').textContent='No se pudo actualizar. Los valores visibles pueden estar desactualizados.';chip('engine-status','Deriv · estado sin confirmar','offline');chip('chart-status','Sin actualización verificada','offline');$('paper-start').disabled=true;}
   finally{busy=false;timer=setTimeout(refresh,5000);}
 }
@@ -235,6 +244,54 @@ $('demo-check').onclick=async()=>{
       :out.state==='BUY_OUTCOME_UNKNOWN'?'Compra sin confirmación; exige conciliación manual con Deriv.':'Sin contratos DEMO pendientes.';
   }catch{msg.textContent='Deriv no confirmó el cierre. El contrato queda pendiente; no se enviarán nuevas compras.';}
   finally{await loadDemo();}
+};
+async function loadArbitrage(){
+  arbFetched=Date.now();
+  try{
+    const response=await fetch('/api/arbitrage',{signal:AbortSignal.timeout(4500)});
+    if(!response.ok)throw Error();
+    const data=await response.json(),tbody=$('arb-comparisons');
+    tbody.replaceChildren();
+    if(!data.hasData||!data.snapshot){
+      $('arb-feedback').textContent='Todavía no hay muestras públicas comparables. Utiliza Consultar precios públicos y comparar.';
+      $('arb-time').textContent='Sin muestras';
+      return;
+    }
+    const snap=data.snapshot;
+    $('arb-time').textContent='Última muestra recibida: '+date(data.latestCapturedAt);
+    $('arb-feedback').textContent='Solo precios observados. No se ejecutó ninguna compra, venta, conversión ni transferencia. Los libros recibidos no demuestran disponibilidad futura del precio.';
+    $('arb-costs').textContent='Supuestos de costos (no verificados): comisión de cada mercado '+snap.assumptionBps.takerEach+' puntos básicos; conversión USDT/USD '+snap.assumptionBps.fx+' pb; deslizamiento por mercado '+snap.assumptionBps.slippageEach+' pb. No incluye retiros, inventario en ambas cuentas ni demoras de transferencia.';
+    $('arb-samples').textContent='Muestras recientes mostradas: '+(data.observationsShown||0)+'; ritmo orientativo de 5 min. Diferencias de milisegundos pueden escapar de este monitor.';
+    for(const item of snap.estimates||[]){
+      const tr=document.createElement('tr');
+      const values=[item.route==='BINANCE_TO_COINBASE'?'Comprar Binance / vender Coinbase':'Comprar Coinbase / vender Binance',
+        price(item.buyUsdPerBtc),price(item.sellUsdPerBtc),
+        Number(item.grossBps).toFixed(2)+' pb',Number(item.estimatedNetBps).toFixed(2)+' pb',
+        money(Math.round(item.estimatedNetUsd*100))];
+      for(let i=0;i<values.length;i++){
+        const td=document.createElement('td');td.textContent=values[i];
+        if(i===4||i===5)td.className=item.estimatedNetUsd>0?'positive':'negative';
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    chip('arb-state','Mercado público · solo investigación','warn');
+  }catch{
+    $('arb-feedback').textContent='No hay datos públicos verificables o se alcanzó algún límite de consulta. No se generan precios ficticios.';
+    chip('arb-state','Muestra no disponible','offline');
+  }
+}
+$('arb-refresh').onclick=async()=>{
+  const btn=$('arb-refresh');btn.disabled=true;
+  $('arb-feedback').textContent='Consultando los tres libros de órdenes públicos...';
+  try{
+    const r=await fetch('/api/arbitrage/refresh',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+      body:'{}',signal:AbortSignal.timeout(18000)});
+    if(!r.ok)throw Error();
+    arbFetched=0;await loadArbitrage();
+  }catch{$('arb-feedback').textContent='No se pudo confirmar una muestra comparable. No hubo ninguna operación.';}
+  finally{btn.disabled=false;}
 };
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});refresh();
 $('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
