@@ -202,6 +202,34 @@ it('records virtual results separately by the four stakes without fabricating ac
   expect(report.quoteAcceptance[0]).toMatchObject({stakeCents:10,rejections:1});
   expect(report.brokerBalanceCents).toBeNull();
 });
+it('audits ten virtual purchases per tranche before the next of five tranches',async()=>{
+  const stub=env.DERIV_DEMO.getByName('five-batches-audit');
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    for(let i=0;i<10;i++)ctx.storage.sql.exec(
+      "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',?,'SETTLED',?,100,?,?)",
+      100+i,1000+i,i<6?180:0,i<6?80:-100
+    );
+    for(let i=0;i<10;i++)ctx.storage.sql.exec(
+      "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents) VALUES('2026-11-07',?,'OPEN',?,100)",
+      200+i,2000+i
+    );
+  });
+  const report=(await stub.status()).tradeReport;
+  expect(report).toMatchObject({pilotPurchases:20,pilotRemainingPurchases:30,
+    pilotCommittedCents:2000,batchCount:5,batchNumber:3,
+    batchSettlementPending:true,openCount:10});
+  expect(report.batches[0]).toMatchObject({number:1,purchases:10,settled:10,
+    wins:6,losses:4,pnlCents:80,complete:true});
+  expect(report.batches[1]).toMatchObject({number:2,purchases:10,settled:0,complete:false});
+  expect(report.batches[2]).toMatchObject({number:3,purchases:0,settled:0,complete:false});
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    ctx.storage.sql.exec("UPDATE demo_trades SET state='SETTLED',pnl_cents=-100,payout_cents=0 WHERE state='OPEN'");
+  });
+  const reviewed=(await stub.status()).tradeReport;
+  expect(reviewed.batchSettlementPending).toBe(false);
+  expect(reviewed.batches[1]).toMatchObject({settled:10,pnlCents:-1000,complete:true});
+  expect(reviewed.unknownCount).toBe(0);
+});
 it('supports all experimental quote values without purchasing',()=>{
  for(const stakeCents of [10,25,50,100]){
    const q=demoQuoteRequest('DOWN',stakeCents);
