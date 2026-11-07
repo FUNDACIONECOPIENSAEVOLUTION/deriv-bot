@@ -477,7 +477,7 @@ function renderDemo(data){
       +' · '+(report.settled||0)+' liquidados';
     const trades=(report.history||[]).slice(0,5);
     $('chart-demo-last-trades').textContent=trades.length
-      ?'Últimos contratos DEMO verificados: '+trades.map(t=>
+      ?'Últimos contratos DEMO registrados: '+trades.map(t=>
         (t.contractType||t.decision?.contractType||'Tipo pendiente')+' '+
         (Number.isInteger(t.buyCents)?money(t.buyCents):'importe pendiente')+
         ' · '+t.state+
@@ -574,7 +574,7 @@ function renderDemo(data){
   const a=report.analysis;
   if(a){
     $('demo-diagnostics').textContent='Contratos DEMO liquidados analizados: '+a.sampleSize
-      +' · P&L verificado: '+money(a.overall.netPnlCents)
+      +' · P&L registrado (incluye resultados de navegador no verificados por el servidor): '+money(a.overall.netPnlCents)
       +' · Máxima caída histórica de la asignación virtual: '+money(a.overall.maxDrawdownCents)
       +' · Expectativa observada por contrato: '+(a.overall.expectancyCents===null?'sin datos':money(Math.round(a.overall.expectancyCents)))
       +' · Límite inferior de acierto al 95 % (Wilson): '+(a.overall.winRateLower95Pct===null?'sin datos':String(a.overall.winRateLower95Pct)+' %')+'.';
