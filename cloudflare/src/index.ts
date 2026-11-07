@@ -5,6 +5,7 @@ import { PublicFeed, type MarketStatus } from '../../runtime/feed.mjs';
 import dashboard from '../../runtime/dashboard.html?raw';
 import release from '../../release.json';
 import { PublicSocket } from './public-socket';
+import { DEMO_STAKES_CENTS } from './demo-risk-policy';
 import { checkPublicContractCompatibility } from './deriv-contracts';
 import { readPublicArbitrageSnapshot } from '../../runtime/cross-exchange.mjs';
 export { DerivDemoConnection } from './deriv-demo';
@@ -225,7 +226,7 @@ export default {
           if(direction!=='UP'&&direction!=='DOWN')return json({error:'Dirección inválida'},400);
           const stakeCents=choice&&typeof choice==='object'&&'stakeCents' in choice?
             (choice as {stakeCents?:unknown}).stakeCents:100;
-          if(typeof stakeCents!=='number'||![35,50,75,100].includes(stakeCents))
+          if(typeof stakeCents!=='number'||!DEMO_STAKES_CENTS.some(allowed=>allowed===stakeCents))
             return json({error:'Importe virtual no permitido'},400);
           return json(await demo.preflightDemo(direction,stakeCents));
         }
