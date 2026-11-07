@@ -12,6 +12,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.2 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:02:54.658Z (UTC).
+- **Commit de origen:** `3a67198ca1a9`.
+- Exigir primera compra manual DEMO liquidada antes de autorizar 49 operaciones automáticas
+
 ## v2.1 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:01:09.901Z (UTC).

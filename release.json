@@ -1,14 +1,10 @@
 {
-  "version": "2.1",
-  "updatedAt": "2026-11-07T20:01:09.901Z",
-  "summary": "Mantener prueba de compuerta fail-closed bajo Worker sintético",
+  "version": "2.2",
+  "updatedAt": "2026-11-07T20:02:54.658Z",
+  "summary": "Exigir primera compra manual DEMO liquidada antes de autorizar 49 operaciones automáticas",
   "changes": [
-    "Mantener prueba de compuerta fail-closed bajo Worker sintético",
-    "No confundir entorno sintético bloqueado con interruptor de producción",
-    "Mantener fixtures de pruebas DEMO bloqueadas aunque producción permita compra manual",
-    "Alinear despliegue manual con compra DEMO bajo control propietario",
-    "Comprobar despliegue de compra manual DEMO habilitada y automatización bloqueada"
+    "Exigir primera compra manual DEMO liquidada antes de autorizar 49 operaciones automáticas"
   ],
-  "sourceCommit": "85674eafeff58c73476c4a3a4a4c65cc9d61fce5",
+  "sourceCommit": "3a67198ca1a924e56bce6b95dddcad580c184e61",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
