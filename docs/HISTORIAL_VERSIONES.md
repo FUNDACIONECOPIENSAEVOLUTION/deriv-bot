@@ -23,6 +23,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.3 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:38:49.265Z (UTC).
+- **Commit de origen:** `d492f213c576`.
+- Mostrar error seguro de cotización Deriv, incluido límite temporal/OTP/WebSocket, sin revelar tokens
+
 ## v3.2 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:22:57.264Z (UTC).

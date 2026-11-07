@@ -1,10 +1,10 @@
 {
-  "version": "3.2",
-  "updatedAt": "2026-11-07T20:22:57.264Z",
-  "summary": "Probar bloqueos de cotización rechazada, vencida o con importe/señal distintos antes de comprar DEMO",
+  "version": "3.3",
+  "updatedAt": "2026-11-07T20:38:49.265Z",
+  "summary": "Mostrar error seguro de cotización Deriv, incluido límite temporal/OTP/WebSocket, sin revelar tokens",
   "changes": [
-    "Probar bloqueos de cotización rechazada, vencida o con importe/señal distintos antes de comprar DEMO"
+    "Mostrar error seguro de cotización Deriv, incluido límite temporal/OTP/WebSocket, sin revelar tokens"
   ],
-  "sourceCommit": "148d61a29cedca09e91182b7a55fee084bb81c3d",
+  "sourceCommit": "d492f213c576979b7e3ba0051fdd295629603b7b",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
