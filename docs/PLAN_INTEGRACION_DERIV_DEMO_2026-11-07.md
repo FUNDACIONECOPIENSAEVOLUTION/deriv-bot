@@ -40,3 +40,13 @@ Calcular éxito por importe, resultado neto, valor esperado por contrato, factor
 - Nunca activar cuenta real automáticamente ni extrapolar estadísticas DEMO a dinero real.
 
 API oficial: https://developers.deriv.com/docs/options/ws-demo/ , https://developers.deriv.com/docs/trading/proposal/ , https://developers.deriv.com/docs/trading/buy/ , https://developers.deriv.com/docs/trading/proposal-open-contract/ .
+
+### Campaña DEMO autorizada — 5 bloques de 10 (07/11/2026)
+
+- El propietario solicita **hasta 50 contratos DEMO**, en **cinco bloques de diez compras confirmadas por Deriv**, sin usar jamás la cuenta real.
+- **Límite de importes virtuales por bloque:** US$10 (1.000 centavos); **máximo acumulado de compras:** US$50 (5.000 centavos). Los importes individuales rotan US$0,10 / US$0,25 / US$0,50 / US$1. Un rechazo de precio no autoriza incrementarlo.
+- **Hasta diez contratos abiertos a la vez**, configurable por el propietario. El siguiente bloque solo puede comenzar cuando los diez contratos anteriores estén liquidados oficialmente. Si hay orden UNKNOWN, se bloquea y requiere conciliación.
+- Un **segundo tope independiente** detiene el entrenamiento cuando el saldo oficial DEMO llega a US$9.900 o la exposición podría atravesarlo desde la referencia US$10.000.
+- Se muestra informe de **cada bloque** (compras, liquidados, ganadas, perdidas, P&L y tasa observada), más el histórico total. El porcentaje de acierto no garantiza resultado positivo.
+- **Publicar código no inicia operaciones**: el Worker mantiene `DEMO_BUY_ENABLED=false` y `DEMO_AUTO_ENABLED=false` hasta una activación operativa específica tras validar autenticación, cotización y primera compra virtual del broker. La cuenta real permanece fuera del código de ejecución.
+
