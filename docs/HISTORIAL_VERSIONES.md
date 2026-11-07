@@ -36,6 +36,16 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.6 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T22:57:58.113Z (UTC).
+- **Commit de origen:** `ce851d07ef07`.
+- Corregir sintaxis de prueba de regresión del HTML DEMO
+- Reprobar CALL y PUT con cuatro importes DEMO en API pública sin compras
+- Añadir regresión para HTML duplicado y el selector del importe DEMO
+- Reparar HTML DEMO duplicado y sincronizar selector con próxima compra autorizada
+
 ## v4.5 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T22:50:40.296Z (UTC).

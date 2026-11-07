@@ -1,10 +1,13 @@
 {
-  "version": "4.5",
-  "updatedAt": "2026-11-07T22:50:40.296Z",
-  "summary": "Validar stakes DEMO 35/50/75/100 antes de desplegar corrección en Cloudflare",
+  "version": "4.6",
+  "updatedAt": "2026-11-07T22:57:58.113Z",
+  "summary": "Corregir sintaxis de prueba de regresión del HTML DEMO",
   "changes": [
-    "Validar stakes DEMO 35/50/75/100 antes de desplegar corrección en Cloudflare"
+    "Corregir sintaxis de prueba de regresión del HTML DEMO",
+    "Reprobar CALL y PUT con cuatro importes DEMO en API pública sin compras",
+    "Añadir regresión para HTML duplicado y el selector del importe DEMO",
+    "Reparar HTML DEMO duplicado y sincronizar selector con próxima compra autorizada"
   ],
-  "sourceCommit": "0e49602fc0e8661bfb8280afcdf03396539b8b47",
+  "sourceCommit": "ce851d07ef0757ffe42073f39b8ee3330b82dab9",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
