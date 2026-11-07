@@ -25,6 +25,16 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.5 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:43:13.601Z (UTC).
+- **Commit de origen:** `41b0e23468de`.
+- Corregir sintaxis de mensaje ContractBuyValidationError y restaurar dashboard validable
+- Probar que diagnóstico de contratos está protegido, no acepta origen externo y no envía órdenes
+- Probar comprobación pública de contratos Deriv y sanitización de mensajes sin realizar compras
+- Mostrar causa exacta del error, próximo importe y diagnóstico de CALL/PUT sin compras en Deriv
+
 ## v3.4 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:39:24.984Z (UTC).
