@@ -1,10 +1,11 @@
 {
-  "version": "5.0",
-  "updatedAt": "2026-11-07T23:17:48.220Z",
-  "summary": "Añadir diagnóstico público seguro y limitado para verificar WebSocket real desde Cloudflare",
+  "version": "5.1",
+  "updatedAt": "2026-11-07T23:18:25.146Z",
+  "summary": "Desplegar WebSocket nativo Deriv y exigir prueba real pública Cloudflare sin compras",
   "changes": [
-    "Añadir diagnóstico público seguro y limitado para verificar WebSocket real desde Cloudflare"
+    "Desplegar WebSocket nativo Deriv y exigir prueba real pública Cloudflare sin compras",
+    "Probar canal WebSocket saliente demo y bloqueo estricto de cuenta real"
   ],
-  "sourceCommit": "bc198a2eca90c80591d1b1190340cf7557f96ea3",
+  "sourceCommit": "4558d08091ad93984f70f4836dfff4cdd0eb8956",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

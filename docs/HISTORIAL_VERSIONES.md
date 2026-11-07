@@ -41,6 +41,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.1 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:18:25.146Z (UTC).
+- **Commit de origen:** `4558d08091ad`.
+- Desplegar WebSocket nativo Deriv y exigir prueba real pública Cloudflare sin compras
+- Probar canal WebSocket saliente demo y bloqueo estricto de cuenta real
+
 ## v5.0 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:17:48.220Z (UTC).
