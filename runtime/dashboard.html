@@ -36,11 +36,11 @@
 <p>Este saldo pertenece a la cuenta demo de Deriv y se muestra por separado de la simulación de USD 10. Esta conexión verifica la cuenta; la ejecución de contratos y la IA todavía no están activadas.</p>
 <div class="tools"><label>Identificador público de la aplicación <input id="deriv-client" maxlength="128" autocomplete="off" spellcheck="false" placeholder="App ID de Deriv"></label><button id="deriv-connect">Autorizar conexión con Deriv</button><button id="deriv-refresh" disabled>Actualizar saldo demo</button></div>
 <p id="demo-balance">Saldo demo oficial: pendiente de conexión.</p>
-<div class="tools"><label>Dirección a cotizar <select id="demo-quote-direction"><option value="UP">Sube (CALL)</option><option value="DOWN">Baja (PUT)</option></select></label><label>Importe virtual <select id="demo-quote-stake"><option value="10">US$0,10</option><option value="25">US$0,25</option><option value="50">US$0,50</option><option value="100">US$1</option></select></label><button id="deriv-quote" disabled>Consultar precio DEMO · 20 ticks</button></div>
+<div class="tools"><label>Dirección a cotizar <select id="demo-quote-direction"><option value="UP">Sube (CALL)</option><option value="DOWN">Baja (PUT)</option></select></label><button id="deriv-quote" disabled>Consultar precio DEMO · USD 1 · 20 ticks</button></div>
 <p id="demo-quote" class="note" role="status">Solo se consultará un precio al broker. No se comprará ningún contrato y no se incrementará el importe si Deriv lo rechaza.</p>
 <div class="divider"></div>
 <h2>Prueba con operaciones reales en la cuenta DEMO (saldo virtual)</h2>
-<p class="note">Entrenamiento DEMO: se alternan automáticamente importes de US$0,10, US$0,25, US$0,50 y US$1 por contrato. Hasta diez contratos abiertos; sin límite arbitrario de operaciones mientras exista una señal válida. Se detiene obligatoriamente si el saldo oficial DEMO llega a US$9.900 o menos, o si las posiciones abiertas podrían superar ese riesgo. El dinero real nunca se utiliza.</p>
+<p class="note">Primer lote de entrenamiento: máximo diez compras virtuales en Deriv, cada una de US$1 y 20 ticks, con un máximo de diez abiertas a la vez. Presupuesto de investigación US$10. Al registrar diez compras se bloquean las siguientes hasta evaluar los resultados, incluso si hay beneficio. El dinero real está deshabilitado.</p>
 <div class="tools">
   <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
   <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
@@ -50,7 +50,6 @@
 <p id="demo-trade-status" class="note" role="status">Sin operaciones DEMO verificadas.</p>
 <p id="demo-trade-summary" class="note">El historial PAPER superior no equivale a resultados de contratos del broker.</p>
 <p id="demo-daily-risk" class="note">Reglas del día: esperando estado. Se calculan sobre resultados virtuales liquidados, no sobre porcentaje de aciertos.</p>
-<p id="demo-stake-diagnostics" class="note">Comparación de importes pendiente de liquidaciones oficiales.</p>
 <div class="divider"></div>
 <h2>Diagnóstico del rendimiento · DEMO</h2>
 <p id="demo-diagnostics" class="note">El informe de entrenamiento aparecerá después de registrar contratos realmente liquidados por Deriv.</p>
@@ -162,46 +161,41 @@ function renderDemo(data){
   const eligible=state?.running===true&&state?.market?.state==='live'
     &&state?.config?.symbol==='R_100'&&[1,-1].includes(state?.decision?.direction)
     &&Number.isFinite(state?.quoteAgeSeconds)&&state.quoteAgeSeconds>=0&&state.quoteAgeSeconds<=10;
-  const safety=report.risk||{},canBuy=data.connected&&data.demoTradingEnabled&&eligible
-    &&safety.allowed===true&&(report.openCount||0)<10;
+  const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&eligible
+    &&daily.allowed===true&&(report.openCount||0)<10
+    &&(report.firstBatchBuys||0)<10
+    &&Number(report.virtualResearchRemainingCents)>=100;
   $('demo-buy-once').disabled=!canBuy;
   $('demo-auto-start').disabled=!(data.connected&&data.demoAutomationAvailable
-    &&data.demoTradingEnabled&&safety.allowed===true&&!data.demoAutomationRequested);
+    &&data.demoTradingEnabled&&daily.allowed===true&&
+    !data.demoAutomationRequested);
   $('demo-auto-stop').disabled=!(data.connected&&data.demoAutomationRequested);
   $('demo-check').disabled=!(data.connected&&(report.openCount||0)>0);
-  $('demo-trade-summary').textContent='Saldo oficial DEMO verificado: '+
-    (report.brokerBalanceCents===null?'sin verificar':money(report.brokerBalanceCents))
-    +' · Límite de parada: US$9.900'
-    +' · Margen restante estimado: '+
-      (report.virtualResearchRemainingCents===null?'sin verificar':money(report.virtualResearchRemainingCents))
-    +' · Contratos abiertos: '+(report.openCount||0)+'/10'
-    +' · Compras sin confirmar: '+(report.unknownCount||0)
+  $('demo-trade-summary').textContent='Asignación virtual inicial: USD 10'
+    +' · Disponibilidad estimada de la asignación: '+money(report.virtualResearchRemainingCents??1000)
+     +' · Abiertos: '+(report.openCount||0)+'/10'
+    +' · Primera tanda: '+(report.firstBatchBuys||0)+'/10'
+    +' · Restantes por comprar: '+(report.firstBatchRemaining??10)
+    +' · Compras sin confirmación: '+(report.unknownCount||0)
     +' · DEMO liquidadas: '+(report.settled||0)
     +' · Ganadas: '+(report.wins||0)+' · Perdidas: '+(report.losses||0)
-    +' · Aciertos: '+(report.winRatePct===null?'sin datos':String(report.winRatePct)+' %')
-    +' · Resultado virtual del bot: '+money(report.pnlCents||0)+'.';
-  $('demo-trade-status').textContent=report.lossHalt
-    ?'ALERTA: la cuenta DEMO alcanzó la pérdida máxima de US$100. El bot no abrirá nuevas operaciones.'
-    :!data.demoTradingEnabled?'Las compras DEMO permanecen deshabilitadas hasta validar la conexión del servidor.'
-    :(report.unknownCount||0)>0?'Compra sin confirmar: bloqueadas nuevas operaciones hasta conciliación.'
-    :safety.allowed===false?'Límite preventivo DEMO: '+String(safety.reason||'saldo pendiente')
-    :(report.openCount||0)>=10?'Diez operaciones abiertas: esperando liquidaciones.'
-    :eligible?'Señal '+(state.decision.direction===1?'CALL ↑':'PUT ↓')+
-      (data.demoAutomationRequested?' · automatización solicitada.':' · puedes consultar una compra virtual.')
-    :'Sin señal reciente verificable. No se realizan compras.';
-  $('demo-daily-risk').textContent='Límite acumulado sobre los US$10.000 iniciales: pérdida máxima US$100 virtuales. '
-    +'El cálculo protege el saldo antes de abrir nuevas posiciones, incluye exposición pendiente y no reescala las apuestas después de perder. '
-    +'Automatización: '+(data.demoAutomationRequested?'solicitada':'apagada')
-    +' · La consulta automática evalúa como máximo una oportunidad nueva por minuto.';
-  const acceptance=report.quoteAcceptance||[],byStake=report.byStake||[];
-  $('demo-stake-diagnostics').textContent=[10,25,50,100].map(stake=>{
-    const s=byStake.find(x=>x.stakeCents===stake),q=acceptance.find(x=>x.stakeCents===stake);
-    const settled=s?.settled||0,wins=s?.wins||0;
-    return money(stake)+': '+settled+' liquidados, '+wins+' aciertos, '+
-      (settled?String(Math.round(wins/settled*100))+' %':'sin datos')+
-      ', neto '+money(s?.netCents||0)+
-      ', propuestas rechazadas '+(q?.rejections||0);
-  }).join(' · ');
+    +' · Acierto: '+(report.winRatePct===null?'sin datos':String(report.winRatePct)+' %')
+    +' · Resultado neto virtual: '+money(report.pnlCents||0)+'.';
+  $('demo-trade-status').textContent=!data.demoTradingEnabled
+    ?'El modo de compra DEMO sigue desactivado hasta validar la integración.'
+    :(report.unknownCount||0)>0?'Una compra no fue confirmada por Deriv: nuevas compras bloqueadas hasta conciliarla.'
+    :daily.allowed===false?(daily.reason==='DEMO_FIRST_BATCH_COMPLETE'?
+      'Primer lote de diez operaciones DEMO completo: esperar liquidación y analizar los resultados antes de otra tanda.':
+      'Pausa de riesgo DEMO: '+String(daily.reason||daily.haltReason||'revisión pendiente'))
+    :(report.openCount||0)>=10?'Hay diez contratos virtuales pendientes; no se aceptan más.'
+    :eligible?'Señal válida '+(state.decision.direction===1?'CALL ↑':'PUT ↓')+
+      (data.demoAutomationRequested?' · modo automático solicitado.':' · puedes enviar una operación DEMO.')
+    :'Sin señal reciente verificable: no se permite comprar.';
+  $('demo-daily-risk').textContent='Resultado neto del día: '+money(daily.netCents||0)
+    +' · Liquidadas hoy: '+(daily.settled||0)
+    +' · Saldo diario mínimo protegido: −USD 1 (incluida exposición abierta)'
+    +' · Evaluación automática: '+(data.demoAutomationRequested?'solicitada':'detenida')
+    +' · Límite de posiciones: 10. Después de 10 compras, el lote se detiene hasta una revisión expresa.';
   const a=report.analysis;
   if(a){
     $('demo-diagnostics').textContent='Contratos DEMO liquidados analizados: '+a.sampleSize
@@ -244,342 +238,11 @@ $('deriv-quote').onclick=async()=>{
   try{
     const response=await fetch('/api/deriv/quote',{method:'POST',
       headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:JSON.stringify({direction:$('demo-quote-direction').value,stakeCents:Number($('demo-quote-stake').value)}),signal:AbortSignal.timeout(28000)});
+      body:JSON.stringify({direction:$('demo-quote-direction').value}),signal:AbortSignal.timeout(28000)});
     if(!response.ok)throw Error('QUOTE_UNAVAILABLE');
     const quote=await response.json();
     if(quote.accepted===false){
-      out.textContent='Deriv rechazó '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · US'+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.';
-    }else if(quote.accepted===true&&Number.isFinite(quote.askPrice)&&Number.isFinite(quote.payout)){
-      out.textContent='Cotización DEMO, sin compra · '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · Importe solicitado US '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.';
-    }else throw Error('QUOTE_INVALID');
-  }catch{out.textContent='No se pudo obtener una cotización DEMO verificable. No se hizo ninguna compra y no se aumentó automáticamente el importe.';}
-  finally{btn.disabled=false;}
-};
-$('demo-buy-once').onclick=async()=>{
-  if(!window.confirm('Confirmar una ÚNICA compra con dinero virtual en la cuenta DEMO de Deriv, máximo USD 1, 20 ticks. No se usa dinero real. ¿Continuar?'))return;
-  const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
-  msg.textContent='Solicitando una sola operación en DEMO. Si se pierde la confirmación, el bot bloqueará nuevas compras.';
-  try{
-    const r=await fetch('/api/deriv/demo/buy-once',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(30000)
-    });
-    if(!r.ok)throw Error('No autorizado o sin cotización válida');
-    const result=await r.json();
-    msg.textContent=result.state==='OPEN'
-      ?'Contrato DEMO confirmado: '+result.contractId+'. Aún falta su liquidación; no se realizará otra compra mientras siga abierto.'
-      :'Deriv rechazó la propuesta o compra DEMO. No se incrementó el importe.';
-  }catch{
-    msg.textContent='No se pudo confirmar la operación DEMO. Revisa el historial y el estado del broker antes de otro intento.';
-  }finally{await loadDemo();}
-};
-for(const kind of ['start','stop']){
-  $('demo-auto-'+kind).onclick=async()=>{
-    const start=kind==='start';
-    if(start&&!window.confirm('Autorizar SOLO DEMO: máximo 10 posiciones abiertas; rotación de importes US$0,10 / US$0,25 / US$0,50 / US$1; detener nuevas compras si la cuenta cae a US$9.900 o menos o hay riesgo de alcanzarlo. No operar con dinero real. ¿Activar?'))return;
-    const btn=$('demo-auto-'+kind);btn.disabled=true;
-    try{
-      const r=await fetch('/api/deriv/demo/auto-'+kind,{
-        method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-        body:'{}',signal:AbortSignal.timeout(12000)});
-      if(!r.ok)throw Error();
-      $('demo-trade-status').textContent=start
-        ?'Evaluación automática DEMO solicitada. Solo operará si el servidor está autorizado y existe una señal reciente.'
-        :'Evaluación automática DEMO pausada. No abre nuevas posiciones; los contratos existentes podrán liquidarse.';
-    }catch{$('demo-trade-status').textContent='No se pudo confirmar el cambio de automatización. Verifica los permisos privados del servidor.';}
-    finally{await loadDemo();}
-  };
-}
-$('demo-check').onclick=async()=>{
-  const btn=$('demo-check'),msg=$('demo-trade-status');btn.disabled=true;
-  msg.textContent='Comprobando el resultado del contrato directamente con Deriv...';
-  try{
-    const r=await fetch('/api/deriv/demo/check',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(25000)
-    });
-    if(!r.ok)throw Error('Sin verificación');
-    const out=await r.json();
-    msg.textContent=out.state==='SETTLED'
-      ?'Contrato DEMO liquidado oficialmente: '+money(out.settlement.profitCents)+' netos virtuales.'
-      :out.state==='OPEN'?'Contrato DEMO todavía abierto.'
-      :out.state==='BUY_OUTCOME_UNKNOWN'?'Compra sin confirmación; exige conciliación manual con Deriv.':'Sin contratos DEMO pendientes.';
-  }catch{msg.textContent='Deriv no confirmó el cierre. El contrato queda pendiente; no se enviarán nuevas compras.';}
-  finally{await loadDemo();}
-};
-async function loadArbitrage(){
-  arbFetched=Date.now();
-  try{
-    const response=await fetch('/api/arbitrage',{signal:AbortSignal.timeout(4500)});
-    if(!response.ok)throw Error();
-    const data=await response.json(),tbody=$('arb-comparisons');
-    tbody.replaceChildren();
-    if(!data.hasData||!data.snapshot){
-      $('arb-feedback').textContent='Todavía no hay muestras públicas comparables. Utiliza Consultar precios públicos y comparar.';
-      $('arb-time').textContent='Sin muestras';
-      return;
-    }
-    const snap=data.snapshot;
-    $('arb-time').textContent='Última muestra recibida: '+date(data.latestCapturedAt);
-    $('arb-feedback').textContent='Solo precios observados. No se ejecutó ninguna compra, venta, conversión ni transferencia. Los libros recibidos no demuestran disponibilidad futura del precio.';
-    $('arb-costs').textContent='Supuestos de costos (no verificados): comisión de cada mercado '+snap.assumptionBps.takerEach+' puntos básicos; conversión USDT/USD '+snap.assumptionBps.fx+' pb; deslizamiento por mercado '+snap.assumptionBps.slippageEach+' pb. No incluye retiros, inventario en ambas cuentas ni demoras de transferencia.';
-    $('arb-samples').textContent='Muestras recientes mostradas: '+(data.observationsShown||0)+'; ritmo orientativo de 5 min. Diferencias de milisegundos pueden escapar de este monitor.';
-    for(const item of snap.estimates||[]){
-      const tr=document.createElement('tr');
-      const values=[item.route==='BINANCE_TO_COINBASE'?'Comprar Binance / vender Coinbase':'Comprar Coinbase / vender Binance',
-        price(item.buyUsdPerBtc),price(item.sellUsdPerBtc),
-        Number(item.grossBps).toFixed(2)+' pb',Number(item.estimatedNetBps).toFixed(2)+' pb',
-        money(Math.round(item.estimatedNetUsd*100))];
-      for(let i=0;i<values.length;i++){
-        const td=document.createElement('td');td.textContent=values[i];
-        if(i===4||i===5)td.className=item.estimatedNetUsd>0?'positive':'negative';
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
-    }
-    chip('arb-state','Mercado público · solo investigación','warn');
-  }catch{
-    $('arb-feedback').textContent='No hay datos públicos verificables o se alcanzó algún límite de consulta. No se generan precios ficticios.';
-    chip('arb-state','Muestra no disponible','offline');
-  }
-}
-$('arb-refresh').onclick=async()=>{
-  const btn=$('arb-refresh');btn.disabled=true;
-  $('arb-feedback').textContent='Consultando los tres libros de órdenes públicos...';
-  try{
-    const r=await fetch('/api/arbitrage/refresh',{method:'POST',
-      headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(18000)});
-    if(!r.ok)throw Error();
-    arbFetched=0;await loadArbitrage();
-  }catch{$('arb-feedback').textContent='No se pudo confirmar una muestra comparable. No hubo ninguna operación.';}
-  finally{btn.disabled=false;}
-};
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});refresh();
-$('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
-</script></main></body></html>
-
-+quote.stake+' (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.';
-    }else if(quote.accepted===true&&Number.isFinite(quote.askPrice)&&Number.isFinite(quote.payout)){
-      out.textContent='Cotización DEMO, sin compra · '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · Importe solicitado USD 1 · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.';
-    }else throw Error('QUOTE_INVALID');
-  }catch{out.textContent='No se pudo obtener una cotización DEMO verificable. El importe sigue en USD 1 y no se realizó ninguna compra.';}
-  finally{btn.disabled=false;}
-};
-$('demo-buy-once').onclick=async()=>{
-  if(!window.confirm('Confirmar una ÚNICA compra con dinero virtual en la cuenta DEMO de Deriv, máximo USD 1, 20 ticks. No se usa dinero real. ¿Continuar?'))return;
-  const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
-  msg.textContent='Solicitando una sola operación en DEMO. Si se pierde la confirmación, el bot bloqueará nuevas compras.';
-  try{
-    const r=await fetch('/api/deriv/demo/buy-once',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(30000)
-    });
-    if(!r.ok)throw Error('No autorizado o sin cotización válida');
-    const result=await r.json();
-    msg.textContent=result.state==='OPEN'
-      ?'Contrato DEMO confirmado: '+result.contractId+'. Aún falta su liquidación; no se realizará otra compra mientras siga abierto.'
-      :'Deriv rechazó la propuesta o compra DEMO. No se incrementó el importe.';
-  }catch{
-    msg.textContent='No se pudo confirmar la operación DEMO. Revisa el historial y el estado del broker antes de otro intento.';
-  }finally{await loadDemo();}
-};
-for(const kind of ['start','stop']){
-  $('demo-auto-'+kind).onclick=async()=>{
-    const start=kind==='start';
-    if(start&&!window.confirm('Autorizar evaluación automática SOLO con saldo virtual Deriv, una oportunidad por minuto como máximo; primera tanda de 10 compras de US$1 y máximo US$10 virtuales; la evaluación se detiene automáticamente después de diez compras. No se operará con dinero real. ¿Activar?'))return;
-    const btn=$('demo-auto-'+kind);btn.disabled=true;
-    try{
-      const r=await fetch('/api/deriv/demo/auto-'+kind,{
-        method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-        body:'{}',signal:AbortSignal.timeout(12000)});
-      if(!r.ok)throw Error();
-      $('demo-trade-status').textContent=start
-        ?'Evaluación automática DEMO solicitada. Solo operará si el servidor está autorizado y existe una señal reciente.'
-        :'Evaluación automática DEMO pausada. No abre nuevas posiciones; los contratos existentes podrán liquidarse.';
-    }catch{$('demo-trade-status').textContent='No se pudo confirmar el cambio de automatización. Verifica los permisos privados del servidor.';}
-    finally{await loadDemo();}
-  };
-}
-$('demo-check').onclick=async()=>{
-  const btn=$('demo-check'),msg=$('demo-trade-status');btn.disabled=true;
-  msg.textContent='Comprobando el resultado del contrato directamente con Deriv...';
-  try{
-    const r=await fetch('/api/deriv/demo/check',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(25000)
-    });
-    if(!r.ok)throw Error('Sin verificación');
-    const out=await r.json();
-    msg.textContent=out.state==='SETTLED'
-      ?'Contrato DEMO liquidado oficialmente: '+money(out.settlement.profitCents)+' netos virtuales.'
-      :out.state==='OPEN'?'Contrato DEMO todavía abierto.'
-      :out.state==='BUY_OUTCOME_UNKNOWN'?'Compra sin confirmación; exige conciliación manual con Deriv.':'Sin contratos DEMO pendientes.';
-  }catch{msg.textContent='Deriv no confirmó el cierre. El contrato queda pendiente; no se enviarán nuevas compras.';}
-  finally{await loadDemo();}
-};
-async function loadArbitrage(){
-  arbFetched=Date.now();
-  try{
-    const response=await fetch('/api/arbitrage',{signal:AbortSignal.timeout(4500)});
-    if(!response.ok)throw Error();
-    const data=await response.json(),tbody=$('arb-comparisons');
-    tbody.replaceChildren();
-    if(!data.hasData||!data.snapshot){
-      $('arb-feedback').textContent='Todavía no hay muestras públicas comparables. Utiliza Consultar precios públicos y comparar.';
-      $('arb-time').textContent='Sin muestras';
-      return;
-    }
-    const snap=data.snapshot;
-    $('arb-time').textContent='Última muestra recibida: '+date(data.latestCapturedAt);
-    $('arb-feedback').textContent='Solo precios observados. No se ejecutó ninguna compra, venta, conversión ni transferencia. Los libros recibidos no demuestran disponibilidad futura del precio.';
-    $('arb-costs').textContent='Supuestos de costos (no verificados): comisión de cada mercado '+snap.assumptionBps.takerEach+' puntos básicos; conversión USDT/USD '+snap.assumptionBps.fx+' pb; deslizamiento por mercado '+snap.assumptionBps.slippageEach+' pb. No incluye retiros, inventario en ambas cuentas ni demoras de transferencia.';
-    $('arb-samples').textContent='Muestras recientes mostradas: '+(data.observationsShown||0)+'; ritmo orientativo de 5 min. Diferencias de milisegundos pueden escapar de este monitor.';
-    for(const item of snap.estimates||[]){
-      const tr=document.createElement('tr');
-      const values=[item.route==='BINANCE_TO_COINBASE'?'Comprar Binance / vender Coinbase':'Comprar Coinbase / vender Binance',
-        price(item.buyUsdPerBtc),price(item.sellUsdPerBtc),
-        Number(item.grossBps).toFixed(2)+' pb',Number(item.estimatedNetBps).toFixed(2)+' pb',
-        money(Math.round(item.estimatedNetUsd*100))];
-      for(let i=0;i<values.length;i++){
-        const td=document.createElement('td');td.textContent=values[i];
-        if(i===4||i===5)td.className=item.estimatedNetUsd>0?'positive':'negative';
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
-    }
-    chip('arb-state','Mercado público · solo investigación','warn');
-  }catch{
-    $('arb-feedback').textContent='No hay datos públicos verificables o se alcanzó algún límite de consulta. No se generan precios ficticios.';
-    chip('arb-state','Muestra no disponible','offline');
-  }
-}
-$('arb-refresh').onclick=async()=>{
-  const btn=$('arb-refresh');btn.disabled=true;
-  $('arb-feedback').textContent='Consultando los tres libros de órdenes públicos...';
-  try{
-    const r=await fetch('/api/arbitrage/refresh',{method:'POST',
-      headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(18000)});
-    if(!r.ok)throw Error();
-    arbFetched=0;await loadArbitrage();
-  }catch{$('arb-feedback').textContent='No se pudo confirmar una muestra comparable. No hubo ninguna operación.';}
-  finally{btn.disabled=false;}
-};
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});refresh();
-$('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
-</script></main></body></html>
-
-+quote.stake+' · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.';
-    }else throw Error('QUOTE_INVALID');
-  }catch{out.textContent='No se pudo obtener una cotización DEMO verificable. El importe sigue en USD 1 y no se realizó ninguna compra.';}
-  finally{btn.disabled=false;}
-};
-$('demo-buy-once').onclick=async()=>{
-  if(!window.confirm('Confirmar una ÚNICA compra con dinero virtual en la cuenta DEMO de Deriv, máximo USD 1, 20 ticks. No se usa dinero real. ¿Continuar?'))return;
-  const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
-  msg.textContent='Solicitando una sola operación en DEMO. Si se pierde la confirmación, el bot bloqueará nuevas compras.';
-  try{
-    const r=await fetch('/api/deriv/demo/buy-once',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(30000)
-    });
-    if(!r.ok)throw Error('No autorizado o sin cotización válida');
-    const result=await r.json();
-    msg.textContent=result.state==='OPEN'
-      ?'Contrato DEMO confirmado: '+result.contractId+'. Aún falta su liquidación; no se realizará otra compra mientras siga abierto.'
-      :'Deriv rechazó la propuesta o compra DEMO. No se incrementó el importe.';
-  }catch{
-    msg.textContent='No se pudo confirmar la operación DEMO. Revisa el historial y el estado del broker antes de otro intento.';
-  }finally{await loadDemo();}
-};
-for(const kind of ['start','stop']){
-  $('demo-auto-'+kind).onclick=async()=>{
-    const start=kind==='start';
-    if(start&&!window.confirm('Autorizar evaluación automática SOLO con saldo virtual Deriv, una oportunidad por minuto como máximo; primera tanda de 10 compras de US$1 y máximo US$10 virtuales; la evaluación se detiene automáticamente después de diez compras. No se operará con dinero real. ¿Activar?'))return;
-    const btn=$('demo-auto-'+kind);btn.disabled=true;
-    try{
-      const r=await fetch('/api/deriv/demo/auto-'+kind,{
-        method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-        body:'{}',signal:AbortSignal.timeout(12000)});
-      if(!r.ok)throw Error();
-      $('demo-trade-status').textContent=start
-        ?'Evaluación automática DEMO solicitada. Solo operará si el servidor está autorizado y existe una señal reciente.'
-        :'Evaluación automática DEMO pausada. No abre nuevas posiciones; los contratos existentes podrán liquidarse.';
-    }catch{$('demo-trade-status').textContent='No se pudo confirmar el cambio de automatización. Verifica los permisos privados del servidor.';}
-    finally{await loadDemo();}
-  };
-}
-$('demo-check').onclick=async()=>{
-  const btn=$('demo-check'),msg=$('demo-trade-status');btn.disabled=true;
-  msg.textContent='Comprobando el resultado del contrato directamente con Deriv...';
-  try{
-    const r=await fetch('/api/deriv/demo/check',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(25000)
-    });
-    if(!r.ok)throw Error('Sin verificación');
-    const out=await r.json();
-    msg.textContent=out.state==='SETTLED'
-      ?'Contrato DEMO liquidado oficialmente: '+money(out.settlement.profitCents)+' netos virtuales.'
-      :out.state==='OPEN'?'Contrato DEMO todavía abierto.'
-      :out.state==='BUY_OUTCOME_UNKNOWN'?'Compra sin confirmación; exige conciliación manual con Deriv.':'Sin contratos DEMO pendientes.';
-  }catch{msg.textContent='Deriv no confirmó el cierre. El contrato queda pendiente; no se enviarán nuevas compras.';}
-  finally{await loadDemo();}
-};
-async function loadArbitrage(){
-  arbFetched=Date.now();
-  try{
-    const response=await fetch('/api/arbitrage',{signal:AbortSignal.timeout(4500)});
-    if(!response.ok)throw Error();
-    const data=await response.json(),tbody=$('arb-comparisons');
-    tbody.replaceChildren();
-    if(!data.hasData||!data.snapshot){
-      $('arb-feedback').textContent='Todavía no hay muestras públicas comparables. Utiliza Consultar precios públicos y comparar.';
-      $('arb-time').textContent='Sin muestras';
-      return;
-    }
-    const snap=data.snapshot;
-    $('arb-time').textContent='Última muestra recibida: '+date(data.latestCapturedAt);
-    $('arb-feedback').textContent='Solo precios observados. No se ejecutó ninguna compra, venta, conversión ni transferencia. Los libros recibidos no demuestran disponibilidad futura del precio.';
-    $('arb-costs').textContent='Supuestos de costos (no verificados): comisión de cada mercado '+snap.assumptionBps.takerEach+' puntos básicos; conversión USDT/USD '+snap.assumptionBps.fx+' pb; deslizamiento por mercado '+snap.assumptionBps.slippageEach+' pb. No incluye retiros, inventario en ambas cuentas ni demoras de transferencia.';
-    $('arb-samples').textContent='Muestras recientes mostradas: '+(data.observationsShown||0)+'; ritmo orientativo de 5 min. Diferencias de milisegundos pueden escapar de este monitor.';
-    for(const item of snap.estimates||[]){
-      const tr=document.createElement('tr');
-      const values=[item.route==='BINANCE_TO_COINBASE'?'Comprar Binance / vender Coinbase':'Comprar Coinbase / vender Binance',
-        price(item.buyUsdPerBtc),price(item.sellUsdPerBtc),
-        Number(item.grossBps).toFixed(2)+' pb',Number(item.estimatedNetBps).toFixed(2)+' pb',
-        money(Math.round(item.estimatedNetUsd*100))];
-      for(let i=0;i<values.length;i++){
-        const td=document.createElement('td');td.textContent=values[i];
-        if(i===4||i===5)td.className=item.estimatedNetUsd>0?'positive':'negative';
-        tr.appendChild(td);
-      }
-      tbody.appendChild(tr);
-    }
-    chip('arb-state','Mercado público · solo investigación','warn');
-  }catch{
-    $('arb-feedback').textContent='No hay datos públicos verificables o se alcanzó algún límite de consulta. No se generan precios ficticios.';
-    chip('arb-state','Muestra no disponible','offline');
-  }
-}
-$('arb-refresh').onclick=async()=>{
-  const btn=$('arb-refresh');btn.disabled=true;
-  $('arb-feedback').textContent='Consultando los tres libros de órdenes públicos...';
-  try{
-    const r=await fetch('/api/arbitrage/refresh',{method:'POST',
-      headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(18000)});
-    if(!r.ok)throw Error();
-    arbFetched=0;await loadArbitrage();
-  }catch{$('arb-feedback').textContent='No se pudo confirmar una muestra comparable. No hubo ninguna operación.';}
-  finally{btn.disabled=false;}
-};
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});refresh();
-$('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
-</script></main></body></html>
-
-+quote.stake+' (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.';
+      out.textContent='Deriv rechazó '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · USD 1 (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.';
     }else if(quote.accepted===true&&Number.isFinite(quote.askPrice)&&Number.isFinite(quote.payout)){
       out.textContent='Cotización DEMO, sin compra · '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · Importe solicitado USD 1 · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.';
     }else throw Error('QUOTE_INVALID');
