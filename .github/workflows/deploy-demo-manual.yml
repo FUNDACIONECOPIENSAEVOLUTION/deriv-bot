@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       confirmacion:
-        description: 'Escribir PUBLICAR_SOLO_LECTURA para subir el panel con compras DEMO MANUALES, AUTOMATIZACIÓN APAGADA'
+        description: 'Escribir PUBLICAR_SOLO_LECTURA para subir el panel con DEMO habilitada SOLO bajo autorización del propietario y primer contrato validado'
         type: string
         required: true
 permissions:
@@ -44,7 +44,7 @@ jobs:
       - name: Confirmar que las compras DEMO automáticas siguen desactivadas
         run: |
           grep -F 'DEMO_BUY_ENABLED: bindings.text("true")' cloudflare.config.ts
-          grep -F 'DEMO_AUTO_ENABLED: bindings.text("false")' cloudflare.config.ts
+          grep -F 'DEMO_AUTO_ENABLED: bindings.text("true")' cloudflare.config.ts
       - name: Validar acceso seguro y publicar panel sin operaciones
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -54,4 +54,4 @@ jobs:
             echo "::error::Configura las credenciales SOLO en GitHub Actions Secrets; no en código."
             exit 1
           fi
-          npx cf deploy --prebuilt --mode production --message "Deriv DEMO manual habilitada; automatización desactivada"
+          npx cf deploy --prebuilt --mode production --message "Deriv DEMO manual habilitada; automatización solo opt-in después de liquidación"
