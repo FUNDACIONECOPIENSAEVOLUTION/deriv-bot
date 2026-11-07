@@ -16,6 +16,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.6 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:05:02.987Z (UTC).
+- **Commit de origen:** `237005b3fc06`.
+- Probar bloqueo de automatización hasta primera liquidación DEMO real
+
 ## v2.5 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:04:26.967Z (UTC).

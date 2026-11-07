@@ -1,11 +1,10 @@
 {
-  "version": "2.5",
-  "updatedAt": "2026-11-07T20:04:26.967Z",
-  "summary": "Validar primera liquidación DEMO con compuerta testeable antes de permitir la automatización",
+  "version": "2.6",
+  "updatedAt": "2026-11-07T20:05:02.987Z",
+  "summary": "Probar bloqueo de automatización hasta primera liquidación DEMO real",
   "changes": [
-    "Validar primera liquidación DEMO con compuerta testeable antes de permitir la automatización",
-    "Exigir liquidación DEMO real previa antes de iniciar tandas automatizadas"
+    "Probar bloqueo de automatización hasta primera liquidación DEMO real"
   ],
-  "sourceCommit": "fd8dabf6bc92190540441a56c84fe5b3e822672b",
+  "sourceCommit": "237005b3fc06efeeea515e5ec33505f318525fcc",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
