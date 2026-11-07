@@ -48,6 +48,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.8 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:48:08.737Z (UTC).
+- **Commit de origen:** `78d30825c0ee`.
+- Conservar resultado tipado de cada contrato y capturar RSI/SMA al entrar en DEMO
+- Añadir controles visibles de ensayo DEMO de 10 contratos balanceados y exportación privada CSV
+
 ## v5.7 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:46:59.599Z (UTC).

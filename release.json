@@ -1,11 +1,11 @@
 {
-  "version": "5.7",
-  "updatedAt": "2026-11-07T23:46:59.599Z",
-  "summary": "Permitir solo indicadores de investigación validados en registro de contrato DEMO",
+  "version": "5.8",
+  "updatedAt": "2026-11-07T23:48:08.737Z",
+  "summary": "Conservar resultado tipado de cada contrato y capturar RSI/SMA al entrar en DEMO",
   "changes": [
-    "Permitir solo indicadores de investigación validados en registro de contrato DEMO",
-    "Registrar señales SMA RSI y volatilidad para auditoría de compras DEMO del navegador"
+    "Conservar resultado tipado de cada contrato y capturar RSI/SMA al entrar en DEMO",
+    "Añadir controles visibles de ensayo DEMO de 10 contratos balanceados y exportación privada CSV"
   ],
-  "sourceCommit": "1d1d771ae3eea56bab77a12a128ee683e0e62c7c",
+  "sourceCommit": "78d30825c0eec938e557c2d8bd8a23f2dcdfff09",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
