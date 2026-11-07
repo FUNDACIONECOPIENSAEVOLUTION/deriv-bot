@@ -189,16 +189,19 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return this.status();
   }
   private reportDemo() {
-    const rows=this.ctx.storage.sql.exec<{id:number;date:string;created_at:number;state:string;contract_id:number|null;buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null}>(
-      'SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code FROM demo_trades ORDER BY id DESC LIMIT 100'
+    type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null};
+    const sql=this.ctx.storage.sql;
+    const stats=sql.exec<{settled:number;wins:number;losses:number;pnlCents:number}>(
+      "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS pnlCents FROM demo_trades WHERE state='SETTLED'"
+    ).one();
+    const unresolved=sql.exec<Row>("SELECT * FROM demo_trades WHERE state IN ('OPEN','UNKNOWN') ORDER BY id DESC LIMIT 1").toArray()[0]||null;
+    const history=sql.exec<Row>(
+      'SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code FROM demo_trades ORDER BY id DESC LIMIT 20'
     ).toArray();
-    const all=rows.filter(r=>r.state==='SETTLED');
-    const wins=all.filter(r=>(r.pnl_cents||0)>0).length,losses=all.filter(r=>(r.pnl_cents||0)<0).length;
-    const pnlCents=all.reduce((sum,r)=>sum+(r.pnl_cents||0),0);
-    return {settled:all.length,wins,losses,pnlCents,
-      winRatePct:all.length?Math.round(wins/all.length*10000)/100:null,
-      unresolved:rows.find(r=>r.state==='OPEN'||r.state==='UNKNOWN')||null,
-      history:rows.slice(0,20).map(r=>({
+    return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.pnlCents,
+      winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
+      unresolved,
+      history:history.map(r=>({
         id:r.id,date:r.date,state:r.state,contractId:r.contract_id,
         buyCents:r.buy_cents,payoutCents:r.payout_cents,pnlCents:r.pnl_cents,
         code:r.code
