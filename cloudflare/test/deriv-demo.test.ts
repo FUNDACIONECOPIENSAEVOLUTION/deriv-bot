@@ -4,7 +4,8 @@ import { setupNetwork } from '@msw/cloudflare';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, afterAll, expect, it } from 'vitest';
 import worker from '../src/index';
-import { selectDemo, DerivDemoConnection, DEMO_QUOTE_REQUEST, parseDemoQuote, demoSocketUrl } from '../src/deriv-demo';
+import { selectDemo, DerivDemoConnection, DEMO_QUOTE_REQUEST, parseDemoQuote, demoQuoteRequest, demoSocketUrl } from '../src/deriv-demo';
+import { dayAt } from '../../runtime/core.mjs';
 
 const token='test-only-token-with-at-least-32-characters';
 const headers={Authorization:'Bearer '+token,'Content-Type':'application/json','X-Paper-Control':'1'};
@@ -152,4 +153,60 @@ it('persists virtual settlement reports separately from PAPER while leaving unre
   expect(report.unresolved?.state).toBe('UNKNOWN');
   expect((await stub.checkDemoSettlement()).state).toBe('BUY_OUTCOME_UNKNOWN');
   expect(calls).toEqual([]);
+});
+
+it('issues distinct CALL and PUT quotes without buying any contract',()=>{
+  expect(demoQuoteRequest('UP')).toMatchObject({proposal:1,contract_type:'CALL',amount:0.10});
+  expect(demoQuoteRequest('DOWN')).toMatchObject({proposal:1,contract_type:'PUT',amount:0.10});
+  expect(demoQuoteRequest('DOWN')).not.toHaveProperty('buy');
+  expect(parseDemoQuote({msg_type:'proposal',req_id:1,proposal:{ask_price:'0.10',payout:'0.18'}},
+    'DOWN')).toMatchObject({accepted:true,contractType:'PUT',potentialProfit:0.08});
+});
+it('does not enable unsupervised DEMO execution when server switches are off',async()=>{
+  const stub=env.DERIV_DEMO.getByName('auto-disabled');
+  expect((await stub.status()).demoAutomationRequested).toBe(false);
+  expect((await stub.status()).demoAutomationAvailable).toBe(false);
+  expect(await errorFrom(stub,x=>x.setDemoAutomation(true))).toBe('DEMO_AUTO_DISABLED');
+  expect((await stub.setDemoAutomation(false)).autoEnabled).toBe(false);
+  expect(await stub.isDemoAutoEnabled()).toBe(false);
+  expect(calls).toEqual([]);
+});
+it('stops the day when ten verified DEMO settlements have nonpositive net P&L',async()=>{
+  const date=dayAt(Math.floor(Date.now()/1000));
+  const generate=async(id:string,wins:number,losses:number)=>{
+    const stub=env.DERIV_DEMO.getByName(id);
+    await runInDurableObject(stub,(_instance,ctx)=>{
+      ctx.storage.transactionSync(()=>{
+        for(let i=0;i<wins+losses;i++){
+          const pnl=i<wins?8:-10,contractId=i+1000;
+          ctx.storage.sql.exec(
+            "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,?,'SETTLED',10,?,?,?)",
+            date,Math.floor(Date.now()/1000)+i,contractId,pnl>0?18:0,pnl
+          );
+        }
+      });
+    });
+    return stub.status();
+  };
+  const profitable=await generate('demo-six-four',6,4);
+  expect(profitable.tradeReport.dayRisk).toMatchObject({
+    settled:10,netCents:8,allowed:true
+  });
+  const loss=await generate('demo-five-five',5,5);
+  expect(loss.tradeReport.dayRisk).toMatchObject({
+    settled:10,netCents:-10,allowed:false,reason:'DEMO_DAY_NOT_PROFITABLE'
+  });
+});
+it('preserves a sticky day-stop even if subsequently reconciled trades make that day profitable',async()=>{
+  const stub=env.DERIV_DEMO.getByName('sticky-demo-day');
+  const date=dayAt(Math.floor(Date.now()/1000));
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    ctx.storage.sql.exec("INSERT INTO demo_day_halts(date,reason,stopped_at) VALUES(?,'DAY_NET_NONPOSITIVE_AFTER_TEN',?)",date,Math.floor(Date.now()/1000));
+    ctx.storage.sql.exec(
+      "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,100,'SETTLED',451,10,20,10)",date
+    );
+  });
+  expect((await stub.status()).tradeReport.dayRisk).toMatchObject({
+    halted:true,allowed:false,reason:'DEMO_DAY_HALTED'
+  });
 });
