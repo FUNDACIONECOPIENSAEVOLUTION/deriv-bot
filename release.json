@@ -1,13 +1,12 @@
 {
-  "version": "4.8",
-  "updatedAt": "2026-11-07T23:16:42.552Z",
-  "summary": "Corregir WebSocket Deriv saliente en deriv-contracts.ts sin cambiar modo DEMO",
+  "version": "4.9",
+  "updatedAt": "2026-11-07T23:17:14.740Z",
+  "summary": "Habilitar primera compra DEMO manual aprobada sin exigir señal PAPER reciente",
   "changes": [
-    "Corregir WebSocket Deriv saliente en deriv-contracts.ts sin cambiar modo DEMO",
-    "Corregir WebSocket Deriv saliente en demo-broker-session.ts sin cambiar modo DEMO",
-    "Corregir WebSocket Deriv saliente en deriv-demo.ts sin cambiar modo DEMO",
-    "Usar WebSocket nativo de Cloudflare para conectar Deriv con canales restringidos"
+    "Habilitar primera compra DEMO manual aprobada sin exigir señal PAPER reciente",
+    "Desvincular primera compra DEMO manual de las restricciones del simulador PAPER",
+    "Permitir piloto manual DEMO solo con preflight reciente sin depender de pérdidas PAPER"
   ],
-  "sourceCommit": "0219d0ce3c5a00b7c5ca359772e9628c1dc65d71",
+  "sourceCommit": "1256c18c39601f8ea3c2081b2a7dc67733f062dd",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

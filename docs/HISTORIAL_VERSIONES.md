@@ -39,6 +39,15 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.9 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:17:14.740Z (UTC).
+- **Commit de origen:** `1256c18c3960`.
+- Habilitar primera compra DEMO manual aprobada sin exigir señal PAPER reciente
+- Desvincular primera compra DEMO manual de las restricciones del simulador PAPER
+- Permitir piloto manual DEMO solo con preflight reciente sin depender de pérdidas PAPER
+
 ## v4.8 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:16:42.552Z (UTC).
