@@ -53,6 +53,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.3 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:55:56.602Z (UTC).
+- **Commit de origen:** `f56b8ef8ee32`.
+- Probar replay PAPER sin órdenes Deriv, sin lookahead y con diez entradas de señal técnica
+- Agregar replay PAPER de diez operaciones con señales del bot y ticks públicos reales, sin órdenes al broker
+
 ## v6.2 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:50:35.860Z (UTC).

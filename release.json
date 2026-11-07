@@ -1,11 +1,11 @@
 {
-  "version": "6.2",
-  "updatedAt": "2026-11-07T23:50:35.860Z",
-  "summary": "Publicar ensayo de 10 contratos DEMO balanceados, paradas de riesgo y análisis CALL/PUT",
+  "version": "6.3",
+  "updatedAt": "2026-11-07T23:55:56.602Z",
+  "summary": "Probar replay PAPER sin órdenes Deriv, sin lookahead y con diez entradas de señal técnica",
   "changes": [
-    "Publicar ensayo de 10 contratos DEMO balanceados, paradas de riesgo y análisis CALL/PUT",
-    "Etiquetar con precisión P&L registrado por navegador sin verificación independiente"
+    "Probar replay PAPER sin órdenes Deriv, sin lookahead y con diez entradas de señal técnica",
+    "Agregar replay PAPER de diez operaciones con señales del bot y ticks públicos reales, sin órdenes al broker"
   ],
-  "sourceCommit": "726042e4e75c6f66b2b368675e9a08d943b948b2",
+  "sourceCommit": "f56b8ef8ee32177900e17ebb8c85851045b6c081",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
