@@ -287,6 +287,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       demoTradingEnabled:String(this.env.DEMO_BUY_ENABLED)==='true',
       demoAutomationAvailable:String(this.env.DEMO_AUTO_ENABLED)==='true',
       demoAutomationRequested:this.read<boolean>('demo-auto')===true,
+      demoLossAlert:this.read<boolean>('demo-loss-halt')===true,
       tradeReport:this.reportDemo()};
   }
   async refresh(){
@@ -327,8 +328,17 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(creds.expiresAt<=epoch()||creds.accountId!==saved.account.account_id)
       throw Error('DERIV_AUTHORIZATION_EXPIRED');
     const latest=await this.accounts(creds.accessToken,creds.accountId);
-    if(latest.account_type!=='demo'||latest.currency!=='USD'||latest.balance<1)
+    if(latest.account_type!=='demo'||latest.currency!=='USD'||!Number.isFinite(latest.balance))
       throw Error('DEMO_ACCOUNT_UNAVAILABLE');
+    const balanceCents=Math.round(latest.balance*100);
+    if(Math.abs(latest.balance*100-balanceCents)>0.00001)
+      throw Error('DEMO_BALANCE_INVALID');
+    this.write('demo-last-balance-cents',balanceCents);
+    this.write('demo-last-balance-at',epoch());
+    if(balanceCents<=DEMO_BASELINE_EXPECTED_CENTS-DEMO_MAX_LOSS_CENTS){
+      this.write('demo-loss-halt',true);
+      this.write('demo-auto',false);
+    }
     return creds;
   }
 
