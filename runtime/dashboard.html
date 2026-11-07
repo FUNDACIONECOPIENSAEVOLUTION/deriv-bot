@@ -18,6 +18,7 @@
 <div class="tools" role="status"><span id="chart-demo-balance" class="chip">Deriv DEMO: saldo no conectado</span><span id="chart-demo-locked" class="chip">Comprometido: sin verificar</span><span id="chart-demo-pnl" class="chip">P&L del bot: sin operaciones verificadas</span></div>
 <div class="tools"><label>Plataforma<select id="provider"><option value="deriv">Deriv · R_100</option><option value="binance">Binance · BTC / USDT</option><option value="coinbase">Coinbase · BTC / USD</option></select></label><label>Ventana<select id="window"><option value="60">60 velas</option><option value="120">120 velas</option><option value="180">180 velas</option></select></label></div>
 <p id="platform-note" class="note">Deriv: precios públicos y simulaciones automáticas. El servicio funciona aunque cierres este panel.</p>
+<p class="note" id="chart-demo-last-trades" role="status">Historial DEMO del broker: no conectado.</p>
 <div class="chart-wrap"><svg id="candles" viewBox="0 0 920 350" role="img" aria-label="Velas de precio y marcas de operaciones simuladas"></svg></div>
 <div id="ohlc" class="readout" aria-live="off">Mueve el puntero o toca una vela para consultar sus precios.</div>
 <div class="legend"><span>Verde: sube · Rosa: baja</span><span class="entry">E↑ / E↓: entrada virtual</span><span class="exit">X: salida · V: interrupción</span></div>
@@ -171,12 +172,22 @@ function renderDemo(data){
       +money(report.activeExposureCents||0)+' virtuales';
     $('chart-demo-pnl').textContent='P&L bot DEMO verificado: '+money(report.pnlCents||0)
       +' · '+(report.settled||0)+' liquidados';
+    const trades=(report.history||[]).slice(0,5);
+    $('chart-demo-last-trades').textContent=trades.length
+      ?'Últimos contratos DEMO verificados: '+trades.map(t=>
+        (t.contractType||t.decision?.contractType||'Tipo pendiente')+' '+
+        (Number.isInteger(t.buyCents)?money(t.buyCents):'importe pendiente')+
+        ' · '+t.state+
+        (Number.isInteger(t.pnlCents)?' · neto '+money(t.pnlCents):'')
+      ).join(' | ')
+      :'Aún no hay compras DEMO registradas por el broker.';
   }else{
     $('official-demo-balance').textContent='Sin conexión';
     $('official-demo-time').textContent='Autoriza la cuenta DEMO; el saldo PAPER es independiente';
     $('chart-demo-balance').textContent='Deriv DEMO: saldo no conectado';
     $('chart-demo-locked').textContent='Comprometido: sin verificar';
     $('chart-demo-pnl').textContent='P&L bot: sin operaciones verificadas';
+    $('chart-demo-last-trades').textContent='Historial DEMO del broker: no conectado.';
   }
   const eligible=state?.running===true&&state?.market?.state==='live'
     &&state?.config?.symbol==='R_100'&&[1,-1].includes(state?.decision?.direction)
@@ -249,6 +260,7 @@ async function loadDemo(){demoFetched=Date.now();try{const r=await fetch('/api/d
   $('chart-demo-balance').textContent='Saldo DEMO sin verificar';
   $('chart-demo-locked').textContent='Comprometido: sin verificar';
   $('chart-demo-pnl').textContent='P&L DEMO: sin datos fiables';
+  $('chart-demo-last-trades').textContent='Historial DEMO del broker: sin verificar';
 }}
 $('deriv-callback').textContent=location.origin+'/api/deriv/callback';
 $('deriv-connect').onclick=async()=>{
