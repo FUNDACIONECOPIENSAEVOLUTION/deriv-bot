@@ -326,6 +326,27 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return this.status();
   }
 
+  /**
+   * Owner-only broker preflight. Confirms a live DEMO USD balance and obtains an
+   * authenticated quote; it NEVER issues buy/sell or changes execution flags.
+   */
+  async preflightDemo(signal:'UP'|'DOWN'='UP',stakeCents=100){
+    const quote=await this.quote(signal,stakeCents);
+    const risk=this.riskFor(stakeCents);
+    const status=this.status();
+    return {
+      mode:'DERIV_DEMO_PREFLIGHT',noOrders:true,accountType:'demo',
+      account:status.account,brokerBalanceCents:risk.brokerBalanceCents,
+      stakeCents,signal,quote,risk,
+      executionConfigured:status.demoTradingEnabled,
+      automationConfigured:status.demoAutomationAvailable,
+      recommendedNextStep:!quote.accepted?'DERIV_QUOTE_REJECTED'
+        :!risk.allowed?risk.reason
+        :!status.demoTradingEnabled?'ENABLE_DEMO_BUY_AFTER_REVIEW'
+        :'READY_FOR_FIRST_VIRTUAL_BUY'
+    };
+  }
+
   async quote(signal:'UP'|'DOWN'='UP',stakeCents=100) {
     const snapshot=this.read<{account:DemoAccount;checkedAt:number;expiresAt:number}>('snapshot');
     if(!snapshot||snapshot.account.account_type!=='demo'||snapshot.account.currency!=='USD'||!this.status().connected)
