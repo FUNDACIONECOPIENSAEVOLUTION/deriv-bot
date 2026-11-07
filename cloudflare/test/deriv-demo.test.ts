@@ -172,6 +172,12 @@ it('does not enable unsupervised DEMO execution when server switches are off',as
   expect(calls).toEqual([]);
 });
 
+it('preflight is read-only and refuses access without a DEMO OAuth connection',async()=>{
+  const stub=env.DERIV_DEMO.getByName('preflight-requires-demo');
+  expect(await errorFrom(stub,x=>x.preflightDemo('UP',10))).toBe('DERIV_DEMO_REQUIRED');
+  expect(await errorFrom(stub,x=>x.preflightDemo('DOWN',100))).toBe('DERIV_DEMO_REQUIRED');
+  expect(calls).toEqual([]);
+});
 it('keeps demo account risk unverified until an official balance is received',async()=>{
   const stub=env.DERIV_DEMO.getByName('risk-not-authorized');
   const report=(await stub.status()).tradeReport;
