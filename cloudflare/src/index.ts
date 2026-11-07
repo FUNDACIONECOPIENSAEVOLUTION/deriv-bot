@@ -181,7 +181,7 @@ export default {
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/demo/buy-once','/api/deriv/demo/check'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -220,6 +220,10 @@ export default {
           }));
         }
         if(url.pathname==='/api/deriv/demo/check')return json(await demo.checkDemoSettlement());
+        if(url.pathname==='/api/deriv/demo/auto-start')
+          return json(await demo.setDemoAutomation(true));
+        if(url.pathname==='/api/deriv/demo/auto-stop')
+          return json(await demo.setDemoAutomation(false));
         if(url.pathname==='/api/deriv/connect'){
           // Read at most 1 KiB; this route accepts only a public application id.
           const reader=request.body?.getReader();if(!reader)return json({error:'Falta el identificador de aplicación'},400);
@@ -283,14 +287,35 @@ export default {
     }
   },
   async scheduled(_event:ScheduledController,env:Env){
-    await env.PAPER.getByName(EXPERIMENT).watchdog();
-    // Read-only status checks allow broker DEMO results to be recorded even
-    // when the browser is closed. There is NEVER a scheduled buy.
-    try{await env.DERIV_DEMO.getByName('owner-deriv-demo-v1').reconcileOpenDemoOnly();}
+    const paper=env.PAPER.getByName(EXPERIMENT);
+    await paper.watchdog();
+    const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
+    // Read-only broker settlement, regardless of automation state.
+    try{await demo.reconcileOpenDemoOnly();}
     catch{console.log(JSON.stringify({type:'demo_settlement_check_pending'}));}
-    try{
-      const snapshot=await readPublicArbitrageSnapshot({budgetUsd:10});
-      await env.PAPER.getByName(EXPERIMENT).recordArbitrage(snapshot);
-    }catch{console.log(JSON.stringify({type:'cross_exchange_observation_unavailable'}));}
+    // Binance/Coinbase scanning is intentionally paused for this Deriv-only stage.
+    if(String(env.DEMO_AUTO_ENABLED)==='true'&&String(env.DEMO_BUY_ENABLED)==='true'){
+      try{
+        if(!await demo.isDemoAutoEnabled())return;
+        const snapshot=await paper.status();
+        if(snapshot.running!==true||snapshot.market.state!=='live'
+          ||snapshot.config.symbol!=='R_100'
+          ||(snapshot.decision.direction!==1&&snapshot.decision.direction!==-1)
+          ||typeof snapshot.quoteAgeSeconds!=='number'
+          ||snapshot.quoteAgeSeconds<0||snapshot.quoteAgeSeconds>10)return;
+        const direction=snapshot.decision.direction===1?'UP':'DOWN';
+        await demo.buyDemoOnce(direction,{
+          reason:snapshot.decision.reason,fast:snapshot.decision.fast,
+          slow:snapshot.decision.slow,rsi:snapshot.decision.rsi,
+          volatility:snapshot.decision.volatility,entryQuote:snapshot.lastQuote,
+          quoteAgeSeconds:snapshot.quoteAgeSeconds
+        });
+      }catch(error){
+        // Logs only trusted bounded domain codes, never broker tokens or OTP URLs.
+        const code=error instanceof Error&&/^(?:DEMO|DERIV)_[A-Z0-9_]+$/.test(error.message)?
+          error.message:'DEMO_AUTO_CHECK_PENDING';
+        console.log(JSON.stringify({type:'demo_auto_check',code}));
+      }
+    }
   },
 } satisfies ExportedHandler<Env>;
