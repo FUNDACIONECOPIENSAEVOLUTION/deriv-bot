@@ -1,11 +1,11 @@
 {
-  "version": "5.4",
-  "updatedAt": "2026-11-07T23:29:17.447Z",
-  "summary": "Desplegar puente manual DEMO y aceptar bloqueo confirmado de egreso Cloudflare como diagnóstico",
+  "version": "5.5",
+  "updatedAt": "2026-11-07T23:30:50.740Z",
+  "summary": "Publicar diagnóstico de mercado en navegador y verificar que el panel sirve el código corregido",
   "changes": [
-    "Desplegar puente manual DEMO y aceptar bloqueo confirmado de egreso Cloudflare como diagnóstico",
-    "Probar que puente navegador DEMO no permite compras sin autenticación ni importes obsoletos"
+    "Publicar diagnóstico de mercado en navegador y verificar que el panel sirve el código corregido",
+    "Corregir diagnóstico de contratos con consulta directa de navegador y diferenciar liquidaciones DEMO"
   ],
-  "sourceCommit": "a8b841c2e48681590e173f9c7c012b2339e41e25",
+  "sourceCommit": "965ae39159357e19df62bd475f04295beb65700a",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

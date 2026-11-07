@@ -45,6 +45,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.5 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:30:50.740Z (UTC).
+- **Commit de origen:** `965ae3915935`.
+- Publicar diagnóstico de mercado en navegador y verificar que el panel sirve el código corregido
+- Corregir diagnóstico de contratos con consulta directa de navegador y diferenciar liquidaciones DEMO
+
 ## v5.4 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:29:17.447Z (UTC).
