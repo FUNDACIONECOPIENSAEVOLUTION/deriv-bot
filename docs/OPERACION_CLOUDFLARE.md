@@ -86,3 +86,17 @@ Cuando preflight, OAuth y permisos funcionen, habilitar `DEMO_BUY_ENABLED` para 
 - Se muestra informe de **cada bloque** (compras, liquidados, ganadas, perdidas, P&L y tasa observada), más el histórico total. El porcentaje de acierto no garantiza resultado positivo.
 - **Publicar código no inicia operaciones**: el Worker mantiene `DEMO_BUY_ENABLED=false` y `DEMO_AUTO_ENABLED=false` hasta una activación operativa específica tras validar autenticación, cotización y primera compra virtual del broker. La cuenta real permanece fuera del código de ejecución.
 
+
+### Inicio controlado con la cuenta DEMO (actualización v2.x)
+
+El Worker se despliega con `DEMO_BUY_ENABLED=true` y `DEMO_AUTO_ENABLED=true` **únicamente para la API DEMO**. Tener estos dos interruptores disponibles **no genera compras automáticamente**: el control persistente `demo-auto` comienza desactivado. El servicio utiliza una URL WebSocket oficial que incluye `/demo`, exige cuenta DEMO USD verificada y no dispone de ruta para órdenes `/real`.
+
+1. Entrar al **panel Cloudflare privado**, autenticar con la contraseña propia del Worker y actualizar el saldo oficial.
+2. Solicitar cotización oficial DEMO. Un rechazo al importe de US$0,10, US$0,25 o US$0,50 debe registrarse y no autoriza un incremento por pérdida ni una compra diferente.
+3. Con una señal vigente, ejecutar **una sola compra manual DEMO** y verificar su identificador y liquidación (P&L oficial). Una orden incierta bloquea posteriores compras hasta conciliación.
+4. **Solo después de que el primer contrato figure SETTLED**, el botón «Activar evaluación automática DEMO» queda disponible. Requiere confirmación explícita del propietario y un máximo de posiciones abiertas entre 1 y 10.
+5. La automatización intenta hasta **50 compras DEMO** en cinco tandas de diez, máximo US$10 de importes acumulados por tanda (US$50 total). No pasa a la siguiente tanda hasta que las diez compras anteriores hayan quedado liquidadas; puede tardar y puede no encontrar señales.
+6. Si el saldo oficial de la cuenta DEMO alcanza US$9.900 con referencia a US$10.000, o si la exposición abierta amenaza ese piso, las compras se detienen. El saldo PAPER no modifica este límite.
+7. Usar «Pausar evaluación automática» para detener nuevas compras; las ya abiertas requieren su liquidación. No se habilita jamás dinero real con estos parámetros.
+
+**Limitación de control:** modificar GitHub o publicar el Worker no equivale a llamar el endpoint privado de inicio. Un operador con sesión autenticada debe pulsar los botones de compra y, tras liquidación, de automatización. La sesión de navegador solo visible desde el chat no permite enviar estas solicitudes autenticadas.
