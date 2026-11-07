@@ -66,6 +66,7 @@
 <script nonce="__NONCE__">
 'use strict';
 const $=id=>document.getElementById(id),ns='http://www.w3.org/2000/svg';
+let demoManualApproval=null; // Never persists across reloads; server verifies a one-use approval too.
 const money=c=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'USD'}).format(c/100);
 const price=v=>Number.isFinite(v)?new Intl.NumberFormat('es-CO',{maximumFractionDigits:5}).format(v):'—';
 const time=t=>new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(t*1000));
@@ -196,7 +197,12 @@ function renderDemo(data){
   const eligible=state?.running===true&&state?.market?.state==='live'
     &&state?.config?.symbol==='R_100'&&[1,-1].includes(state?.decision?.direction)
     &&Number.isFinite(state?.quoteAgeSeconds)&&state.quoteAgeSeconds>=0&&state.quoteAgeSeconds<=10;
-  const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&eligible
+  const manualDirection=state?.decision?.direction===1?'UP':state?.decision?.direction===-1?'DOWN':null;
+  const quoteApproved=demoManualApproval!==null&&Date.now()-demoManualApproval.at<45000
+    &&demoManualApproval.direction===manualDirection
+    &&demoManualApproval.stakeCents===data.nextManualStakeCents
+    &&demoManualApproval.purchases===(report.pilotPurchases||0);
+  const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&eligible&&quoteApproved
     &&daily.allowed===true&&(report.openCount||0)<selectedConcurrent
     &&Number(report.pilotRemainingPurchases)>0&&Number(report.pilotRemainingBudgetCents)>=10;
   $('demo-buy-once').disabled=!canBuy;
@@ -224,6 +230,9 @@ function renderDemo(data){
     :eligible?'Señal válida '+(state.decision.direction===1?'CALL ↑':'PUT ↓')+
       (data.demoAutomationRequested?' · modo automático solicitado.':' · puedes enviar una operación DEMO.')
     :'Sin señal reciente verificable: no se permite comprar.';
+  if(data.demoTradingEnabled&&!quoteApproved)
+    $('demo-trade-status').textContent+=' · Compra manual bloqueada: consulta y obtén primero una propuesta aceptada de '
+      +money(data.nextManualStakeCents||10)+' para la señal actual, y compra dentro de 45 segundos.';
   if(data.demoTradingEnabled&&(report.settled||0)<1&&!data.demoAutomationRequested)
     $('demo-trade-status').textContent+=' · Primero confirma y liquida una compra DEMO manual para habilitar la automatización.';
   $('demo-daily-risk').textContent='Cinco tandas: '+(report.pilotRemainingPurchases??50)+' contratos por comprar, presupuesto de cada tanda US$10 virtuales, total máximo US$50. Al completar diez compras se espera su liquidación y se calcula el rendimiento antes del siguiente bloque. Parada adicional si el saldo oficial cae US$100 desde US$10.000, contando exposición. Automatización: '+(data.demoAutomationRequested?'solicitada':'detenida')+'.';
@@ -285,6 +294,7 @@ $('deriv-connect').onclick=async()=>{
 };
 $('deriv-refresh').onclick=async()=>{const out=$('demo-feedback');$('deriv-refresh').disabled=true;try{const r=await fetch('/api/deriv/refresh',{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error();renderDemo(await r.json());out.textContent='Saldo demo verificado en Deriv. La ejecución de contratos sigue desactivada.';}catch{out.textContent='No se pudo actualizar la cuenta demo. Puede ser necesario autorizarla nuevamente.';await loadDemo();}};
 $('deriv-quote').onclick=async()=>{
+  demoManualApproval=null;
   const btn=$('deriv-quote'),out=$('demo-quote');btn.disabled=true;
   out.textContent='Consultando exclusivamente una cotización en la cuenta DEMO. No se realizará ninguna compra.';
   try{
@@ -304,15 +314,33 @@ $('deriv-quote').onclick=async()=>{
       +' · Estado de seguridad: '+(risk.allowed?'apto para continuar con validación':'bloqueado '+String(risk.reason||'sin información'))
       +' · Compras realizadas en esta consulta: 0.';
     if(quote.accepted===false){
+      demoManualApproval=null;
       out.textContent='Deriv rechazó '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · US$'+quote.stake+' (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.'+note;
     }else if(quote.accepted===true&&Number.isFinite(quote.askPrice)&&Number.isFinite(quote.payout)){
+      if(preflight.manualApproved===true)
+        demoManualApproval={at:Date.now(),direction:preflight.signal,
+          stakeCents:preflight.stakeCents,purchases:Number(preflight.risk?.pilotPurchases||0)};
       out.textContent='Cotización DEMO, sin compra · '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · Importe solicitado US$'+quote.stake+' · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.'+note;
+      if(quote.accepted===true&&!demoManualApproval)
+        out.textContent+=' La propuesta es válida pero NO corresponde al próximo importe del bot ('
+          +money(preflight.nextManualStakeCents||10)+') o existe un bloqueo de riesgo. La compra sigue deshabilitada.';
+      else if(demoManualApproval)
+        out.textContent+=' Cotización aceptada: botón de compra manual disponible solo con la misma señal y dentro de 45 segundos.';
     }else throw Error('QUOTE_INVALID');
-  }catch{out.textContent='No se pudo obtener una cotización DEMO verificable. No se realizó ninguna compra y no se aumentó el importe.';}
-  finally{btn.disabled=false;}
+  }catch{
+    demoManualApproval=null;
+    out.textContent='No se pudo obtener una cotización DEMO verificable. No se realizó ninguna compra y no se aumentó el importe.';
+  }finally{btn.disabled=false;await loadDemo();}
 };
+$('demo-quote-direction').onchange=()=>{demoManualApproval=null;};
+$('demo-quote-stake').onchange=()=>{demoManualApproval=null;};
 $('demo-buy-once').onclick=async()=>{
+  if(!demoManualApproval||Date.now()-demoManualApproval.at>45000){
+    $('demo-trade-status').textContent='Cotización caducada o rechazada. Solicita una propuesta aceptada antes de comprar.';
+    return;
+  }
   if(!window.confirm('Confirmar UNA compra de US$0,10 a US$1 virtual (importe rotativo), duración 20 ticks, dentro de cinco tandas de 10 contratos (US$10 máximo por tanda y US$50 total). No se usará dinero real. ¿Continuar?'))return;
+  demoManualApproval=null;
   const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
   msg.textContent='Solicitando una sola operación en DEMO. Si se pierde la confirmación, el bot bloqueará nuevas compras.';
   try{
