@@ -1,4 +1,5 @@
 import { dayAt } from '../../runtime/core.mjs';
+import { assessDailyDemoRisk, DEMO_MAX_OPEN, DEMO_ALLOCATION_CENTS, DEMO_MIN_SETTLED_FOR_REVIEW } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
@@ -122,8 +123,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
   constructor(ctx:DurableObjectState,env:Env){super(ctx,env);
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS demo_connection (slot TEXT PRIMARY KEY,data TEXT NOT NULL)');
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_trades (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, created_at INTEGER NOT NULL, state TEXT NOT NULL, contract_id INTEGER UNIQUE, buy_cents INTEGER, payout_cents INTEGER, pnl_cents INTEGER, code TEXT)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_day_halts (date TEXT PRIMARY KEY, reason TEXT NOT NULL, stopped_at INTEGER NOT NULL)");
     const cols=new Set(ctx.storage.sql.exec<{name:string}>('PRAGMA table_info(demo_trades)').toArray().map(r=>r.name));
-    for(const [name,kind] of [['decision_json','TEXT'],['entry_spot','REAL'],['exit_spot','REAL']]){
+    for(const [name,kind] of [['decision_json','TEXT'],['entry_spot','REAL'],['exit_spot','REAL'],['contract_type','TEXT']]){
       if(!cols.has(name))ctx.storage.sql.exec('ALTER TABLE demo_trades ADD COLUMN '+name+' '+kind);
     }
 
@@ -197,6 +199,26 @@ export class DerivDemoConnection extends DurableObject<Env> {
     this.ctx.storage.transactionSync(()=>{this.write('credentials',credentials);this.write('snapshot',{account,checkedAt:epoch(),expiresAt});});
     return this.status();
   }
+  private dayRisk(date=dayAt(epoch())){
+    const d=this.ctx.storage.sql.exec<{settled:number;net:number}>(
+      "SELECT COUNT(*) AS settled, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE date=? AND state='SETTLED'",date
+    ).one();
+    const stop=this.ctx.storage.sql.exec<{reason:string}>(
+      'SELECT reason FROM demo_day_halts WHERE date=?',date
+    ).toArray()[0]||null;
+    return {date,settled:d.settled,netCents:d.net,halted:!!stop,haltReason:stop?.reason??null};
+  }
+  private freezeLosingDay(date:string){
+    const d=this.dayRisk(date);
+    // Risk halt is sticky: a late settlement cannot reopen trading the same day.
+    if(d.settled>=DEMO_MIN_SETTLED_FOR_REVIEW&&d.netCents<=0){
+      this.ctx.storage.sql.exec(
+        'INSERT OR IGNORE INTO demo_day_halts(date,reason,stopped_at) VALUES(?,?,?)',
+        date,'DAY_NET_NONPOSITIVE_AFTER_TEN',epoch()
+      );
+    }
+  }
+
   private reportDemo() {
     type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null;decision_json?:string|null;entry_spot?:number|null;exit_spot?:number|null};
     const sql=this.ctx.storage.sql;
@@ -220,11 +242,19 @@ export class DerivDemoConnection extends DurableObject<Env> {
       decision:r.decision_json?JSON.parse(r.decision_json):null
     }));
     const analysis=analyzeBrokerDemoHistory(analyticRows);
+    const day=this.dayRisk();
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.pnlCents,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
-      virtualResearchAllocationCents:1000,
-      virtualResearchRemainingCents:1000+stats.pnlCents-activeExposureCents,
-      maxParallel:3,openCount,unknownCount,activeExposureCents,
+      virtualResearchAllocationCents:DEMO_ALLOCATION_CENTS,
+      virtualResearchRemainingCents:DEMO_ALLOCATION_CENTS+stats.pnlCents-activeExposureCents,
+      maxParallel:DEMO_MAX_OPEN,openCount,unknownCount,activeExposureCents,
+      dayRisk:{...day,
+        ...assessDailyDemoRisk({
+          openContracts:openCount,unknownCount,exposureCents:activeExposureCents,
+          lifetimeNetCents:stats.pnlCents,dailyNetCents:day.netCents,
+          dailySettled:day.settled,haltedToday:day.halted
+        })
+      },
       analysis,analysisScope:'most_recent_1000_settled',
       openContracts:pending.filter(r=>r.state==='OPEN').map(r=>({id:r.id,contractId:r.contract_id,createdAt:r.created_at})),
       unresolved:pending.find(r=>r.state==='UNKNOWN')||pending[0]||null,
@@ -298,19 +328,19 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * Cloudflare owner changes DEMO_BUY_ENABLED from its safe 'false' default.
    * PAPER signals must be fresh and upward; a real account never qualifies.
    */
-  async buyDemoOnce(paperSignal:'UP'|'HOLD',evidence?:{
+  async buyDemoOnce(paperSignal:'UP'|'DOWN'|'HOLD',evidence?:{
     reason?:string;fast?:number|null;slow?:number|null;rsi?:number|null;
     volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
   }) {
     if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
-    if(paperSignal!=='UP')throw Error('NO_APPROVED_SIGNAL');
+    if(paperSignal!=='UP'&&paperSignal!=='DOWN')throw Error('NO_APPROVED_SIGNAL');
     const creds=await this.verifiedDemoCredentials();
     const url=await this.otpDemoUrl(creds);
     const report=this.reportDemo();
-    if(report.unknownCount>0||report.openCount>=3)throw Error('DEMO_POSITION_UNRESOLVED');
+    if(!report.dayRisk.allowed)throw Error(report.dayRisk.reason);
     const safeNumber=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?v:null;
     const decision=JSON.stringify({
-      strategy:'sma-rsi-v1',
+      strategy:'sma-rsi-v1',direction:paperSignal,contractType:paperSignal==='UP'?'CALL':'PUT',
       reason:evidence?.reason==='TREND_AND_MOMENTUM'?'TREND_AND_MOMENTUM':'UNVERIFIED',
       fast:safeNumber(evidence?.fast),slow:safeNumber(evidence?.slow),
       rsi:safeNumber(evidence?.rsi),volatility:safeNumber(evidence?.volatility),
@@ -319,10 +349,11 @@ export class DerivDemoConnection extends DurableObject<Env> {
       recordedAt:epoch(),source:'Deriv public price feed'
     });
     const today=dayAt(epoch());
-    const dailyStats=()=>this.ctx.storage.sql.exec<{total:number;losses:number}>(
-      "SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN pnl_cents < 0 THEN -pnl_cents ELSE 0 END),0) AS losses FROM demo_trades WHERE date=? AND state IN ('UNKNOWN','OPEN','SETTLED')",today
+    const dailyStats=()=>this.ctx.storage.sql.exec<{total:number}>(
+      "SELECT COUNT(*) AS total FROM demo_trades WHERE date=? AND state IN ('UNKNOWN','OPEN','SETTLED')",today
     ).one();
     const available=dailyStats();
+    const currentDay=this.dayRisk(today);
     const reserve=async(quote:DemoQuoteForBuy):Promise<number>=>{
       // A failed buy is not retried. A synchronous reservation also prevents
       // racing web requests from exceeding three concurrent DEMO contracts.
@@ -334,17 +365,19 @@ export class DerivDemoConnection extends DurableObject<Env> {
         const lifetime=this.ctx.storage.sql.exec<{pnl:number}>(
           "SELECT COALESCE(SUM(pnl_cents),0) AS pnl FROM demo_trades WHERE state='SETTLED'"
         ).one().pnl;
+        const todayRisk=this.dayRisk(today);
         buildDemoBuyRequest({
           accountType:'demo',currency:'USD',socketUrl:url,userEnabledDemoExecution:true,
-          signal:paperSignal,quote,now:epoch(),todayTrades:current.total,todayLossCents:current.losses,
+          signal:paperSignal,quote,now:epoch(),todayTrades:current.total,todayLossCents:0,
           hasOpenContract:pending.length>0,unresolvedBuy:pending.some(p=>p.state==='UNKNOWN'),
           openContracts:pending.filter(p=>p.state==='OPEN').length,
           activeExposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||10),0),
-          lifetimePnlCents:lifetime
+          lifetimePnlCents:lifetime,dailyNetPnlCents:todayRisk.netCents,
+          dailySettled:todayRisk.settled,haltedToday:todayRisk.halted
         });
         this.ctx.storage.sql.exec(
-          "INSERT INTO demo_trades(date,created_at,state,buy_cents,decision_json) VALUES(?,?,'UNKNOWN',10,?)",
-          today,epoch(),decision
+          "INSERT INTO demo_trades(date,created_at,state,buy_cents,decision_json,contract_type) VALUES(?,?,'UNKNOWN',10,?,?)",
+          today,epoch(),decision,quote.contractType
         );
         return this.ctx.storage.sql.exec<{id:number}>('SELECT last_insert_rowid() AS id').one().id;
       });
@@ -365,10 +398,11 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const result=await buySingleDemoContract({
       wsUrl:url,gate:{
         accountType:'demo',currency:'USD',userEnabledDemoExecution:true,
-        signal:paperSignal,todayTrades:available.total,todayLossCents:available.losses,
+        signal:paperSignal,todayTrades:available.total,todayLossCents:0,
         hasOpenContract:report.openCount>0,unresolvedBuy:report.unknownCount>0,
         openContracts:report.openCount,activeExposureCents:report.activeExposureCents,
-        lifetimePnlCents:report.pnlCents
+        lifetimePnlCents:report.pnlCents,dailyNetPnlCents:currentDay.netCents,
+        dailySettled:currentDay.settled,haltedToday:currentDay.halted
       },reserve,acknowledge
     });
     return {mode:'DERIV_DEMO',...result,tradeReport:this.reportDemo()};
@@ -402,11 +436,15 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const url=await this.otpDemoUrl(creds);
     const result=await readDemoSettlement(url,pending.contractId);
     if(result) {
-      this.ctx.storage.sql.exec(
-        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=? WHERE id=? AND contract_id=? AND state='OPEN'",
-        result.profitCents,result.payoutCents,result.entrySpot??null,result.exitSpot??null,
-        pending.id,pending.contractId
-      );
+      this.ctx.storage.transactionSync(()=>{
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=? WHERE id=? AND contract_id=? AND state='OPEN'",
+          result.profitCents,result.payoutCents,result.entrySpot??null,result.exitSpot??null,
+          pending.id,pending.contractId
+        );
+        this.freezeLosingDay(this.ctx.storage.sql.exec<{date:string}>(
+          'SELECT date FROM demo_trades WHERE id=?',pending.id).one().date);
+      });
       return {state:'SETTLED',settlement:result,tradeReport:this.reportDemo()};
     }
     return {state:'OPEN',tradeReport:this.reportDemo()};
