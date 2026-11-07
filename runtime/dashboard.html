@@ -47,6 +47,7 @@
 <div class="tools">
   <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
   <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
+  <label>Máximo de contratos DEMO simultáneos <select id="demo-max-concurrent"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10" selected>10</option></select></label>
   <button id="demo-auto-start" disabled>Activar evaluación automática DEMO</button>
   <button id="demo-auto-stop" disabled>Pausar evaluación automática</button>
 </div>
@@ -161,6 +162,9 @@ function renderDemo(data){
   $('deriv-refresh').disabled=!data.connected;
   $('deriv-quote').disabled=!data.connected;
   const report=data.tradeReport||{},pending=report.unresolved;
+  const selectedConcurrent=Number.isInteger(data.demoMaxConcurrent)?data.demoMaxConcurrent:10;
+  if(document.activeElement!==$('demo-max-concurrent'))
+    $('demo-max-concurrent').value=String(selectedConcurrent);
   if(data.account&&data.connected&&Number.isFinite(data.account.balance)){
     const fresh=Number.isFinite(data.account.checkedAt)&&Date.now()/1000-data.account.checkedAt<=120;
     const label=money(Math.round(data.account.balance*100));
@@ -193,7 +197,7 @@ function renderDemo(data){
     &&state?.config?.symbol==='R_100'&&[1,-1].includes(state?.decision?.direction)
     &&Number.isFinite(state?.quoteAgeSeconds)&&state.quoteAgeSeconds>=0&&state.quoteAgeSeconds<=10;
   const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&eligible
-    &&daily.allowed===true&&(report.openCount||0)<10
+    &&daily.allowed===true&&(report.openCount||0)<selectedConcurrent
     &&Number(report.virtualResearchRemainingCents)>=10;
   $('demo-buy-once').disabled=!canBuy;
   $('demo-auto-start').disabled=!(data.connected&&data.demoAutomationAvailable
@@ -203,7 +207,7 @@ function renderDemo(data){
   $('demo-check').disabled=!(data.connected&&(report.openCount||0)>0);
   $('demo-trade-summary').textContent='Límite acumulado US$100 · Saldo de parada US$9.900'
     +' · Disponibilidad estimada de la asignación: '+money(report.virtualResearchRemainingCents??1000)
-     +' · Abiertos: '+(report.openCount||0)+'/10'
+     +' · Abiertos: '+(report.openCount||0)+'/'+selectedConcurrent
     +' · Saldo DEMO comprobado: '+(report.brokerBalanceCents===null?'sin verificar':money(report.brokerBalanceCents))
     +' · Compras sin confirmación: '+(report.unknownCount||0)
     +' · DEMO liquidadas: '+(report.settled||0)
@@ -214,7 +218,7 @@ function renderDemo(data){
     ?'El modo de compra DEMO sigue desactivado hasta validar la integración.'
     :(report.unknownCount||0)>0?'Una compra no fue confirmada por Deriv: nuevas compras bloqueadas hasta conciliarla.'
     :daily.allowed===false?'Pausa DEMO: '+String(daily.reason||'saldo no verificado')
-    :(report.openCount||0)>=10?'Hay diez contratos virtuales pendientes; no se aceptan más.'
+    :(report.openCount||0)>=selectedConcurrent?'Se alcanzó el máximo configurado de contratos DEMO abiertos; esperando liquidaciones.'
     :eligible?'Señal válida '+(state.decision.direction===1?'CALL ↑':'PUT ↓')+
       (data.demoAutomationRequested?' · modo automático solicitado.':' · puedes enviar una operación DEMO.')
     :'Sin señal reciente verificable: no se permite comprar.';
@@ -308,12 +312,14 @@ $('demo-buy-once').onclick=async()=>{
 for(const kind of ['start','stop']){
   $('demo-auto-'+kind).onclick=async()=>{
     const start=kind==='start';
-    if(start&&!window.confirm('Autorizar únicamente DEMO, importes de US$0,10, US$0,25, US$0,50 y US$1, máximo diez contratos abiertos y detención por US$100 de pérdida respecto al saldo de US$10.000. Nunca dinero real. ¿Activar?'))return;
+    const maxConcurrent=Number($('demo-max-concurrent').value);
+    if(start&&(!Number.isSafeInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>10))return;
+    if(start&&!window.confirm('Autorizar únicamente DEMO, importes de US$0,10, US$0,25, US$0,50 y US$1, un máximo de '+maxConcurrent+' contratos simultáneos y detención por US$100 de pérdida respecto al saldo de US$10.000. Nunca dinero real. ¿Activar?'))return;
     const btn=$('demo-auto-'+kind);btn.disabled=true;
     try{
       const r=await fetch('/api/deriv/demo/auto-'+kind,{
         method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-        body:'{}',signal:AbortSignal.timeout(12000)});
+        body:JSON.stringify(start?{maxConcurrent}:{}),signal:AbortSignal.timeout(12000)});
       if(!r.ok)throw Error();
       $('demo-trade-status').textContent=start
         ?'Evaluación automática DEMO solicitada. Solo operará si el servidor está autorizado y existe una señal reciente.'
