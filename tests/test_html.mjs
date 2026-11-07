@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
+const release=JSON.parse(readFileSync('release.json','utf8'));
+assert.match(release.version,/^\\d+\\.[0-9]$/);
+assert.ok(Number.isFinite(Date.parse(release.updatedAt)),'Release debe tener fecha válida');
+assert.ok(Array.isArray(release.changes)&&release.changes.length>0,'Historial de mejoras obligatorio');
 const panel=readFileSync('runtime/dashboard.html','utf8');
+assert.ok(panel.includes('__RELEASE_VERSION__'),'El servidor debe insertar la versión del manifiesto');
 for(const script of panel.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(script[1]);
 for(const name of ['index.html','laboratorio.html','operaciones.html','conexion.html']){
  const html=readFileSync(name,'utf8');
@@ -8,7 +13,9 @@ for(const name of ['index.html','laboratorio.html','operaciones.html','conexion.
    assert.ok(html.includes('https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/'),'Acceso principal al bot DEMO privado');
    assert.ok(html.includes('El saldo no se lee desde GitHub Pages'),'No presentar PAPER como saldo oficial');
    assert.ok(html.includes('/api/health'),'El portal debe enlazar al comprobador de versión del Worker');
-   assert.ok(html.includes('TRADER LAB · V1.5'),'Mostrar versión actualizada del portal');
+   assert.ok(html.includes('id="release-nav-version"'),'Mostrar versión actualizada desde release.json');
+   assert.ok(html.includes('showPublishedRelease()'),'Consultar manifiesto de versión publicado');
+   assert.ok(html.includes('id="release-change-list"'),'Mostrar novedades por versión');
    assert.ok(!html.includes('href="https://api.derivws.com/trading/v1/options/ws/real'),'Nunca enlazar canal real');
  }
  const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
