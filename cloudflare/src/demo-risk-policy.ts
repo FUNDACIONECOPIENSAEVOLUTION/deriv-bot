@@ -1,56 +1,51 @@
 /**
- * Risk controls for broker-verifiable virtual DEMO contracts only.
- * Does not issue trades or make a claim of profitability.
+ * Experimental, DEMO-only risk policy. Values are virtual USD cents.
+ * The 100 USD guard is a hard loss boundary from verified baseline;
+ * never use this module to authorize real-money transactions.
  */
-export const DEMO_ALLOCATION_CENTS=1000;
-export const DEMO_STAKE_CENTS=100; // USD 1 virtual per contract
+export const DEMO_STAKES_CENTS=Object.freeze([10,25,50,100] as const);
+export const DEMO_MAX_STAKE_CENTS=100;
 export const DEMO_MAX_OPEN=10;
-export const DEMO_FIRST_BATCH_SIZE=10; // no further buys until a separate review
-export const DEMO_DAILY_LOSS_FLOOR_CENTS=-1000; // never exceed virtual USD 10 including open risk
-export const DEMO_MIN_SETTLED_FOR_REVIEW=10;
-
-export type DailyDemoRiskInput={
-  openContracts:number;
-  unknownCount:number;
-  exposureCents:number;
-  lifetimeNetCents:number;
-  dailyNetCents:number;
-  dailySettled:number;
-  haltedToday:boolean;
-  /** Number of demo buys recorded for the initial ten-operation experiment. */
-  firstBatchBuys?:number;
+export const DEMO_MAX_LOSS_CENTS=10_000; // US$100 off verified demo starting balance
+export const DEMO_BASELINE_EXPECTED_CENTS=1_000_000; // US$10,000; broker must confirm it
+export const DEMO_REVIEW_INTERVAL=10;
+export type DemoRiskInput={
+ openContracts:number;
+ unknownCount:number;
+ exposureCents:number;
+ lifetimeNetCents:number;
+ stakeCents:number;
+ /** Verified broker balance and baseline in USD cents. Never take these from PAPER. */
+ brokerBalanceCents:number;
+ baselineBalanceCents:number;
+ halted:boolean;
 };
-
-export function assessDailyDemoRisk(s:DailyDemoRiskInput){
-  for(const n of [s.openContracts,s.unknownCount,s.exposureCents,s.lifetimeNetCents,s.dailyNetCents,s.dailySettled]){
-    if(!Number.isSafeInteger(n))throw Error('DEMO_RISK_INVALID');
-  }
-  if(s.openContracts<0||s.openContracts>DEMO_MAX_OPEN||s.unknownCount<0||
-     !Number.isSafeInteger(s.firstBatchBuys??0)||(s.firstBatchBuys??0)<0||
-     s.exposureCents<0||s.exposureCents>DEMO_ALLOCATION_CENTS||
-     s.dailySettled<0||s.exposureCents<s.openContracts*DEMO_STAKE_CENTS)
-    throw Error('DEMO_RISK_INVALID');
-  const virtualRemainingCents=DEMO_ALLOCATION_CENTS+s.lifetimeNetCents-s.exposureCents;
-  const worstCaseDailyNetCents=s.dailyNetCents-s.exposureCents-DEMO_STAKE_CENTS;
-  const reviewTriggered=s.dailySettled>=DEMO_MIN_SETTLED_FOR_REVIEW&&s.dailyNetCents<=0;
-  let reason='';
-  if(s.haltedToday)reason='DEMO_DAY_HALTED';
-  else if((s.firstBatchBuys??0)>=DEMO_FIRST_BATCH_SIZE)reason='DEMO_FIRST_BATCH_COMPLETE';
-  else if(s.unknownCount>0)reason='DEMO_BUY_OUTCOME_UNKNOWN';
-  else if(reviewTriggered)reason='DEMO_DAY_NOT_PROFITABLE';
-  else if(s.openContracts>=DEMO_MAX_OPEN)reason='DEMO_MAX_OPEN';
-  else if(virtualRemainingCents<DEMO_STAKE_CENTS)reason='DEMO_RESEARCH_ALLOCATION';
-  else if(worstCaseDailyNetCents<DEMO_DAILY_LOSS_FLOOR_CENTS)reason='DEMO_DAILY_RISK_FLOOR';
-  return {
-    allowed:reason==='',
-    reason,
-    reviewTriggered,
-    dailyNetCents:s.dailyNetCents,
-    worstCaseDailyNetCents,
-    virtualRemainingCents,
-    maxParallel:DEMO_MAX_OPEN,
-    maxRiskCents:Math.abs(DEMO_DAILY_LOSS_FLOOR_CENTS),
-    reviewAfterSettled:DEMO_MIN_SETTLED_FOR_REVIEW,
-    firstBatchBuys:s.firstBatchBuys??0,firstBatchSize:DEMO_FIRST_BATCH_SIZE
-  };
+export function pickDemoStakeCents(index:number){
+ if(!Number.isSafeInteger(index)||index<0)throw Error('DEMO_STAKE_INDEX_INVALID');
+ return DEMO_STAKES_CENTS[index%DEMO_STAKES_CENTS.length];
+}
+export function evaluateDemoRisk(s:DemoRiskInput){
+ const integers=[s.openContracts,s.unknownCount,s.exposureCents,s.lifetimeNetCents,
+  s.stakeCents,s.brokerBalanceCents,s.baselineBalanceCents];
+ if(integers.some(n=>!Number.isSafeInteger(n))||s.openContracts<0||s.openContracts>DEMO_MAX_OPEN
+  ||s.unknownCount<0||s.exposureCents<0||s.brokerBalanceCents<0
+  ||s.baselineBalanceCents<=0||s.exposureCents>DEMO_MAX_OPEN*DEMO_MAX_STAKE_CENTS
+  ||!DEMO_STAKES_CENTS.some(x=>x===s.stakeCents)
+  ||s.exposureCents<s.openContracts*DEMO_STAKES_CENTS[0])throw Error('DEMO_RISK_INVALID');
+ const floor=s.baselineBalanceCents-DEMO_MAX_LOSS_CENTS;
+ const lowestExpectedBalance=s.brokerBalanceCents-s.exposureCents-s.stakeCents;
+ const ledgerWorstCase=s.lifetimeNetCents-s.exposureCents-s.stakeCents;
+ let reason='';
+ if(s.halted)reason='DEMO_LOSS_STOP_PERSISTED';
+ else if(s.unknownCount>0)reason='DEMO_BUY_OUTCOME_UNKNOWN';
+ else if(s.brokerBalanceCents<=floor)reason='DEMO_LOSS_100_REACHED';
+ else if(s.openContracts>=DEMO_MAX_OPEN)reason='DEMO_MAX_OPEN';
+ else if(lowestExpectedBalance<floor)reason='DEMO_LOSS_RISK_LIMIT';
+ else if(ledgerWorstCase< -DEMO_MAX_LOSS_CENTS)reason='DEMO_LEDGER_RISK_LIMIT';
+ return {allowed:reason==='',reason,maximumOpen:DEMO_MAX_OPEN,
+  brokerBalanceCents:s.brokerBalanceCents,baselineBalanceCents:s.baselineBalanceCents,
+  lossStopBalanceCents:floor,openExposureCents:s.exposureCents,
+  estimatedBalanceAfterWorstCaseCents:lowestExpectedBalance,
+  virtualStakeCents:s.stakeCents,
+  dollarsAtRiskUntilStopCents:Math.max(0,s.brokerBalanceCents-floor)};
 }
