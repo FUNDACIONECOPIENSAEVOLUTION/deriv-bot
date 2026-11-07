@@ -82,7 +82,8 @@
 <script nonce="__NONCE__">
 'use strict';
 const $=id=>document.getElementById(id),ns='http://www.w3.org/2000/svg';
-let demoManualApproval=null,demoCurrent=null; // Never persists across reloads; server verifies a one-use approval too.
+let demoManualApproval=null,demoCurrent=null;
+let demoBalancedRunning=false,demoBalancedStop=false; // Never persists across reloads; server verifies a one-use approval too.
 const money=c=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'USD'}).format(c/100);
 const price=v=>Number.isFinite(v)?new Intl.NumberFormat('es-CO',{maximumFractionDigits:5}).format(v):'—';
 const time=t=>new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(t*1000));
@@ -222,6 +223,14 @@ async function browserCheckDemoSettlement(msg){
  }finally{try{ws.close();}catch{}}
 }
 
+function demoResearchEvidence(pilot='manual'){
+ const d=state?.decision||{};
+ const safe=v=>typeof v==='number'&&Number.isFinite(v)?v:null;
+ return {pilot,fast:safe(d.fast),slow:safe(d.slow),
+  rsi:safe(d.rsi),volatility:safe(d.volatility),
+  entryQuote:safe(state?.lastQuote),quoteAgeSeconds:safe(state?.quoteAgeSeconds),
+  reason:typeof d.reason==='string'?d.reason:'UNVERIFIED'};
+}
 async function oneBrowserDemoBuy(approved,msg){
  const {direction,stakeCents}=approved;
  const session=await browserPrivate('begin',{signal:direction,stakeCents});
@@ -238,7 +247,8 @@ async function oneBrowserDemoBuy(approved,msg){
     throw Error('DEMO_BROWSER_PROPOSAL_REJECTED');
   reserved=await browserPrivate('reserve',{
    nonce:session.nonce,signal:direction,stakeCents,
-   proposalId:p.id,askPrice:ask,payout
+   proposalId:p.id,askPrice:ask,payout,
+   evidence:demoResearchEvidence(approved.pilot==='balanced-ten'?'balanced-ten':'manual')
   });
   if(reserved.mode!=='DEMO_BROWSER_RESERVED'||reserved.request?.price!==stakeCents/100)
    throw Error('DEMO_BROWSER_RESERVATION_INVALID');
@@ -247,7 +257,7 @@ async function oneBrowserDemoBuy(approved,msg){
   const result=await browserPrivate('ack',{nonce:session.nonce,id:reserved.id,response:ack});
   if(result.accepted!==true){
    msg.textContent='Deriv rechazó la compra DEMO. No se repitió ni se subió el importe.';
-   return;
+   return {state:'REJECTED'};
   }
   msg.textContent='Compra DEMO observada: contrato '+result.contractId+
    ', importe '+money(stakeCents)+'. Comprobando el cierre...';
@@ -259,10 +269,12 @@ async function oneBrowserDemoBuy(approved,msg){
     const settled=await browserPrivate('settle',{nonce:session.nonce,id:reserved.id,response:reply});
     msg.textContent='Contrato DEMO '+result.contractId+' cerrado · resultado '+money(settled.settlement.profitCents)+
      '. Observado desde el navegador; aún sin verificación independiente en Cloudflare.';
-    return;
+    return {state:'SETTLED',contractId:result.contractId,pnlCents:settled.settlement.profitCents,stakeCents};
+
    }
   }
   msg.textContent='Compra DEMO '+result.contractId+' observada; el cierre sigue pendiente. No repitas la compra.';
+  return {state:'OPEN',contractId:result.contractId};
  }finally{try{ws.close();}catch{}}
 }
 
