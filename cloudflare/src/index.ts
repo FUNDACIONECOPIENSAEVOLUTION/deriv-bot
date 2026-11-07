@@ -3,6 +3,7 @@ import { readConfig, initialState, seedHistory, onTick, invalidatePosition, entr
 import { addCandleTick, mergeCandleHistory, validateCandles, publicMarketSnapshot, PROVIDERS, equityPoints, type Candle } from '../../runtime/market-data.mjs';
 import { PublicFeed, type MarketStatus } from '../../runtime/feed.mjs';
 import dashboard from '../../runtime/dashboard.html?raw';
+import release from '../../release.json';
 import { PublicSocket } from './public-socket';
 import { readPublicArbitrageSnapshot } from '../../runtime/cross-exchange.mjs';
 export { DerivDemoConnection } from './deriv-demo';
@@ -168,7 +169,17 @@ async function authorized(request:Request,secret:string) {
 
 function privateDashboard() {
   const nonce=crypto.randomUUID();
-  const html=dashboard.replaceAll('__NONCE__',nonce);
+  // HTML-escape each release field; commit messages must never become executable markup.
+  const escapeHtml=(value:unknown)=>String(value).replace(/[&<>"']/g,ch=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[ch]||ch));
+  const changes=(Array.isArray(release.changes)?release.changes:[])
+    .slice(0,12).map(value=>'<li>'+escapeHtml(value)+'</li>').join('');
+  const html=dashboard.replaceAll('__NONCE__',nonce)
+    .replaceAll('__RELEASE_VERSION__',escapeHtml(release.version))
+    .replaceAll('__RELEASE_UPDATED_AT__',escapeHtml(release.updatedAt))
+    .replaceAll('__RELEASE_SUMMARY__',escapeHtml(release.summary))
+    .replaceAll('__RELEASE_CHANGES__',changes);
   return new Response(html,{headers:{...security,'Content-Type':'text/html; charset=utf-8',
     'Content-Security-Policy':"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"}});
 }
@@ -178,8 +189,9 @@ export default {
     const url=new URL(request.url);
     if(url.protocol!=='https:'){url.protocol='https:';return Response.redirect(url.href,308);}
     if(url.pathname==='/api/health'&&request.method==='GET')return json({
-      status:'ok',mode:'PAPER',version:'1.5.0',release:'cloudflare-deriv-demo-panel-v1.5',
-      publishedFeature:'private-demo-panel',date:'2026-11-07',
+      status:'ok',mode:'PAPER',version:release.version+'.0',release:'cloudflare-deriv-demo-panel-v'+release.version,
+      lastUpdated:release.updatedAt,summary:release.summary,changes:release.changes,
+      publishedFeature:'private-demo-panel',date:release.updatedAt.slice(0,10),
       demoBuyingEnabled:String(env.DEMO_BUY_ENABLED)==='true',
       demoAutomationEnabled:String(env.DEMO_AUTO_ENABLED)==='true',
       note:'Estado técnico del Worker. No confirma sesión Deriv ni operaciones DEMO.'
