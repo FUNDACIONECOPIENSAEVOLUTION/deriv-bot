@@ -1,11 +1,10 @@
 {
-  "version": "5.8",
-  "updatedAt": "2026-11-07T23:48:08.737Z",
-  "summary": "Conservar resultado tipado de cada contrato y capturar RSI/SMA al entrar en DEMO",
+  "version": "5.9",
+  "updatedAt": "2026-11-07T23:48:43.076Z",
+  "summary": "Crear ejecución secuencial controlada de 10 contratos DEMO 5 CALL y 5 PUT con paradas de seguridad",
   "changes": [
-    "Conservar resultado tipado de cada contrato y capturar RSI/SMA al entrar en DEMO",
-    "Añadir controles visibles de ensayo DEMO de 10 contratos balanceados y exportación privada CSV"
+    "Crear ejecución secuencial controlada de 10 contratos DEMO 5 CALL y 5 PUT con paradas de seguridad"
   ],
-  "sourceCommit": "78d30825c0eec938e557c2d8bd8a23f2dcdfff09",
+  "sourceCommit": "3ad723015068a9314896318510391c45843e372b",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

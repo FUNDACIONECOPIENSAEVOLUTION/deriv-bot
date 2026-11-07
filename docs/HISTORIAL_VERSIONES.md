@@ -49,6 +49,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.9 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:48:43.076Z (UTC).
+- **Commit de origen:** `3ad723015068`.
+- Crear ejecución secuencial controlada de 10 contratos DEMO 5 CALL y 5 PUT con paradas de seguridad
+
 ## v5.8 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:48:08.737Z (UTC).
