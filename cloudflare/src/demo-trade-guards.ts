@@ -21,9 +21,17 @@ export type DemoTradeGate = {
   todayLossCents:number;
   hasOpenContract:boolean;
   unresolvedBuy:boolean;
+  /** Confirmed DEMO contracts open at the broker, separate from unknown acknowledgements. */
+  openContracts?:number;
+  /** Reserved worst-case loss of all OPEN/UNKNOWN contracts in cents. */
+  activeExposureCents?:number;
+  /** Total realized broker-verified P&L, all days, in cents. */
+  lifetimePnlCents?:number;
 };
 
 const MAX_STAKE_CENTS=10;
+export const DEMO_RESEARCH_ALLOCATION_CENTS=1000;
+export const DEMO_MAX_PARALLEL_CONTRACTS=3;
 const DAILY_LOSS_LIMIT_CENTS=30;
 const MAX_DAILY_TRADES=12;
 const MAX_QUOTE_AGE_SECONDS=8;
@@ -46,10 +54,23 @@ export function buildDemoBuyRequest(gate:DemoTradeGate){
     ||parsed.searchParams.size!==1||!parsed.searchParams.get('otp'))throw Error('DEMO_SOCKET_REQUIRED');
   if(!gate.userEnabledDemoExecution)throw Error('DEMO_EXECUTION_DISABLED');
   if(gate.signal!=='UP')throw Error('NO_APPROVED_SIGNAL');
-  if(gate.hasOpenContract||gate.unresolvedBuy)throw Error('DEMO_POSITION_UNRESOLVED');
-  if(!Number.isSafeInteger(gate.todayTrades)||gate.todayTrades<0||gate.todayTrades>=MAX_DAILY_TRADES)throw Error('DEMO_TRADE_LIMIT');
+  // An UNKNOWN broker response is an account-level emergency stop. Confirmed
+  // OPEN demo positions can coexist, up to three, when budget permits.
+  const open=gate.openContracts===undefined?(gate.hasOpenContract?DEMO_MAX_PARALLEL_CONTRACTS:0):gate.openContracts;
+  if(!Number.isSafeInteger(open)||open<0||open>DEMO_MAX_PARALLEL_CONTRACTS
+    ||gate.unresolvedBuy||open>=DEMO_MAX_PARALLEL_CONTRACTS)throw Error('DEMO_POSITION_UNRESOLVED');
+  const exposure=gate.activeExposureCents===undefined?open*MAX_STAKE_CENTS:gate.activeExposureCents;
+  if(!Number.isSafeInteger(exposure)||exposure<open*MAX_STAKE_CENTS||exposure>DEMO_RESEARCH_ALLOCATION_CENTS)
+    throw Error('DEMO_EXPOSURE_INVALID');
+  const lifetime=gate.lifetimePnlCents??0;
+  if(!Number.isSafeInteger(lifetime)||Math.abs(lifetime)>100000000)throw Error('DEMO_ALLOCATION_INVALID');
+  if(DEMO_RESEARCH_ALLOCATION_CENTS+lifetime-exposure<MAX_STAKE_CENTS)
+    throw Error('DEMO_ALLOCATION_EXHAUSTED');
+  if(!Number.isSafeInteger(gate.todayTrades)||gate.todayTrades<0||gate.todayTrades>=MAX_DAILY_TRADES)
+    throw Error('DEMO_TRADE_LIMIT');
   if(!Number.isSafeInteger(gate.todayLossCents)||gate.todayLossCents<0
-    ||gate.todayLossCents+MAX_STAKE_CENTS>DAILY_LOSS_LIMIT_CENTS)throw Error('DEMO_LOSS_LIMIT');
+    ||gate.todayLossCents+exposure+MAX_STAKE_CENTS>DAILY_LOSS_LIMIT_CENTS)
+    throw Error('DEMO_LOSS_LIMIT');
   const q=gate.quote;
   if(q.symbol!=='R_100'||q.contractType!=='CALL'||q.durationTicks!==20||q.stake!==0.10)
     throw Error('DEMO_CONTRACT_NOT_ALLOWED');
