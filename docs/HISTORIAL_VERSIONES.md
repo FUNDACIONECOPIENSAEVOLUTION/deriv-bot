@@ -6,6 +6,24 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 **Importante:** el número de versión del software **no significa** que el bot haya comprado contratos o mejorado su porcentaje de aciertos. PAPER, DEMO y dinero real se mantienen distinguidos. La versión en el Worker se informa directamente mediante `/api/health`. Si la publicación de una plataforma falla, puede conservar una versión anterior: esta diferencia se debe mostrar, no ocultar.
 
+
+## v1.6 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T19:43:13.220Z (UTC).
+- **Commit de origen:** `b0083dd3d2c6`.
+- Activar actualización incremental +0,1, changelog y despliegue sincronizado Pages/Cloudflare
+- Exigir prueba de incremento v1.9 a v2.0 y manifiesto compartido en CI
+- Sincronizar automáticamente versión del paquete con manifiesto y changelog
+- Sincronizar versión de paquete y añadir validación del incremento automático
+- Comprobar versión del Worker desde release.json y registro de cambios real en HTML
+- Corregir expresión regular de versión en pruebas de manifest
+- Verificar manifiesto incremental y novedades visibles en GitHub Pages y panel Cloudflare
+- Publicar versión de manifiesto en Cloudflare HTML y health con escapado seguro de texto
+- Mostrar versión publicada y detalle de mejoras en panel privado de Cloudflare
+- Corregir validación de versiones decimales en portada pública
+- Mostrar versión incremental y última mejora con historial desde release.json en GitHub Pages
+- Añadir regla de incremento automático de 0,1 y changelog acumulativo para publicaciones
+
 ## v1.5 — 2026-11-07
 
 - Publicación de la portada GitHub Pages y del panel Cloudflare con acceso DEMO.

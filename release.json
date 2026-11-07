@@ -1,12 +1,21 @@
 {
-  "version": "1.5",
-  "updatedAt": "2026-11-07T19:27:40Z",
-  "summary": "Versión publicada: GitHub Pages v1.5 y panel Cloudflare DEMO v1.5",
+  "version": "1.6",
+  "updatedAt": "2026-11-07T19:43:13.220Z",
+  "summary": "Activar actualización incremental +0,1, changelog y despliegue sincronizado Pages/Cloudflare",
   "changes": [
-    "Identificación de versiones visible en ambos portales",
-    "Acceso al panel DEMO desde GitHub Pages",
-    "Panel privado con cotizaciones, saldo oficial separado de PAPER y pruebas seguras de contratos virtuales"
+    "Activar actualización incremental +0,1, changelog y despliegue sincronizado Pages/Cloudflare",
+    "Exigir prueba de incremento v1.9 a v2.0 y manifiesto compartido en CI",
+    "Sincronizar automáticamente versión del paquete con manifiesto y changelog",
+    "Sincronizar versión de paquete y añadir validación del incremento automático",
+    "Comprobar versión del Worker desde release.json y registro de cambios real en HTML",
+    "Corregir expresión regular de versión en pruebas de manifest",
+    "Verificar manifiesto incremental y novedades visibles en GitHub Pages y panel Cloudflare",
+    "Publicar versión de manifiesto en Cloudflare HTML y health con escapado seguro de texto",
+    "Mostrar versión publicada y detalle de mejoras en panel privado de Cloudflare",
+    "Corregir validación de versiones decimales en portada pública",
+    "Mostrar versión incremental y última mejora con historial desde release.json en GitHub Pages",
+    "Añadir regla de incremento automático de 0,1 y changelog acumulativo para publicaciones"
   ],
-  "sourceCommit": "e84cb710754f950c657dd2d9d4644e37d4a91747",
+  "sourceCommit": "b0083dd3d2c61cb8f56556b96aadddcf5d7dc35d",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
