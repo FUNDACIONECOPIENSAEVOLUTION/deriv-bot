@@ -235,17 +235,11 @@ export default {
           // DEMO-only, the feature switch defaults OFF, and the local rule
           // must have a fresh confirmed upward signal from real public ticks.
           if(String(env.DEMO_BUY_ENABLED)!=='true')return json({error:'Ejecución DEMO desactivada'},403);
-          const paper=await env.PAPER.getByName(EXPERIMENT).status();
-          const ready=paper.running===true&&paper.market.state==='live'
-            &&paper.config.symbol==='R_100'&&[1,-1].includes(paper.decision.direction)
-            &&typeof paper.quoteAgeSeconds==='number'
-            &&paper.quoteAgeSeconds>=0&&paper.quoteAgeSeconds<=10;
-          return json(await demo.buyDemoOnce(ready?(paper.decision.direction===1?'UP':'DOWN'):'HOLD',{
-            reason:paper.decision.reason,
-            fast:paper.decision.fast,slow:paper.decision.slow,
-            rsi:paper.decision.rsi,volatility:paper.decision.volatility,
-            entryQuote:paper.lastQuote,quoteAgeSeconds:paper.quoteAgeSeconds
-          }));
+          // Exactly one DEMO buy under the owner's 45-second approved quote.
+          // PAPER daily simulation limits must not block this separate research pilot.
+          const direction=await demo.manualApprovedSignal();
+          if(direction==='HOLD')return json({error:'Cotización DEMO caducada o no aprobada',code:'DEMO_FRESH_APPROVED_QUOTE_REQUIRED'},409);
+          return json(await demo.buyDemoOnce(direction,{reason:'OWNER_APPROVED_DEMO_QUOTE'},'manual'));
         }
         if(url.pathname==='/api/deriv/demo/check')return json(await demo.checkDemoSettlement());
         if(url.pathname==='/api/deriv/demo/auto-start'){
