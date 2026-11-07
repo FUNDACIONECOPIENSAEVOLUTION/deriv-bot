@@ -381,7 +381,12 @@ $('deriv-quote').onclick=async()=>{
       +' · Compras realizadas en esta consulta: 0.';
     if(quote.accepted===false){
       demoManualApproval=null;
-      out.textContent='Deriv rechazó '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · US
+      out.textContent='Deriv rechazó la propuesta para '+(quote.contractType||'CALL')
+        +' en R_100, duración 20 ticks, importe '+money(Math.round(quote.stake*100))
+        +' (código '+String(quote.code||'REJECTED')+'). No se realizó ninguna compra.'
+        +(quote.code==='ContractBuyValidationError'
+          ?' Comprueba tipos de contrato y símbolos disponibles: el rechazo puede corresponder a incompatibilidad de parámetros.':'')
+        +note;
     }else if(quote.accepted===true&&Number.isFinite(quote.askPrice)&&Number.isFinite(quote.payout)){
       if(preflight.manualApproved===true)
         demoManualApproval={at:Date.now(),direction:preflight.signal,
