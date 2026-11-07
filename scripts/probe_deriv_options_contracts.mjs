@@ -6,7 +6,12 @@ const requests=[
   {contracts_for:'R_100',req_id:72},
   {contracts_for:'1HZ100V',req_id:73},
   {proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:74},
-  {proposal:1,amount:0.10,basis:'stake',contract_type:'CALL',currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:75}
+  {proposal:1,amount:0.10,basis:'stake',contract_type:'CALL',currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:75},
+  {proposal:1,amount:10,basis:'stake',contract_type:'CALL',currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:76},
+  {proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'1HZ100V',req_id:77},
+  {proposal:1,amount:10,basis:'stake',contract_type:'CALL',currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'1HZ100V',req_id:78},
+  {proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:79},
+  {proposal:1,amount:1,basis:'stake',contract_type:'PUT',currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:80}
 ];
 const safe=x=>typeof x==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(x)?x:'UNSPECIFIED';
 const expected=new Set(requests.map(x=>x.req_id));
@@ -37,9 +42,16 @@ const result=await new Promise(resolve=>{
     row.availableCount=list?.length??null;
     row.contractTypes=list===null?null:[...new Set(list.map(x=>x?.contract_type).filter(x=>typeof x==='string'))].slice(0,40);
    }else{
-    row.stake=obj.req_id===74?1:0.10;
+    const source=requests.find(x=>x.req_id===obj.req_id);
+    row.stake=source?.amount??null;
+    row.symbol=source?.underlying_symbol??null;
+    row.durationTicks=source?.duration??null;
+    row.contractType=source?.contract_type??null;
     row.proposalAccepted=!!obj.proposal&&!code;
     row.priceAvailable=obj.proposal?.ask_price!==undefined;
+    // Public endpoint only: safe bounded diagnostic text; no credentials exist here.
+    row.brokerExplanation=typeof err?.message==='string'
+      ?err.message.replace(/[^a-zA-Z0-9 .,;:()_-]/g,' ').slice(0,200):null;
    }
    report.results.push(row);
    if(!expected.size)finish('COMPLETE');
