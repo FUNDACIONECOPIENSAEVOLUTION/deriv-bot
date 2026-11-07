@@ -47,6 +47,11 @@
 </div>
 <p id="demo-trade-status" class="note" role="status">Sin operaciones DEMO verificadas.</p>
 <p id="demo-trade-summary" class="note">El historial PAPER superior no equivale a resultados de contratos del broker.</p>
+<div class="divider"></div>
+<h2>Diagnóstico del rendimiento · DEMO</h2>
+<p id="demo-diagnostics" class="note">El informe de entrenamiento aparecerá después de registrar contratos realmente liquidados por Deriv.</p>
+<p id="demo-holdout" class="note">Se distinguirán el primer 70 % de las operaciones y el 30 % final en orden cronológico para evaluar fuera de muestra. Esto no activa dinero real.</p>
+<p id="demo-loss-cases" class="note">El bot comprobará pérdidas, tendencia y volatilidad al momento de decidir. La asociación no demuestra por sí sola la causa.</p>
 <div class="table-scroll"><table aria-label="Operaciones DEMO verificadas"><thead><tr><th>Fecha</th><th>Estado</th><th>Contrato</th><th>Precio virtual</th><th>Resultado virtual</th></tr></thead><tbody id="demo-trade-history"></tbody></table></div>
 <p id="demo-feedback" role="status"></p><p class="note">Registra una aplicación web con permiso Trade y recargo de 0 %. Dirección de retorno: <code id="deriv-callback"></code>. No escribas contraseñas ni tokens en este campo.</p>
 <p class="note">OpenAI: sin conexión activa. Las decisiones actuales siguen siendo reglas SMA/RSI. Practicar y revisar resultados no reentrena automáticamente a ChatGPT.</p></section>
@@ -171,6 +176,20 @@ function renderDemo(data){
     :(report.openCount||0)>=3?'Tres contratos DEMO pendientes: espera una liquidación antes de comprar más.'
     :eligible?'Señal alcista reciente: puedes decidir si compras UN contrato virtual. Se permiten hasta tres simultáneos.'
     :'Esperando señal alcista actual y datos verificables de Deriv.';
+  const a=report.analysis;
+  if(a){
+    $('demo-diagnostics').textContent='Contratos DEMO liquidados analizados: '+a.sampleSize
+      +' · P&L verificado: '+money(a.overall.netPnlCents)
+      +' · Máxima caída histórica de la asignación virtual: '+money(a.overall.maxDrawdownCents)
+      +' · Expectativa observada por contrato: '+(a.overall.expectancyCents===null?'sin datos':money(Math.round(a.overall.expectancyCents)))
+      +' · Límite inferior de acierto al 95 % (Wilson): '+(a.overall.winRateLower95Pct===null?'sin datos':String(a.overall.winRateLower95Pct)+' %')+'.';
+    $('demo-holdout').textContent='Entrenamiento retrospectivo (70 % inicial): '+a.training.n+' contratos, resultado '+money(a.training.netPnlCents)
+      +' · Evaluación cronológica final (30 %): '+a.chronologicalHoldout.n+' contratos, resultado '+money(a.chronologicalHoldout.netPnlCents)
+      +' · '+(a.holdoutSampleSufficient?'Tamaño mínimo exploratorio alcanzado.':'Muestra insuficiente para conclusiones confiables.')+' No hay paso automático a dinero real.';
+    const top=(a.losingContractsReasons||[]).slice(0,3).map(x=>x.code+' ('+x.count+')').join('; ');
+    $('demo-loss-cases').textContent='Diagnóstico preliminar de pérdidas: '+(top||'Sin pérdidas verificadas')
+      +'. Se conservan RSI/volatilidad por contrato para comparar patrones; no se modifican las reglas del bot automáticamente.';
+  }
   const history=$('demo-trade-history');history.replaceChildren();
   for(const item of report.history||[]){
     const tr=document.createElement('tr');
