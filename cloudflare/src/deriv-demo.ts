@@ -218,10 +218,15 @@ export class DerivDemoConnection extends DurableObject<Env> {
       unknownCount:pending.filter(p=>p.state==='UNKNOWN').length,
       exposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||100),0)};
   }
+  private chosenMaxConcurrent(){
+    const value=this.read<number>('demo-max-concurrent')??10;
+    if(!Number.isSafeInteger(value)||value<1||value>10)throw Error('DEMO_CONCURRENCY_INVALID');
+    return value;
+  }
   private riskFor(stakeCents:number){
     const s=this.getRiskSnapshot();
     if(s.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
-    return evaluateDemoRisk({...s,brokerBalanceCents:s.brokerBalanceCents,stakeCents});
+    return evaluateDemoRisk({...s,brokerBalanceCents:s.brokerBalanceCents,stakeCents,maxConcurrent:this.chosenMaxConcurrent()});
   }
 
   private reportDemo() {
@@ -256,7 +261,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     ).toArray();
     let risk:null|ReturnType<typeof evaluateDemoRisk>=null;
     if(raw.brokerBalanceCents!==null)
-      risk=evaluateDemoRisk({...raw,brokerBalanceCents:raw.brokerBalanceCents,stakeCents:100});
+      risk=evaluateDemoRisk({...raw,brokerBalanceCents:raw.brokerBalanceCents,stakeCents:100,maxConcurrent:this.chosenMaxConcurrent()});
     const lastChecked=this.read<number>('demo-last-balance-at')||null;
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.net,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
@@ -288,6 +293,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       demoTradingEnabled:String(this.env.DEMO_BUY_ENABLED)==='true',
       demoAutomationAvailable:String(this.env.DEMO_AUTO_ENABLED)==='true',
       demoAutomationRequested:this.read<boolean>('demo-auto')===true,
+      demoMaxConcurrent:this.chosenMaxConcurrent(),
       demoLossAlert:this.read<boolean>('demo-loss-halt')===true,
       tradeReport:this.reportDemo()};
   }
@@ -376,18 +382,23 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return {state:'BROKER_BALANCE_VERIFIED',tradeReport:this.reportDemo()};
   }
 
-  async setDemoAutomation(enabled:boolean) {
+  async setDemoAutomation(enabled:boolean,maxConcurrent?:number) {
     if(typeof enabled!=='boolean')throw Error('DEMO_AUTO_INVALID');
+    const chosen=maxConcurrent??this.chosenMaxConcurrent();
+    if(!Number.isSafeInteger(chosen)||chosen<1||chosen>10)throw Error('DEMO_CONCURRENCY_INVALID');
     if(enabled){
       if(String(this.env.DEMO_AUTO_ENABLED)!=='true'||String(this.env.DEMO_BUY_ENABLED)!=='true')
         throw Error('DEMO_AUTO_DISABLED');
       await this.verifiedDemoCredentials();
       const next=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
-      const safety=this.riskFor(next);
+      const snapshot=this.getRiskSnapshot();
+      if(snapshot.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
+      const safety=evaluateDemoRisk({...snapshot,brokerBalanceCents:snapshot.brokerBalanceCents,stakeCents:next,maxConcurrent:chosen});
       if(!safety.allowed)throw Error(safety.reason);
     }
+    this.write('demo-max-concurrent',chosen);
     this.write('demo-auto',enabled);
-    return {mode:'DERIV_DEMO',autoEnabled:enabled,tradeReport:this.reportDemo()};
+    return {mode:'DERIV_DEMO',autoEnabled:enabled,maxConcurrent:chosen,tradeReport:this.reportDemo()};
   }
 
   isDemoAutoEnabled(){
@@ -439,7 +450,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
           signal:paperSignal,quote,now:epoch(),openContracts:risk.openContracts,
           unknownCount:risk.unknownCount,exposureCents:risk.exposureCents,
           lifetimeNetCents:risk.lifetimeNetCents,brokerBalanceCents:risk.brokerBalanceCents,
-          baselineBalanceCents:risk.baselineBalanceCents,halted:risk.halted
+          baselineBalanceCents:risk.baselineBalanceCents,halted:risk.halted,
+          maxConcurrent:this.chosenMaxConcurrent()
         });
         if(answer.price!==stakeCents/100)throw Error('DEMO_STAKE_CHANGED');
         this.ctx.storage.sql.exec(
@@ -470,7 +482,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
         signal:paperSignal,openContracts:current.openContracts,unknownCount:current.unknownCount,
         exposureCents:current.exposureCents,lifetimeNetCents:current.lifetimeNetCents,
         brokerBalanceCents:current.brokerBalanceCents,baselineBalanceCents:current.baselineBalanceCents,
-        halted:current.halted
+        halted:current.halted,maxConcurrent:this.chosenMaxConcurrent()
       },reserve,acknowledge
     });
     this.ctx.storage.sql.exec(
