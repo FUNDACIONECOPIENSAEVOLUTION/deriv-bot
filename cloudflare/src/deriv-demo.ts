@@ -1,5 +1,5 @@
 import { dayAt } from '../../runtime/core.mjs';
-import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL } from './demo-risk-policy';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
@@ -452,7 +452,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
         throw Error('DEMO_AUTO_DISABLED');
       // Never launch the 50-trade campaign until a real broker DEMO settlement
       // from a single owner-approved manual order has been reconciled.
-      if(this.reportDemo().settled<1)throw Error('DEMO_FIRST_SETTLEMENT_REQUIRED');
+      requireFirstDemoSettlement(this.reportDemo().settled);
       await this.verifiedDemoCredentials();
       const next=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
       const snapshot=this.getRiskSnapshot();
