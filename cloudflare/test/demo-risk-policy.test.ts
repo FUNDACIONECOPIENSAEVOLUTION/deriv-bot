@@ -6,11 +6,11 @@ const input={openContracts:0,unknownCount:0,exposureCents:0,
  lifetimeNetCents:0,dailyNetCents:0,dailySettled:0,haltedToday:false};
 
 describe('DERIV virtual-dollar rule, not raw win percentage',()=>{
-  it('permits 10 open positions at 10 virtual cents (USD 1 max exposure)',()=>{
+  it('permits ten open virtual contracts at US$1 each, US$10 total',()=>{
     expect(DEMO_MAX_OPEN).toBe(10);expect(DEMO_STAKE_CENTS).toBe(100);
     expect(DEMO_DAILY_LOSS_FLOOR_CENTS).toBe(-1000);
     expect(DEMO_MIN_SETTLED_FOR_REVIEW).toBe(10);
-    const s=assessDailyDemoRisk({...input,openContracts:9,exposureCents:9000});
+    const s=assessDailyDemoRisk({...input,openContracts:9,exposureCents:900});
     expect(s.allowed).toBe(true);expect(s.worstCaseDailyNetCents).toBe(-1000);
     expect(assessDailyDemoRisk({...input,openContracts:10,exposureCents:1000}).reason).toBe('DEMO_MAX_OPEN');
   });
@@ -30,7 +30,7 @@ describe('DERIV virtual-dollar rule, not raw win percentage',()=>{
     expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:15,haltedToday:true}).reason).toBe('DEMO_DAY_HALTED');
   });
   it('reserves possible worst-case losses of open contracts even during a profitable session',()=>{
-    expect(assessDailyDemoRisk({...input,dailyNetCents:-100,openContracts:9,exposureCents:9000})
+    expect(assessDailyDemoRisk({...input,dailyNetCents:-100,openContracts:9,exposureCents:900})
       .reason).toBe('DEMO_DAILY_RISK_FLOOR');
     expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:80,
       openContracts:9,exposureCents:9000,lifetimeNetCents:8}).allowed).toBe(true);
