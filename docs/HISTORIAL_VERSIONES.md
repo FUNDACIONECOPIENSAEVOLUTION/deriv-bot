@@ -11,6 +11,17 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.1 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:01:09.901Z (UTC).
+- **Commit de origen:** `85674eafeff5`.
+- Mantener prueba de compuerta fail-closed bajo Worker sintético
+- No confundir entorno sintético bloqueado con interruptor de producción
+- Mantener fixtures de pruebas DEMO bloqueadas aunque producción permita compra manual
+- Alinear despliegue manual con compra DEMO bajo control propietario
+- Comprobar despliegue de compra manual DEMO habilitada y automatización bloqueada
+
 ## v2.0 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T19:59:26.974Z (UTC).

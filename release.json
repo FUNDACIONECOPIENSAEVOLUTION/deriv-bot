@@ -1,12 +1,14 @@
 {
-  "version": "2.0",
-  "updatedAt": "2026-11-07T19:59:26.974Z",
-  "summary": "Verificar que solo compra manual DEMO está permitida y automatización apagada",
+  "version": "2.1",
+  "updatedAt": "2026-11-07T20:01:09.901Z",
+  "summary": "Mantener prueba de compuerta fail-closed bajo Worker sintético",
   "changes": [
-    "Verificar que solo compra manual DEMO está permitida y automatización apagada",
-    "Probar que compras manuales requieren DEMO OAuth y autorización privada",
-    "Habilitar exclusivamente una compra manual DEMO; mantener la automatización y dinero real apagados"
+    "Mantener prueba de compuerta fail-closed bajo Worker sintético",
+    "No confundir entorno sintético bloqueado con interruptor de producción",
+    "Mantener fixtures de pruebas DEMO bloqueadas aunque producción permita compra manual",
+    "Alinear despliegue manual con compra DEMO bajo control propietario",
+    "Comprobar despliegue de compra manual DEMO habilitada y automatización bloqueada"
   ],
-  "sourceCommit": "827ac61b0c9af5883b9ebf1c71343d7fc1712c7e",
+  "sourceCommit": "85674eafeff58c73476c4a3a4a4c65cc9d61fce5",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
