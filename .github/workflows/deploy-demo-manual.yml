@@ -90,3 +90,17 @@ jobs:
           }
           if(!verified)process.exitCode=1;
           JS
+      - name: Verificar WebSocket saliente real desde Cloudflare sin comprar
+        run: |
+          node --input-type=module <<'JS'
+          const url='https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/api/health/deriv-socket';
+          const response=await fetch(url,{signal:AbortSignal.timeout(20000)});
+          const result=await response.json();
+          console.log('DERIV_LIVE_PUBLIC_SOCKET '+JSON.stringify({
+            status:result.status,version:result.version,code:result.code||null,
+            markets:Array.isArray(result.markets)?result.markets.map(({symbol,state,call,put})=>({symbol,state,call,put})):null
+          }));
+          if(!response.ok||result.status!=='CONNECTED'||result.mode!=='PUBLIC_READ_ONLY'||result.readOnly!==true){
+            process.exitCode=1;
+          }
+          JS
