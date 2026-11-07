@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#081821">
+<title>Diez operaciones PAPER | Deriv IA Trader Ecopiensa</title>
+<meta name="description" content="Reproducir 10 señales CALL/PUT del motor de Ecopiensa sobre ticks históricos públicos. Nunca compra contratos.">
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;--bg:#071521;--card:#102433;--line:#29465a;--ink:#edf8f8;--muted:#aec1cb;--green:#4adbb4;--red:#fb8594}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% -20%,#123b45,var(--bg) 53%);color:var(--ink)}main{max-width:1100px;margin:auto;padding:28px 18px 80px}
+a{color:#80dcfa}h1{font-size:clamp(26px,4vw,42px);margin:15px 0}h2{font-size:19px}
+p{line-height:1.6;color:var(--muted)}header{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+.tag{font-size:12px;letter-spacing:.15em;color:var(--green);font-weight:800}
+.card{padding:23px;border:1px solid var(--line);background:var(--card);border-radius:18px;margin:18px 0}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.metric{padding:15px;border:1px solid var(--line);border-radius:13px}
+.metric small{display:block;color:var(--muted)}.metric strong{display:block;font-size:26px;margin-top:10px}.up{color:var(--green)}.down{color:var(--red)}
+button{background:var(--green);border:0;border-radius:11px;padding:14px 18px;color:#062b28;font-weight:800;font-size:15px;cursor:pointer}
+button:disabled{opacity:.5;cursor:wait}button.secondary{background:#244153;color:var(--ink)}
+.status{background:#09202b;border:1px solid #276172;border-radius:10px;padding:13px}
+.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;min-width:750px;font-size:13px}
+td,th{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line)}th{color:var(--muted)}.small{font-size:12px}
+@media(max-width:650px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:16px}}
+</style>
+</head>
+<body>
+<main>
+<header><a href="./index.html">← Deriv IA Trader</a><span class="tag">ECOPIENSA · PAPER EXCLUSIVO</span></header>
+<section class="card">
+<h1>Diez operaciones del bot, sin dinero real</h1>
+<p>El motor SMA 8 / SMA 21 + RSI + volatilidad decidirá por sí mismo <strong>CALL (alza), PUT (baja) o esperar</strong>. Se reproducen cronológicamente los últimos 1.000 ticks públicos de Deriv R_100. La prueba abre como máximo 10 posiciones virtuales, una a la vez, con salida a los 5 ticks. No hay órdenes a Deriv ni cuenta DEMO conectada.</p>
+<div><button id="start" type="button">Ejecutar 10 operaciones PAPER</button> <button id="export" type="button" class="secondary" disabled>Descargar CSV</button></div>
+<p class="small">Suposición exclusivamente educativa: apuesta US$0,35 virtuales, pago hipotético del 80 % al acertar, costos supuestos cero, saldo inicial US$10 y límite de pérdidas simuladas US$3,50. Estos valores no son cotizaciones ni pagos ofrecidos por Deriv.</p>
+<p id="status" class="status" role="status">Sin ejecutar. Pulsa el botón para consultar datos públicos y simular.</p>
+</section>
+<section class="card" id="results" hidden>
+<h2>Resultado cronológico · PAPER</h2>
+<div class="metrics">
+<div class="metric"><small>Operaciones</small><strong id="count">—</strong></div>
+<div class="metric"><small>Acierto</small><strong id="winrate">—</strong></div>
+<div class="metric"><small>Resultado neto hipotético</small><strong id="net">—</strong></div>
+<div class="metric"><small>Saldo virtual</small><strong id="balance">—</strong></div>
+</div>
+<p id="sides" class="small"></p>
+<div class="tablewrap"><table><thead><tr><th>#</th><th>Dirección</th><th>Entrada Colombia</th><th>Precio entrada → salida</th><th>RSI</th><th>Resultado</th><th>P&L virtual</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p id="footer" class="small"></p>
+</section>
+<section class="card"><h2>¿Cómo interpretar la prueba?</h2>
+<p>Un rendimiento positivo en 10 operaciones no demuestra que la estrategia sea rentable. CALL y PUT no se fuerzan a ser cinco y cinco: el algoritmo selecciona la dirección cuando sus filtros coinciden. Si no encuentra 10 oportunidades suficientes, muestra el número real y nunca inventa las operaciones que falten.</p>
+<p>El ensayo usa históricos públicos, por lo que es un <strong>replay retrospectivo</strong> y no una ejecución en tiempo real. Para medir contratos DEMO adquiridos oficialmente se utiliza exclusivamente el <a href="https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/">panel privado Cloudflare</a>.</p>
+</section>
+</main>
+<script type="module" src="./scripts/paper_ten_browser.mjs"></script>
+</body></html>
