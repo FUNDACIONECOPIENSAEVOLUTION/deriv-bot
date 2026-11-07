@@ -22,13 +22,22 @@ export async function boundedJson(response:Response,limit=32768):Promise<unknown
 }
 
 /** Account discovery deliberately returns no real account or real balance. */
+function accountBalance(value:unknown):number|null {
+  // The live REST service uses decimal strings despite its numeric OpenAPI schema.
+  // Accept plain USD amounts only, including extra zero precision; reject exponents,
+  // separators, signs, non-finite values and fractional cents.
+  if(typeof value==='string'&&!/^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,2}0{0,6})?$/.test(value))return null;
+  if(typeof value!=='number'&&typeof value!=='string')return null;
+  const amount=Number(value),cents=Math.round(amount*100);
+  return Number.isFinite(amount)&&amount>=0&&Number.isSafeInteger(cents)&&Math.abs(amount*100-cents)<0.000001?cents/100:null;
+}
 export function selectDemo(payload:unknown,accountId?:string):DemoAccount {
   if(!payload||typeof payload!=='object'||!('data' in payload)||!Array.isArray(payload.data))throw Error('DERIV_INVALID_RESPONSE');
   const match=payload.data.find(a=>a&&a.account_type==='demo'&&a.currency==='USD'&&a.status==='active'
     &&typeof a.account_id==='string'&&/^[A-Za-z0-9_-]{1,80}$/.test(a.account_id)
-    &&Number.isFinite(a.balance)&&a.balance>=0&&(!accountId||a.account_id===accountId));
+    &&accountBalance(a.balance)!==null&&(!accountId||a.account_id===accountId));
   if(!match)throw Error('DERIV_DEMO_USD_REQUIRED');
-  return {account_id:match.account_id,account_type:'demo',currency:'USD',balance:match.balance};
+  return {account_id:match.account_id,account_type:'demo',currency:'USD',balance:accountBalance(match.balance)!};
 }
 
 /** Separate coordination atom for the owner's broker-demo authorization, never PAPER accounting. */

@@ -40,6 +40,12 @@ it('selects only active USD demo accounts and refuses real, inactive and malform
   for(const data of [[real],[{...demo,account_type:undefined}],[{...demo,status:'inactive'}],[{...demo,currency:'EUR'}],[{...demo,balance:-1}]])expect(()=>selectDemo({data})).toThrow('DERIV_DEMO_USD_REQUIRED');
   expect(()=>selectDemo({data:[demo]},'another-account')).toThrow('DERIV_DEMO_USD_REQUIRED');
 });
+it('normalizes the live decimal-string balance format without allowing real accounts or malformed money',()=>{
+  for(const balance of ['10000','10000.00','10000.00000000',10000])expect(selectDemo({data:[{...demo,balance}]}).balance).toBe(10000);
+  expect(selectDemo({data:[{...demo,balance:'0.29'}]}).balance).toBe(0.29);
+  for(const balance of ['1e4','NaN','Infinity','-1','10,000.00','10000.001',' 10000 ',null,Infinity,-1])expect(()=>selectDemo({data:[{...demo,balance}]})).toThrow('DERIV_DEMO_USD_REQUIRED');
+  expect(()=>selectDemo({data:[{...real,balance:'10000.00'}]})).toThrow('DERIV_DEMO_USD_REQUIRED');
+});
 it('uses PKCE and only the trade scope, consumes authorization once and stores credentials encrypted across eviction',async()=>{
   const stub=env.DERIV_DEMO.getByName('demo-1');
   const start=await stub.begin('app-123','https://paper.example'),url=new URL(start.url);
