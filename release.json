@@ -1,11 +1,10 @@
 {
-  "version": "6.3",
-  "updatedAt": "2026-11-07T23:55:56.602Z",
-  "summary": "Probar replay PAPER sin órdenes Deriv, sin lookahead y con diez entradas de señal técnica",
+  "version": "6.4",
+  "updatedAt": "2026-11-07T23:56:29.285Z",
+  "summary": "Ejecutar diez operaciones PAPER del bot sobre historial público y guardar auditoría GitHub Actions",
   "changes": [
-    "Probar replay PAPER sin órdenes Deriv, sin lookahead y con diez entradas de señal técnica",
-    "Agregar replay PAPER de diez operaciones con señales del bot y ticks públicos reales, sin órdenes al broker"
+    "Ejecutar diez operaciones PAPER del bot sobre historial público y guardar auditoría GitHub Actions"
   ],
-  "sourceCommit": "f56b8ef8ee32177900e17ebb8c85851045b6c081",
+  "sourceCommit": "a10d3ef168c9b702084e69a7244527806b948ef7",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

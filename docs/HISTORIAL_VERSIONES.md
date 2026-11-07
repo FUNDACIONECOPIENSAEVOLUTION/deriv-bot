@@ -54,6 +54,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.4 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:56:29.285Z (UTC).
+- **Commit de origen:** `a10d3ef168c9`.
+- Ejecutar diez operaciones PAPER del bot sobre historial público y guardar auditoría GitHub Actions
+
 ## v6.3 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:55:56.602Z (UTC).
