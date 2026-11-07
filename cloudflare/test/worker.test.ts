@@ -167,10 +167,12 @@ it('keeps arbitrage refresh private and does not invent quotes on public API err
   expect(noAuth.response.status).toBe(401);
   const invalid=await request('/api/arbitrage/refresh',{method:'POST',headers});
   expect(invalid.response.status).toBe(403);
+  const before=JSON.parse((await request('/api/arbitrage',{headers})).body);
   const response=await request('/api/arbitrage/refresh',{method:'POST',headers:{
     ...headers,'Content-Type':'application/json','X-Paper-Control':'1'
   },body:'{}'});
   expect(response.response.status).toBe(503);
   const store=JSON.parse((await request('/api/arbitrage',{headers})).body);
-  expect(store.hasData).toBe(false);
+  expect(store.observationsShown).toBe(before.observationsShown);
+  expect(store.latestCapturedAt).toBe(before.latestCapturedAt);
 });
