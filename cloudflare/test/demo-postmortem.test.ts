@@ -2,7 +2,7 @@ import {it,expect} from 'vitest';
 import {analyzeBrokerDemoHistory} from '../../runtime/demo-postmortem.mjs';
 const row=(id:number,pnl:number,decision?:Record<string,unknown>)=>({
   state:'SETTLED',contractId:id,createdAt:1700000000+id,pnlCents:pnl,
-  decision:decision||{rsi:55,volatility:0.2},entrySpot:100,
+  decision:decision||{contractType:'CALL',rsi:55,volatility:0.2},entrySpot:100,
   exitSpot:pnl>0?101:99
 });
 it('reports true broker DEMO success and failure including costs and drawdown',()=>{
@@ -47,4 +47,18 @@ it('refuses duplicated, invalid or fabricated settlement records',()=>{
   expect(()=>analyzeBrokerDemoHistory([row(1,8),row(1,-10)])).toThrow('EVALUATION_DUPLICATE_CONTRACT');
   expect(()=>analyzeBrokerDemoHistory([row(1,8),{...row(2,-10),pnlCents:NaN}])).toThrow('EVALUATION_TRADE_INVALID');
   expect(()=>analyzeBrokerDemoHistory(null)).toThrow('EVALUATION_INPUT_INVALID');
+});
+
+it('correctly distinguishes PUT losses and directional sample sizes without predicting results',()=>{
+ const rows=[
+  {...row(7,-35,{contractType:'PUT',direction:'DOWN',rsi:28,volatility:0.02}),entrySpot:100,exitSpot:101},
+  {...row(8,31,{contractType:'PUT',direction:'DOWN',rsi:35,volatility:0.02}),entrySpot:100,exitSpot:99},
+  {...row(9,-35,{contractType:'CALL',direction:'UP',rsi:65,volatility:0.02}),entrySpot:100,exitSpot:99}
+ ];
+ const report=analyzeBrokerDemoHistory(rows);
+ expect(report.byDirection.find(x=>x.segment==='PUT')?.n).toBe(2);
+ expect(report.byDirection.find(x=>x.segment==='CALL')?.n).toBe(1);
+ expect(report.losingContractsReasons).toContainEqual({code:'PUT_DID_NOT_FALL_BY_EXPIRY',count:1});
+ expect(report.losingContractsReasons).toContainEqual({code:'CALL_DID_NOT_RISE_BY_EXPIRY',count:1});
+ expect(report.tradeRealAutomatically).toBe(false);
 });
