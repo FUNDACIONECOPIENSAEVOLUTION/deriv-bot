@@ -33,6 +33,19 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
    expect(()=>evaluateDemoRisk({...base,maxConcurrent:11})).toThrow('DEMO_RISK_INVALID');
    expect(()=>evaluateDemoRisk({...base,maxConcurrent:0})).toThrow('DEMO_RISK_INVALID');
  });
+ it('first 10 virtual operations consume a shared US$10 pilot budget and then stop',()=>{
+   const near={...base,pilotPurchases:9,pilotCommittedCents:900,stakeCents:100};
+   expect(evaluateDemoRisk(near).allowed).toBe(true);
+   const full=evaluateDemoRisk({...near,pilotPurchases:10,pilotCommittedCents:1000});
+   expect(full.allowed).toBe(false);
+   expect(full.reason).toBe('DEMO_PILOT_COMPLETE');
+   expect(full.pilotRemainingPurchases).toBe(0);
+   expect(full.pilotRemainingBudgetCents).toBe(0);
+   expect(evaluateDemoRisk({...base,pilotPurchases:8,pilotCommittedCents:950,stakeCents:100}).reason)
+     .toBe('DEMO_PILOT_BUDGET');
+   expect(evaluateDemoRisk({...base,pilotPurchases:8,pilotCommittedCents:950,stakeCents:10}).allowed)
+     .toBe(true);
+ });
  it('allows at most ten concurrent contracts',()=>{
    expect(DEMO_MAX_OPEN).toBe(10);
    expect(evaluateDemoRisk({...base,openContracts:9,exposureCents:900,stakeCents:100}).allowed).toBe(true);
