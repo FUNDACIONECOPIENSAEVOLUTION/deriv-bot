@@ -131,7 +131,8 @@ it('allows quote requests only to the owner and never quotes without a connected
 
 it('permits owner-only manual DEMO after OAuth while blocking unauthenticated calls',async()=>{
   const status=await env.DERIV_DEMO.getByName('safety-state').status();
-  expect(status.demoTradingEnabled).toBe(true);
+  // Miniflare intentionally leaves DEMO_BUY_ENABLED unset to test fail-closed behavior.
+  expect(status.demoTradingEnabled).toBe(false);
   expect(status.tradeReport.settled).toBe(0);
   expect(status.tradeReport.unresolved).toBeNull();
   expect((await request('/api/deriv/demo/buy-once',{method:'POST'})).r.status).toBe(401);
