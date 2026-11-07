@@ -9,7 +9,7 @@ import { assessDailyDemoRisk, DEMO_ALLOCATION_CENTS, DEMO_MAX_OPEN, DEMO_STAKE_C
  */
 export type DemoQuoteForBuy = {
   id:string; askPrice:number; payout:number; quotedAt:number;
-  symbol:'R_100'; contractType:'CALL'|'PUT'; durationTicks:20; stake:0.10;
+  symbol:'R_100'; contractType:'CALL'|'PUT'; durationTicks:20; stake:1;
 };
 export type DemoTradeGate = {
   accountType:'demo'|'real'|'unknown';
@@ -35,9 +35,10 @@ export type DemoTradeGate = {
   dailySettled?:number;
   /** Sticky day-stop stored in the database, not recalculated away when late trades settle. */
   haltedToday?:boolean;
+  firstBatchBuys?:number;
 };
 
-const MAX_STAKE_CENTS=10;
+const MAX_STAKE_CENTS=DEMO_STAKE_CENTS;
 export const DEMO_RESEARCH_ALLOCATION_CENTS=DEMO_ALLOCATION_CENTS;
 export const DEMO_MAX_PARALLEL_CONTRACTS=DEMO_MAX_OPEN;
 const MAX_QUOTE_AGE_SECONDS=8;
@@ -68,12 +69,13 @@ export function buildDemoBuyRequest(gate:DemoTradeGate){
   const risk=assessDailyDemoRisk({
     openContracts:open,unknownCount:gate.unresolvedBuy?1:0,
     exposureCents:exposure,lifetimeNetCents:lifetime,
-    dailyNetCents:dailyNet,dailySettled:gate.dailySettled??0,haltedToday:gate.haltedToday===true
+    dailyNetCents:dailyNet,dailySettled:gate.dailySettled??0,haltedToday:gate.haltedToday===true,
+    firstBatchBuys:gate.firstBatchBuys??0
   });
   if(!risk.allowed)throw Error(risk.reason);
   const q=gate.quote;
   const requiredType=gate.signal==='UP'?'CALL':'PUT';
-  if(q.symbol!=='R_100'||q.contractType!==requiredType||q.durationTicks!==20||q.stake!==0.10)
+  if(q.symbol!=='R_100'||q.contractType!==requiredType||q.durationTicks!==20||q.stake!==1)
     throw Error('DEMO_CONTRACT_NOT_ALLOWED');
   if(!/^[A-Za-z0-9_-]{32,128}$/.test(q.id))throw Error('DEMO_PROPOSAL_ID_INVALID');
   if(!Number.isSafeInteger(gate.now)||!Number.isSafeInteger(q.quotedAt)
@@ -81,7 +83,7 @@ export function buildDemoBuyRequest(gate:DemoTradeGate){
   const askCents=cents(q.askPrice),payoutCents=cents(q.payout);
   if(askCents!==MAX_STAKE_CENTS||payoutCents===null||payoutCents<MAX_STAKE_CENTS)
     throw Error('DEMO_PRICE_NOT_ALLOWED');
-  return Object.freeze({buy:q.id,price:0.10,req_id:2} as const);
+  return Object.freeze({buy:q.id,price:1,req_id:2} as const);
 }
 
 export type DemoBuyAck =
