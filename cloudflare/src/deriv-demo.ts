@@ -211,7 +211,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return {mode:'DERIV_DEMO',connected,executionEnabled:false,aiConnected:false,clientId:this.read<string>('clientId')||'',
       account:connected&&saved?{type:'demo',currency:'USD',label:'Demo · …'+saved.account.account_id.slice(-4),balance:saved.account.balance,checkedAt:saved.checkedAt}:null,
       discovery:this.read<Discovery>('discovery'),state:connected?'DEMO_VERIFIED':saved?'AUTHORIZATION_EXPIRED':this.read('discovery')?'DEMO_ACCOUNT_NOT_VERIFIED':'NOT_CONNECTED',
-      demoTradingEnabled:this.env.DEMO_BUY_ENABLED==='true',tradeReport:this.reportDemo()};
+      demoTradingEnabled:String(this.env.DEMO_BUY_ENABLED)==='true',tradeReport:this.reportDemo()};
   }
   async refresh(){
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');
@@ -270,7 +270,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * PAPER signals must be fresh and upward; a real account never qualifies.
    */
   async buyDemoOnce(paperSignal:'UP'|'HOLD') {
-    if(this.env.DEMO_BUY_ENABLED!=='true')throw Error('DEMO_EXECUTION_DISABLED');
+    if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
     if(paperSignal!=='UP')throw Error('NO_APPROVED_SIGNAL');
     const creds=await this.verifiedDemoCredentials();
     const url=await this.otpDemoUrl(creds);
