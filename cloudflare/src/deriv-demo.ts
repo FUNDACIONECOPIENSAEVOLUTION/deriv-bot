@@ -225,50 +225,53 @@ export class DerivDemoConnection extends DurableObject<Env> {
   }
 
   private reportDemo() {
-    type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null;decision_json?:string|null;entry_spot?:number|null;exit_spot?:number|null;contract_type?:string|null};
+    type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;
+      buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null;
+      decision_json:string|null;entry_spot:number|null;exit_spot:number|null;contract_type:string|null};
     const sql=this.ctx.storage.sql;
-    const stats=sql.exec<{settled:number;wins:number;losses:number;pnlCents:number}>(
-      "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS pnlCents FROM demo_trades WHERE state='SETTLED'"
+    const stats=sql.exec<{settled:number;wins:number;losses:number;net:number}>(
+      "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents<0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED'"
     ).one();
-    const pending=sql.exec<Row>(
-      "SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code,contract_type FROM demo_trades WHERE state IN ('UNKNOWN','OPEN') ORDER BY id ASC"
-    ).toArray();
-    const unknownCount=pending.filter(r=>r.state==='UNKNOWN').length,
-      openCount=pending.filter(r=>r.state==='OPEN').length,
-      activeExposureCents=pending.reduce((sum,r)=>sum+(r.buy_cents||DEMO_STAKE_CENTS),0);
+    const raw=this.getRiskSnapshot();
     const history=sql.exec<Row>(
-      'SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code,decision_json,entry_spot,exit_spot FROM demo_trades ORDER BY id DESC LIMIT 50'
+      'SELECT * FROM demo_trades ORDER BY id DESC LIMIT 50'
     ).toArray();
     const analyticRows=sql.exec<Row>(
-      "SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code,decision_json,entry_spot,exit_spot FROM demo_trades WHERE state='SETTLED' ORDER BY created_at DESC,id DESC LIMIT 1000"
+      "SELECT * FROM demo_trades WHERE state='SETTLED' ORDER BY created_at DESC,id DESC LIMIT 1000"
     ).toArray().map(r=>({
-      state:r.state,contractId:r.contract_id,createdAt:r.created_at,pnlCents:r.pnl_cents,
-      entrySpot:r.entry_spot,exitSpot:r.exit_spot,
+      state:r.state,contractId:r.contract_id,createdAt:r.created_at,
+      pnlCents:r.pnl_cents,entrySpot:r.entry_spot,exitSpot:r.exit_spot,
       decision:r.decision_json?JSON.parse(r.decision_json):null
     }));
     const analysis=analyzeBrokerDemoHistory(analyticRows);
-    const firstBatchBuys=sql.exec<{total:number}>(
-      "SELECT COUNT(*) AS total FROM demo_trades WHERE state IN ('UNKNOWN','OPEN','SETTLED')"
-    ).one().total;
-    const day=this.dayRisk();
-    return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.pnlCents,
+    const stakes=sql.exec<{stake:number;settled:number;wins:number;net:number}>(
+      "SELECT buy_cents AS stake, COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED' GROUP BY buy_cents ORDER BY buy_cents"
+    ).toArray().map(r=>({stakeCents:r.stake,settled:r.settled,wins:r.wins,
+      netCents:r.net,winRatePct:r.settled?Math.round(r.wins/r.settled*10000)/100:null}));
+    const quoteRejections=sql.exec<{stake:number;attempts:number;rejections:number}>(
+      "SELECT stake_cents AS stake, COUNT(*) AS attempts, COALESCE(SUM(CASE WHEN accepted=0 THEN 1 ELSE 0 END),0) AS rejections FROM demo_quote_checks GROUP BY stake_cents ORDER BY stake_cents"
+    ).toArray().map(r=>({...r,stakeCents:r.stake}));
+    const open=sql.exec<Row>(
+      "SELECT * FROM demo_trades WHERE state='OPEN' ORDER BY id ASC"
+    ).toArray();
+    let risk:null|ReturnType<typeof evaluateDemoRisk>=null;
+    if(raw.brokerBalanceCents!==null)
+      risk=evaluateDemoRisk({...raw,brokerBalanceCents:raw.brokerBalanceCents,stakeCents:100});
+    const lastChecked=this.read<number>('demo-last-balance-at')||null;
+    return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.net,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
-      virtualResearchAllocationCents:DEMO_ALLOCATION_CENTS,
-      firstBatchBuys,firstBatchRemaining:Math.max(0,10-firstBatchBuys),
-      virtualResearchRemainingCents:DEMO_ALLOCATION_CENTS+stats.pnlCents-activeExposureCents,
-      maxParallel:DEMO_MAX_OPEN,openCount,unknownCount,activeExposureCents,
-      dayRisk:{...day,
-        ...assessDailyDemoRisk({
-          openContracts:openCount,unknownCount,exposureCents:activeExposureCents,
-          lifetimeNetCents:stats.pnlCents,dailyNetCents:day.netCents,
-          dailySettled:day.settled,haltedToday:day.halted,firstBatchBuys
-        })
-      },
+      virtualResearchAllocationCents:DEMO_MAX_LOSS_CENTS,
+      virtualResearchRemainingCents:raw.brokerBalanceCents===null?null:
+        Math.max(0,raw.brokerBalanceCents-(DEMO_BASELINE_EXPECTED_CENTS-DEMO_MAX_LOSS_CENTS)-raw.exposureCents),
+      maxParallel:DEMO_MAX_OPEN,openCount:raw.openContracts,unknownCount:raw.unknownCount,
+      activeExposureCents:raw.exposureCents,brokerBalanceCents:raw.brokerBalanceCents,
+      brokerBalanceCheckedAt:lastChecked,lossHalt:raw.halted,
+      risk,dayRisk:risk,
       analysis,analysisScope:'most_recent_1000_settled',
-      openContracts:pending.filter(r=>r.state==='OPEN').map(r=>({id:r.id,contractId:r.contract_id,
-        contractType:r.contract_type==='PUT'?'PUT' as const:'CALL' as const,
-        createdAt:r.created_at})),
-      unresolved:pending.find(r=>r.state==='UNKNOWN')||pending[0]||null,
+      byStake:stakes,quoteAcceptance:quoteRejections,
+      openContracts:open.map(r=>({id:r.id,contractId:r.contract_id,buyCents:r.buy_cents,
+        contractType:r.contract_type==='PUT'?'PUT' as const:'CALL' as const,createdAt:r.created_at})),
+      unresolved:this.ctx.storage.sql.exec<Row>("SELECT * FROM demo_trades WHERE state='UNKNOWN' ORDER BY id ASC LIMIT 1").toArray()[0]||open[0]||null,
       history:history.map(r=>({id:r.id,date:r.date,state:r.state,contractId:r.contract_id,
         buyCents:r.buy_cents,payoutCents:r.payout_cents,pnlCents:r.pnl_cents,
         code:r.code,createdAt:r.created_at,entrySpot:r.entry_spot??null,exitSpot:r.exit_spot??null,
