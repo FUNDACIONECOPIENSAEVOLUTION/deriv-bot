@@ -194,18 +194,25 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const stats=sql.exec<{settled:number;wins:number;losses:number;pnlCents:number}>(
       "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS pnlCents FROM demo_trades WHERE state='SETTLED'"
     ).one();
-    const unresolved=sql.exec<Row>("SELECT * FROM demo_trades WHERE state IN ('OPEN','UNKNOWN') ORDER BY id DESC LIMIT 1").toArray()[0]||null;
+    const pending=sql.exec<Row>(
+      "SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code FROM demo_trades WHERE state IN ('UNKNOWN','OPEN') ORDER BY id ASC"
+    ).toArray();
+    const unknownCount=pending.filter(r=>r.state==='UNKNOWN').length,
+      openCount=pending.filter(r=>r.state==='OPEN').length,
+      activeExposureCents=pending.reduce((sum,r)=>sum+(r.buy_cents||10),0);
     const history=sql.exec<Row>(
-      'SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code FROM demo_trades ORDER BY id DESC LIMIT 20'
+      'SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code FROM demo_trades ORDER BY id DESC LIMIT 50'
     ).toArray();
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.pnlCents,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
-      unresolved,
-      history:history.map(r=>({
-        id:r.id,date:r.date,state:r.state,contractId:r.contract_id,
+      virtualResearchAllocationCents:1000,
+      virtualResearchRemainingCents:1000+stats.pnlCents-activeExposureCents,
+      maxParallel:3,openCount,unknownCount,activeExposureCents,
+      openContracts:pending.filter(r=>r.state==='OPEN').map(r=>({id:r.id,contractId:r.contract_id,createdAt:r.created_at})),
+      unresolved:pending.find(r=>r.state==='UNKNOWN')||pending[0]||null,
+      history:history.map(r=>({id:r.id,date:r.date,state:r.state,contractId:r.contract_id,
         buyCents:r.buy_cents,payoutCents:r.payout_cents,pnlCents:r.pnl_cents,
-        code:r.code
-      }))
+        code:r.code,createdAt:r.created_at}))
     };
   }
   status(){
@@ -278,31 +285,35 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const creds=await this.verifiedDemoCredentials();
     const url=await this.otpDemoUrl(creds);
     const report=this.reportDemo();
-    if(report.unresolved)throw Error('DEMO_POSITION_UNRESOLVED');
+    if(report.unknownCount>0||report.openCount>=3)throw Error('DEMO_POSITION_UNRESOLVED');
     const today=dayAt(epoch());
-    const available=this.ctx.storage.sql.exec<{total:number;losses:number}>(
+    const dailyStats=()=>this.ctx.storage.sql.exec<{total:number;losses:number}>(
       "SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN pnl_cents < 0 THEN -pnl_cents ELSE 0 END),0) AS losses FROM demo_trades WHERE date=? AND state IN ('UNKNOWN','OPEN','SETTLED')",today
-    ).toArray()[0];
+    ).one();
+    const available=dailyStats();
     const reserve=async(quote:DemoQuoteForBuy):Promise<number>=>{
-      // Transaction is synchronous: two overlapping browser clicks cannot
-      // both reserve the single outstanding broker trade.
+      // A failed buy is not retried. A synchronous reservation also prevents
+      // racing web requests from exceeding three concurrent DEMO contracts.
       return this.ctx.storage.transactionSync(()=>{
-        const pending=this.ctx.storage.sql.exec<{id:number}>(
-          "SELECT id FROM demo_trades WHERE state IN ('UNKNOWN','OPEN') LIMIT 1"
-        ).toArray()[0];
-        const daily=this.ctx.storage.sql.exec<{total:number;losses:number}>(
-          "SELECT COUNT(*) AS total, COALESCE(SUM(CASE WHEN pnl_cents < 0 THEN -pnl_cents ELSE 0 END),0) AS losses FROM demo_trades WHERE date=? AND state IN ('UNKNOWN','OPEN','SETTLED')",today
-        ).toArray()[0];
+        const pending=this.ctx.storage.sql.exec<{state:string;buy_cents:number|null}>(
+          "SELECT state,buy_cents FROM demo_trades WHERE state IN ('UNKNOWN','OPEN')"
+        ).toArray();
+        const current=dailyStats();
+        const lifetime=this.ctx.storage.sql.exec<{pnl:number}>(
+          "SELECT COALESCE(SUM(pnl_cents),0) AS pnl FROM demo_trades WHERE state='SETTLED'"
+        ).one().pnl;
         buildDemoBuyRequest({
           accountType:'demo',currency:'USD',socketUrl:url,userEnabledDemoExecution:true,
-          signal:paperSignal,quote,now:epoch(),todayTrades:daily.total,todayLossCents:daily.losses,
-          hasOpenContract:!!pending,unresolvedBuy:!!pending
+          signal:paperSignal,quote,now:epoch(),todayTrades:current.total,todayLossCents:current.losses,
+          hasOpenContract:pending.length>0,unresolvedBuy:pending.some(p=>p.state==='UNKNOWN'),
+          openContracts:pending.filter(p=>p.state==='OPEN').length,
+          activeExposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||10),0),
+          lifetimePnlCents:lifetime
         });
         this.ctx.storage.sql.exec(
           "INSERT INTO demo_trades(date,created_at,state,buy_cents) VALUES(?,?,'UNKNOWN',10)",today,epoch()
         );
-        const id=this.ctx.storage.sql.exec<{id:number}>('SELECT last_insert_rowid() AS id').one().id;
-        return id;
+        return this.ctx.storage.sql.exec<{id:number}>('SELECT last_insert_rowid() AS id').one().id;
       });
     };
     const acknowledge=async(id:number,ack:DemoBuyAck)=>{
@@ -311,7 +322,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
           "UPDATE demo_trades SET state='REJECTED',code=? WHERE id=? AND state='UNKNOWN'",
           ack.code,id
         );
-      }else {
+      }else{
         this.ctx.storage.sql.exec(
           "UPDATE demo_trades SET state='OPEN',contract_id=?,buy_cents=? WHERE id=? AND state='UNKNOWN'",
           ack.contractId,ack.buyCents,id
@@ -322,32 +333,45 @@ export class DerivDemoConnection extends DurableObject<Env> {
       wsUrl:url,gate:{
         accountType:'demo',currency:'USD',userEnabledDemoExecution:true,
         signal:paperSignal,todayTrades:available.total,todayLossCents:available.losses,
-        hasOpenContract:false,unresolvedBuy:false
+        hasOpenContract:report.openCount>0,unresolvedBuy:report.unknownCount>0,
+        openContracts:report.openCount,activeExposureCents:report.activeExposureCents,
+        lifetimePnlCents:report.pnlCents
       },reserve,acknowledge
     });
     return {mode:'DERIV_DEMO',...result,tradeReport:this.reportDemo()};
   }
 
-  /** Scheduled check is read-only and skips the broker when no contract is open. */
+  /** Scheduled read-only reconciler for every confirmed OPEN demo contract. */
   async reconcileOpenDemoOnly(){
-    const unresolved=this.reportDemo().unresolved;
-    if(!unresolved||unresolved.state!=='OPEN')return {state:'NOTHING_TO_RECONCILE'};
-    return this.checkDemoSettlement();
+    const open=this.reportDemo().openContracts;
+    const outcomes:Array<{contractId:number|null;state:string}>=[];
+    for(const entry of open){
+      if(!entry.contractId)continue;
+      try{
+        const result=await this.checkDemoSettlement(entry.contractId);
+        outcomes.push({contractId:entry.contractId,state:result.state});
+      }catch{outcomes.push({contractId:entry.contractId,state:'RETRY_LATER'});}
+    }
+    return {state:'READ_ONLY_RECONCILIATION',outcomes,tradeReport:this.reportDemo()};
   }
 
-  /** Read a single previously acknowledged contract. No new buy occurs. */
-  async checkDemoSettlement() {
-    const pending=this.reportDemo().unresolved;
-    if(!pending)return {state:'NO_PENDING_CONTRACT',tradeReport:this.reportDemo()};
-    if(pending.state==='UNKNOWN'||!pending.contract_id)
-      return {state:'BUY_OUTCOME_UNKNOWN',tradeReport:this.reportDemo()};
+  /** Read a specific or the oldest OPEN contract; never issues a new buy. */
+  async checkDemoSettlement(contractId?:number) {
+    const report=this.reportDemo();
+    const pending=contractId===undefined?report.openContracts[0]:
+      report.openContracts.find(r=>r.contractId===contractId);
+    if(!pending){
+      return {state:report.unknownCount>0?'BUY_OUTCOME_UNKNOWN':'NO_PENDING_CONTRACT',
+        tradeReport:report};
+    }
+    if(!pending.contractId)return {state:'BUY_OUTCOME_UNKNOWN',tradeReport:report};
     const creds=await this.verifiedDemoCredentials();
     const url=await this.otpDemoUrl(creds);
-    const result=await readDemoSettlement(url,pending.contract_id);
+    const result=await readDemoSettlement(url,pending.contractId);
     if(result) {
       this.ctx.storage.sql.exec(
         "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=? WHERE id=? AND contract_id=? AND state='OPEN'",
-        result.profitCents,result.payoutCents,pending.id,pending.contract_id
+        result.profitCents,result.payoutCents,pending.id,pending.contractId
       );
       return {state:'SETTLED',settlement:result,tradeReport:this.reportDemo()};
     }
