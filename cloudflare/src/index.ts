@@ -200,7 +200,11 @@ export default {
           const direction=choice&&typeof choice==='object'&&'direction' in choice?
             (choice as {direction?:unknown}).direction:'UP';
           if(direction!=='UP'&&direction!=='DOWN')return json({error:'Dirección inválida'},400);
-          return json(await demo.quote(direction));
+          const stakeCents=choice&&typeof choice==='object'&&'stakeCents' in choice?
+            (choice as {stakeCents?:unknown}).stakeCents:100;
+          if(typeof stakeCents!=='number'||![10,25,50,100].includes(stakeCents))
+            return json({error:'Importe virtual no permitido'},400);
+          return json(await demo.quote(direction,stakeCents));
         }
         if(url.pathname==='/api/deriv/demo/buy-once'){
           // A browser click alone is NOT permission to trade: the broker is
@@ -290,6 +294,10 @@ export default {
     const paper=env.PAPER.getByName(EXPERIMENT);
     await paper.watchdog();
     const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
+    // Update authoritative DEMO balance and enforce the cumulative US$100
+    // loss stop on every scheduled check while the virtual bot is enabled.
+    try{await demo.refreshDemoRisk();}
+    catch{console.log(JSON.stringify({type:'demo_balance_check_pending'}));}
     // Read-only broker settlement, regardless of automation state.
     try{await demo.reconcileOpenDemoOnly();}
     catch{console.log(JSON.stringify({type:'demo_settlement_check_pending'}));}
