@@ -62,3 +62,17 @@ La integración en preparación consulta únicamente la cuenta **DEMO USD** a tr
 **No existe activación remota desde este chat sin un servicio conectado y autorizado.** La apertura de una pestaña de Deriv en el navegador no transfiere la sesión OAuth al Worker. La puesta en marcha requiere una sesión de Cloudflare y una autorización de Deriv DEMO efectuadas por el titular.
 
 Documentación: https://developers.deriv.com/docs/options/ws-demo/ , https://developers.deriv.com/docs/trading/proposal/ , https://developers.deriv.com/docs/trading/buy/ , https://developers.deriv.com/docs/trading/proposal-open-contract/ .
+
+### Despliegue guiado desde GitHub (sin operaciones al publicar)
+
+Se ha añadido `.github/workflows/deploy-demo-manual.yml`. Este flujo **solo se ejecuta a petición expresa**, requiere escribir `PUBLICAR_SOLO_LECTURA`, compila y ejecuta las pruebas antes de cargar la nueva versión de `ecopiensa-paper-10`. La versión desplegada tendrá ambos interruptores desactivados, `DEMO_BUY_ENABLED=false` y `DEMO_AUTO_ENABLED=false`, de modo que **publicar el panel no inicia ninguna compra**.
+
+Una vez que el archivo esté en la rama principal, se podrá ejecutar desde **GitHub → Actions → Publicar Deriv DEMO en Cloudflare → Run workflow**. La acción requiere los secretos de GitHub `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`, con permiso mínimo de editar Workers; configurar además, si procede, revisión obligatoria en el entorno `deriv-demo`. **No enviar esos valores por chat ni subirlos al repositorio**.
+
+Precaución: **conservar exactamente el valor vigente de `ADMIN_TOKEN` en Cloudflare**; sirve para descifrar la autorización OAuth DEMO guardada. Si se reemplaza, se necesitará autorizar la cuenta de nuevo. La clave no aparece ni se requiere en el workflow.
+
+### Comprobación antes de comenzar
+
+En el Worker privado actualizado, seleccionar CALL o PUT y un importe del laboratorio y utilizar «Consultar precio DEMO»; la nueva respuesta realiza un **preflight** de solo lectura: coteja saldo oficial, presupuesto virtual de US$10 en las diez primeras compras, posición abierta, autorización y propuesta del broker. No envía ningún `buy`.
+
+Cuando preflight, OAuth y permisos funcionen, habilitar `DEMO_BUY_ENABLED` para efectuar **una sola compra virtual** desde el botón privado y verificar por contrato su liquidación. La automatización posterior requiere además `DEMO_AUTO_ENABLED` y activación privada explícita. El código no implementa operaciones reales en ningún estado. Mantener el registro de ejecuciones para comprobar P&L y aciertos.
