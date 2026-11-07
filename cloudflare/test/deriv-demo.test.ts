@@ -91,19 +91,19 @@ it('bounds request bodies and refuses invalid ids, overwritten state and arbitra
 });
 
 
-it('keeps the DEMO proposal fixed at USD 0.10 for CALL R_100 at 20 ticks and never sends buy',()=>{
-  expect(DEMO_QUOTE_REQUEST).toEqual({proposal:1,amount:0.10,basis:'stake',contract_type:'CALL',
+it('keeps the DEMO proposal fixed at USD 1 for CALL R_100 at 20 ticks and never sends buy',()=>{
+  expect(DEMO_QUOTE_REQUEST).toEqual({proposal:1,amount:1,basis:'stake',contract_type:'CALL',
     currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1});
   expect(JSON.stringify(DEMO_QUOTE_REQUEST)).not.toContain('"buy"');
   expect(JSON.stringify(DEMO_QUOTE_REQUEST)).not.toContain('"sell"');
 });
 it('parses only valid broker quotes, omits the actionable proposal id and never increases rejected stakes',()=>{
   const accepted=parseDemoQuote({msg_type:'proposal',req_id:1,
-    proposal:{id:'do-not-expose-this-id',ask_price:'0.10',payout:0.18}});
-  expect(accepted).toMatchObject({accepted:true,stake:0.10,durationTicks:20,askPrice:0.10,payout:0.18,potentialProfit:0.08});
+    proposal:{id:'do-not-expose-this-id',ask_price:'1.00',payout:1.80}});
+  expect(accepted).toMatchObject({accepted:true,stake:1,durationTicks:20,askPrice:1,payout:1.80,potentialProfit:0.80});
   expect(JSON.stringify(accepted)).not.toContain('do-not-expose-this-id');
   const denied=parseDemoQuote({msg_type:'proposal',req_id:1,error:{code:'ContractTooSmall',message:'Raise amount'}});
-  expect(denied).toEqual({accepted:false,code:'ContractTooSmall',stake:0.10,durationTicks:20,symbol:'R_100',contractType:'CALL'});
+  expect(denied).toEqual({accepted:false,code:'ContractTooSmall',stake:1,durationTicks:20,symbol:'R_100',contractType:'CALL'});
   expect(JSON.stringify(denied)).not.toContain('Raise amount');
   for(const price of ['NaN','1e5','0.000000001',-1,null]) {
     expect(()=>parseDemoQuote({msg_type:'proposal',proposal:{ask_price:price,payout:0.2}})).toThrow('DERIV_QUOTE_INVALID_RESPONSE');
@@ -144,23 +144,23 @@ it('keeps all broker orders disabled by default and blocks unauthenticated calls
 it('persists virtual settlement reports separately from PAPER while leaving unresolved orders blocked',async()=>{
   const stub=env.DERIV_DEMO.getByName('ledger-state');
   await runInDurableObject(stub,(_instance,ctx)=>{
-    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',100,'SETTLED',123,10,18,8)");
-    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',101,'SETTLED',124,10,0,-10)");
-    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,buy_cents) VALUES('2026-11-07',102,'UNKNOWN',10)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',100,'SETTLED',123,100,180,80)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',101,'SETTLED',124,100,0,-100)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,buy_cents) VALUES('2026-11-07',102,'UNKNOWN',100)");
   });
   const report=(await stub.status()).tradeReport;
-  expect(report).toMatchObject({settled:2,wins:1,losses:1,pnlCents:-2,winRatePct:50});
+  expect(report).toMatchObject({settled:2,wins:1,losses:1,pnlCents:-20,winRatePct:50});
   expect(report.unresolved?.state).toBe('UNKNOWN');
   expect((await stub.checkDemoSettlement()).state).toBe('BUY_OUTCOME_UNKNOWN');
   expect(calls).toEqual([]);
 });
 
 it('issues distinct CALL and PUT quotes without buying any contract',()=>{
-  expect(demoQuoteRequest('UP')).toMatchObject({proposal:1,contract_type:'CALL',amount:0.10});
-  expect(demoQuoteRequest('DOWN')).toMatchObject({proposal:1,contract_type:'PUT',amount:0.10});
+  expect(demoQuoteRequest('UP')).toMatchObject({proposal:1,contract_type:'CALL',amount:1});
+  expect(demoQuoteRequest('DOWN')).toMatchObject({proposal:1,contract_type:'PUT',amount:1});
   expect(demoQuoteRequest('DOWN')).not.toHaveProperty('buy');
-  expect(parseDemoQuote({msg_type:'proposal',req_id:1,proposal:{ask_price:'0.10',payout:'0.18'}},
-    'DOWN')).toMatchObject({accepted:true,contractType:'PUT',potentialProfit:0.08});
+  expect(parseDemoQuote({msg_type:'proposal',req_id:1,proposal:{ask_price:'1.00',payout:'1.80'}},
+    'DOWN')).toMatchObject({accepted:true,contractType:'PUT',potentialProfit:0.80});
 });
 it('does not enable unsupervised DEMO execution when server switches are off',async()=>{
   const stub=env.DERIV_DEMO.getByName('auto-disabled');
@@ -178,10 +178,10 @@ it('stops the day when ten verified DEMO settlements have nonpositive net P&L',a
     await runInDurableObject(stub,(_instance,ctx)=>{
       ctx.storage.transactionSync(()=>{
         for(let i=0;i<wins+losses;i++){
-          const pnl=i<wins?8:-10,contractId=i+1000;
+          const pnl=i<wins?80:-100,contractId=i+1000;
           ctx.storage.sql.exec(
-            "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,?,'SETTLED',?,10,?,?)",
-            date,Math.floor(Date.now()/1000)+i,contractId,pnl>0?18:0,pnl
+            "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,?,'SETTLED',?,100,?,?)",
+            date,Math.floor(Date.now()/1000)+i,contractId,pnl>0?180:0,pnl
           );
         }
       });
@@ -190,11 +190,11 @@ it('stops the day when ten verified DEMO settlements have nonpositive net P&L',a
   };
   const profitable=await generate('demo-six-four',6,4);
   expect(profitable.tradeReport.dayRisk).toMatchObject({
-    settled:10,netCents:8,allowed:true
+    settled:10,netCents:80,allowed:true
   });
   const loss=await generate('demo-five-five',5,5);
   expect(loss.tradeReport.dayRisk).toMatchObject({
-    settled:10,netCents:-10,allowed:false,reason:'DEMO_DAY_NOT_PROFITABLE'
+    settled:10,netCents:-100,allowed:false,reason:'DEMO_DAY_NOT_PROFITABLE'
   });
 });
 it('preserves a sticky day-stop even if subsequently reconciled trades make that day profitable',async()=>{
@@ -203,7 +203,7 @@ it('preserves a sticky day-stop even if subsequently reconciled trades make that
   await runInDurableObject(stub,(_instance,ctx)=>{
     ctx.storage.sql.exec("INSERT INTO demo_day_halts(date,reason,stopped_at) VALUES(?,'DAY_NET_NONPOSITIVE_AFTER_TEN',?)",date,Math.floor(Date.now()/1000));
     ctx.storage.sql.exec(
-      "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,100,'SETTLED',451,10,20,10)",date
+      "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,100,'SETTLED',451,100,120,20)",date
     );
   });
   expect((await stub.status()).tradeReport.dayRisk).toMatchObject({
