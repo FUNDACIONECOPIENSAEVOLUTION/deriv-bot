@@ -120,6 +120,14 @@ it('accepts OTP WebSocket URLs only for the official demo endpoint, never for re
     expect(()=>demoSocketUrl({data:{url}})).toThrow();
   }
 });
+it('keeps public contracts diagnostic behind private owner authentication and strict POST control',async()=>{
+  expect((await request('/api/deriv/market-check')).r.status).toBe(401);
+  expect((await request('/api/deriv/market-check',{method:'GET',headers})).r.status).toBe(404);
+  expect((await request('/api/deriv/market-check',{method:'POST',headers:{
+    ...headers,Origin:'https://attacker.example'
+  },body:'{}'})).r.status).toBe(403);
+  expect(calls).toEqual([]);
+});
 it('allows quote requests only to the owner and never quotes without a connected demo',async()=>{
   expect((await request('/api/deriv/quote')).r.status).toBe(401);
   expect((await request('/api/deriv/quote',{method:'GET',headers})).r.status).toBe(404);
