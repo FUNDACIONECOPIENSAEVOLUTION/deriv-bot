@@ -1,0 +1,12 @@
+{
+  "version": "1.5",
+  "updatedAt": "2026-11-07T19:27:40Z",
+  "summary": "Versión publicada: GitHub Pages v1.5 y panel Cloudflare DEMO v1.5",
+  "changes": [
+    "Identificación de versiones visible en ambos portales",
+    "Acceso al panel DEMO desde GitHub Pages",
+    "Panel privado con cotizaciones, saldo oficial separado de PAPER y pruebas seguras de contratos virtuales"
+  ],
+  "sourceCommit": "e84cb710754f950c657dd2d9d4644e37d4a91747",
+  "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
+}
