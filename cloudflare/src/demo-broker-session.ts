@@ -71,7 +71,7 @@ export function parseDemoProposalForBuy(raw:Record<string,unknown>,quotedAt:numb
   if(typeof proposal.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(proposal.id))
     throw Error('DEMO_PROPOSAL_ID_INVALID');
   return {id:proposal.id,askPrice:priced.askPrice,payout:priced.payout,
-    quotedAt,symbol:'R_100',contractType:direction==='UP'?'CALL':'PUT',durationTicks:20,stakeCents};
+    quotedAt,symbol:'R_100',contractType:direction==='UP'?'CALL':'PUT',durationTicks:5,stakeCents};
 }
 
 export type DemoAttemptOutcome =

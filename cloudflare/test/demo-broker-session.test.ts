@@ -21,29 +21,29 @@ it('uses only OTP demo channel, never real',()=>{
 });
 it('parses valid quote id and exact cost',()=>{
  const q=parseDemoProposalForBuy({msg_type:'proposal',req_id:1,
-   proposal:{id:'Q'.repeat(40),ask_price:'0.25',payout:'0.45'}},1750000100,'DOWN',25);
- expect(q).toMatchObject({id:'Q'.repeat(40),contractType:'PUT',stakeCents:25,askPrice:0.25,payout:0.45});
+   proposal:{id:'Q'.repeat(40),ask_price:'0.50',payout:'0.90'}},1750000100,'DOWN',50);
+ expect(q).toMatchObject({id:'Q'.repeat(40),contractType:'PUT',stakeCents:50,askPrice:0.50,payout:0.90});
 });
-it('makes exactly one 10-cent demo buy after durable reservation',async()=>{
+it('makes exactly one 35-cent demo buy after durable reservation',async()=>{
  const events:string[]=[];
  const broker=new Broker(req=>req.proposal===1?
-   {msg_type:'proposal',req_id:1,proposal:{id:'Q'.repeat(40),ask_price:'0.10',payout:'0.18'}}:
-   {msg_type:'buy',req_id:2,buy:{contract_id:1234,buy_price:'0.10',purchase_time:1750000000}});
+   {msg_type:'proposal',req_id:1,proposal:{id:'Q'.repeat(40),ask_price:'0.35',payout:'0.63'}}:
+   {msg_type:'buy',req_id:2,buy:{contract_id:1234,buy_price:'0.35',purchase_time:1750000000}});
  const result=await buyDemoOverSocket(broker as unknown as WebSocket,{
-  wsUrl:socketUrl,gate,stakeCents:10,
+  wsUrl:socketUrl,gate,stakeCents:35,
   reserve:async()=>{events.push('reserve');return 1;},
   acknowledge:async()=>{events.push('ack');}
  });
- expect(result).toEqual({state:'OPEN',contractId:1234,buyCents:10,purchaseTime:1750000000});
+ expect(result).toEqual({state:'OPEN',contractId:1234,buyCents:35,purchaseTime:1750000000});
  expect(broker.sent).toHaveLength(2);
- expect(broker.sent[0]).toMatchObject({proposal:1,amount:0.10,contract_type:'CALL'});
- expect(broker.sent[1]).toMatchObject({buy:'Q'.repeat(40),price:0.10});
+ expect(broker.sent[0]).toMatchObject({proposal:1,amount:0.35,contract_type:'CALL'});
+ expect(broker.sent[1]).toMatchObject({buy:'Q'.repeat(40),price:0.35});
  expect(events).toEqual(['reserve','ack']);
 });
 it('rejects a too-small proposal without increasing the amount or buying',async()=>{
  const broker=new Broker(()=>({req_id:1,error:{code:'StakeTooSmall'}}));
  const result=await buyDemoOverSocket(broker as unknown as WebSocket,{
-  wsUrl:socketUrl,gate,stakeCents:10,reserve:async()=>{throw Error('MUST_NOT_RESERVE');},
+  wsUrl:socketUrl,gate,stakeCents:35,reserve:async()=>{throw Error('MUST_NOT_RESERVE');},
   acknowledge:async()=>{throw Error('MUST_NOT_ACK');}
  });
  expect(result).toEqual({state:'REJECTED',code:'StakeTooSmall'});
@@ -62,7 +62,7 @@ it('never retries an uncertain purchase on lost connection',async()=>{
    {msg_type:'proposal',req_id:1,proposal:{id:'Q'.repeat(40),ask_price:'1.00',payout:'1.80'}}:null);
  let reserved=0;
  await expect(buyDemoOverSocket(broker as unknown as WebSocket,{
-   wsUrl:socketUrl,gate:{...gate,signal:'DOWN'},stakeCents:100,
+   wsUrl:socketUrl,gate:{...gate,signal:'DOWN'},stakeCents:350,
    reserve:async()=>{reserved++;return 1;},acknowledge:async()=>{}
  })).rejects.toThrow('DEMO_BUY_OUTCOME_UNKNOWN');
  expect(reserved).toBe(1);

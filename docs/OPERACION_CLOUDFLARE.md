@@ -42,8 +42,8 @@ La integración en preparación consulta únicamente la cuenta **DEMO USD** a tr
 
 ### Opciones de entrenamiento
 
-- Importes virtuales rotativos fijos: **US$0,10, US$0,25, US$0,50 y US$1** por contrato; los importes rechazados no se incrementan automáticamente.
-- Instrumento inicial R_100, dirección CALL o PUT según señal confirmada, 20 ticks de duración. Se registra cada compra, entrada, resultado y señales SMA/RSI. No hay predicciones infalibles.
+- Importes virtuales rotativos fijos: **US$0,35, US$0,50, US$0,75 y US$1** por contrato; los importes rechazados no se incrementan automáticamente.
+- Instrumento inicial R_100, dirección CALL o PUT según señal confirmada, 5 ticks de duración. Se registra cada compra, entrada, resultado y señales SMA/RSI. No hay predicciones infalibles.
 - El panel ofrece un **selector de 1 a 10 contratos DEMO abiertos simultáneamente**. La selección se valida otra vez en el Durable Object antes de transmitir cada compra, para impedir carreras entre solicitudes.
 - La parada rígida se fija en **US$9.900** de saldo oficial o antes si el coste de los contratos abiertos puede superar una pérdida de US$100 con respecto a US$10.000. La pérdida realizada se consulta directamente del broker y se contrasta con el registro.
 - Ante una compra sin confirmación, bloquea todas las compras hasta conciliarla con Deriv; jamás repite automáticamente la orden incierta. Consulta liquidaciones pendientes sin emitir nuevas compras.
@@ -80,7 +80,7 @@ Cuando preflight, OAuth y permisos funcionen, habilitar `DEMO_BUY_ENABLED` para 
 ### Campaña DEMO autorizada — 5 bloques de 10 (07/11/2026)
 
 - El propietario solicita **hasta 50 contratos DEMO**, en **cinco bloques de diez compras confirmadas por Deriv**, sin usar jamás la cuenta real.
-- **Límite de importes virtuales por bloque:** US$10 (1.000 centavos); **máximo acumulado de compras:** US$50 (5.000 centavos). Los importes individuales rotan US$0,10 / US$0,25 / US$0,50 / US$1. Un rechazo de precio no autoriza incrementarlo.
+- **Límite de importes virtuales por bloque:** US$10 (1.000 centavos); **máximo acumulado de compras:** US$50 (5.000 centavos). Los importes individuales rotan US$0,35 / US$0,50 / US$0,75 / US$1. Un rechazo de precio no autoriza incrementarlo.
 - **Hasta diez contratos abiertos a la vez**, configurable por el propietario. El siguiente bloque solo puede comenzar cuando los diez contratos anteriores estén liquidados oficialmente. Si hay orden UNKNOWN, se bloquea y requiere conciliación.
 - Un **segundo tope independiente** detiene el entrenamiento cuando el saldo oficial DEMO llega a US$9.900 o la exposición podría atravesarlo desde la referencia US$10.000.
 - Se muestra informe de **cada bloque** (compras, liquidados, ganadas, perdidas, P&L y tasa observada), más el histórico total. El porcentaje de acierto no garantiza resultado positivo.
@@ -92,7 +92,7 @@ Cuando preflight, OAuth y permisos funcionen, habilitar `DEMO_BUY_ENABLED` para 
 El Worker se despliega con `DEMO_BUY_ENABLED=true` y `DEMO_AUTO_ENABLED=true` **únicamente para la API DEMO**. Tener estos dos interruptores disponibles **no genera compras automáticamente**: el control persistente `demo-auto` comienza desactivado. El servicio utiliza una URL WebSocket oficial que incluye `/demo`, exige cuenta DEMO USD verificada y no dispone de ruta para órdenes `/real`.
 
 1. Entrar al **panel Cloudflare privado**, autenticar con la contraseña propia del Worker y actualizar el saldo oficial.
-2. Solicitar cotización oficial DEMO. Un rechazo al importe de US$0,10, US$0,25 o US$0,50 debe registrarse y no autoriza un incremento por pérdida ni una compra diferente.
+2. Solicitar cotización oficial DEMO. Un rechazo al importe de US$0,35, US$0,50 o US$0,75 debe registrarse y no autoriza un incremento por pérdida ni una compra diferente.
 3. Con una señal vigente, ejecutar **una sola compra manual DEMO** y verificar su identificador y liquidación (P&L oficial). Una orden incierta bloquea posteriores compras hasta conciliación.
 4. **Solo después de que el primer contrato figure SETTLED**, el botón «Activar evaluación automática DEMO» queda disponible. Requiere confirmación explícita del propietario y un máximo de posiciones abiertas entre 1 y 10.
 5. La automatización intenta hasta **50 compras DEMO** en cinco tandas de diez, máximo US$10 de importes acumulados por tanda (US$50 total). No pasa a la siguiente tanda hasta que las diez compras anteriores hayan quedado liquidadas; puede tardar y puede no encontrar señales.
@@ -100,3 +100,7 @@ El Worker se despliega con `DEMO_BUY_ENABLED=true` y `DEMO_AUTO_ENABLED=true` **
 7. Usar «Pausar evaluación automática» para detener nuevas compras; las ya abiertas requieren su liquidación. No se habilita jamás dinero real con estos parámetros.
 
 **Limitación de control:** modificar GitHub o publicar el Worker no equivale a llamar el endpoint privado de inicio. Un operador con sesión autenticada debe pulsar los botones de compra y, tras liquidación, de automatización. La sesión de navegador solo visible desde el chat no permite enviar estas solicitudes autenticadas.
+
+### Validación pública de restricciones Deriv (07/11/2026)
+
+Se verificó sin credenciales ni compras que R_100 con CALL/PUT admite propuestas de 5 ticks, mientras que 20 ticks resulta rechazado: Deriv limita la duración en ticks a un máximo de 10 para esas propuestas. También rechazó 0,10 USD con un mínimo de 0,35 USD. Las propuestas CALL de 5 ticks para importes 0,35 / 0,50 / 0,75 / 1 USD y PUT de 1 USD fueron aceptadas en el canal público. **Una propuesta aceptada no confirma una compra o una liquidación.** La cuenta REAL sigue bloqueada.

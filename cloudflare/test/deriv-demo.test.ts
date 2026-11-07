@@ -91,19 +91,19 @@ it('bounds request bodies and refuses invalid ids, overwritten state and arbitra
 });
 
 
-it('keeps the DEMO proposal fixed at USD 1 for CALL R_100 at 20 ticks and never sends buy',()=>{
+it('keeps the DEMO proposal fixed at USD 1 for CALL R_100 at 5 ticks and never sends buy',()=>{
   expect(DEMO_QUOTE_REQUEST).toEqual({proposal:1,amount:1,basis:'stake',contract_type:'CALL',
-    currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1});
+    currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:1});
   expect(JSON.stringify(DEMO_QUOTE_REQUEST)).not.toContain('"buy"');
   expect(JSON.stringify(DEMO_QUOTE_REQUEST)).not.toContain('"sell"');
 });
 it('parses only valid broker quotes, omits the actionable proposal id and never increases rejected stakes',()=>{
   const accepted=parseDemoQuote({msg_type:'proposal',req_id:1,
     proposal:{id:'do-not-expose-this-id',ask_price:'1.00',payout:1.80}});
-  expect(accepted).toMatchObject({accepted:true,stake:1,durationTicks:20,askPrice:1,payout:1.80,potentialProfit:0.80});
+  expect(accepted).toMatchObject({accepted:true,stake:1,durationTicks:5,askPrice:1,payout:1.80,potentialProfit:0.80});
   expect(JSON.stringify(accepted)).not.toContain('do-not-expose-this-id');
   const denied=parseDemoQuote({msg_type:'proposal',req_id:1,error:{code:'ContractTooSmall',message:'Raise amount'}});
-  expect(denied).toEqual({accepted:false,code:'ContractTooSmall',stake:1,durationTicks:20,symbol:'R_100',contractType:'CALL'});
+  expect(denied).toEqual({accepted:false,code:'ContractTooSmall',stake:1,durationTicks:5,symbol:'R_100',contractType:'CALL'});
   expect(JSON.stringify(denied)).not.toContain('Raise amount');
   for(const price of ['NaN','1e5','0.000000001',-1,null]) {
     expect(()=>parseDemoQuote({msg_type:'proposal',proposal:{ask_price:price,payout:0.2}})).toThrow('DERIV_QUOTE_INVALID_RESPONSE');
@@ -240,7 +240,7 @@ it('audits ten virtual purchases per tranche before the next of five tranches',a
   expect(reviewed.unknownCount).toBe(0);
 });
 it('supports all experimental quote values without purchasing',()=>{
- for(const stakeCents of [10,25,50,100]){
+ for(const stakeCents of [35,50,75,100]){
    const q=demoQuoteRequest('DOWN',stakeCents);
    expect(q).toMatchObject({proposal:1,contract_type:'PUT',amount:stakeCents/100});
    expect(q).not.toHaveProperty('buy');

@@ -3,7 +3,7 @@ import { evaluateDemoRisk, DEMO_STAKES_CENTS, DEMO_MAX_OPEN } from './demo-risk-
 /** Strict broker DEMO-only order guards. Nothing in this file sends an order. */
 export type DemoQuoteForBuy = {
   id:string;askPrice:number;payout:number;quotedAt:number;
-  symbol:'R_100';contractType:'CALL'|'PUT';durationTicks:20;stakeCents:number;
+  symbol:'R_100';contractType:'CALL'|'PUT';durationTicks:5;stakeCents:number;
 };
 export type DemoTradeGate = {
   accountType:'demo'|'real'|'unknown';currency:string;socketUrl:string;
@@ -42,7 +42,7 @@ export function buildDemoBuyRequest(gate:DemoTradeGate) {
   });
   if(!risk.allowed)throw Error(risk.reason);
   if(q.symbol!=='R_100'||q.contractType!==(gate.signal==='UP'?'CALL':'PUT')
-    ||q.durationTicks!==20||!DEMO_STAKES_CENTS.some(v=>v===q.stakeCents))
+    ||q.durationTicks!==5||!DEMO_STAKES_CENTS.some(v=>v===q.stakeCents))
       throw Error('DEMO_CONTRACT_NOT_ALLOWED');
   if(!/^[A-Za-z0-9_-]{32,128}$/.test(q.id))throw Error('DEMO_PROPOSAL_ID_INVALID');
   if(!Number.isSafeInteger(gate.now)||!Number.isSafeInteger(q.quotedAt)

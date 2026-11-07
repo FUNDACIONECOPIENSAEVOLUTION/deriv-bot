@@ -49,10 +49,10 @@ export function selectDemo(payload:unknown,accountId?:string):DemoAccount {
 /** A quote is never an order. Deliberately discard the proposal id. */
 export const DEMO_QUOTE_REQUEST = Object.freeze({
   proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',
-  duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1
+  duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:1
 });
 export function demoQuoteRequest(signal:'UP'|'DOWN'='UP',stakeCents=100){
-  if(![10,25,50,100].includes(stakeCents))throw Error('DEMO_STAKE_INVALID');
+  if(![35,50,75,100].includes(stakeCents))throw Error('DEMO_STAKE_INVALID');
   return {...DEMO_QUOTE_REQUEST,amount:stakeCents/100,contract_type:signal==='UP'?'CALL':signal==='DOWN'?'PUT':(()=>{throw Error('DEMO_SIGNAL_INVALID')})()};
 }
 
@@ -69,12 +69,12 @@ export function parseDemoQuote(payload:unknown,signal:'UP'|'DOWN'='UP',stakeCent
   if(rejected){
     const raw=rejected.code;
     const code=typeof raw==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(raw)?raw:'REJECTED';
-    return {accepted:false,code,stake:stakeCents/100,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT'};
+    return {accepted:false,code,stake:stakeCents/100,durationTicks:5,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT'};
   }
   if(p.msg_type!=='proposal'||!p.proposal||typeof p.proposal!=='object')throw Error('DERIV_QUOTE_INVALID_RESPONSE');
   const proposal=p.proposal as Record<string,unknown>,askPrice=quoteMoney(proposal.ask_price),payout=quoteMoney(proposal.payout);
   if(askPrice===null||payout===null)throw Error('DERIV_QUOTE_INVALID_RESPONSE');
-  return {accepted:true,stake:stakeCents/100,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT',
+  return {accepted:true,stake:stakeCents/100,durationTicks:5,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT',
     askPrice,payout,potentialProfit:Math.round((payout-askPrice)*100)/100,quotedAt:epoch()};
 }
 export function demoSocketUrl(payload:unknown):string {

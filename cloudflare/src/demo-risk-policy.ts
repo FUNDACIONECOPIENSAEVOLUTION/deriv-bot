@@ -3,7 +3,7 @@
  * The 100 USD guard is a hard loss boundary from verified baseline;
  * never use this module to authorize real-money transactions.
  */
-export const DEMO_STAKES_CENTS=Object.freeze([10,25,50,100] as const);
+export const DEMO_STAKES_CENTS=Object.freeze([35,50,75,100] as const);
 export const DEMO_MAX_STAKE_CENTS=100;
 export const DEMO_MAX_OPEN=10;
 export const DEMO_MAX_LOSS_CENTS=10_000; // US$100 off verified demo starting balance
