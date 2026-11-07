@@ -204,7 +204,7 @@ export default {
             (choice as {stakeCents?:unknown}).stakeCents:100;
           if(typeof stakeCents!=='number'||![10,25,50,100].includes(stakeCents))
             return json({error:'Importe virtual no permitido'},400);
-          return json(await demo.quote(direction,stakeCents));
+          return json(await demo.preflightDemo(direction,stakeCents));
         }
         if(url.pathname==='/api/deriv/demo/buy-once'){
           // A browser click alone is NOT permission to trade: the broker is
@@ -287,11 +287,12 @@ export default {
       return new Response(stream.readable,{headers:{...security,'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="paper-trades.csv"'}});
     }catch(error){
       if(url.pathname.startsWith('/api/deriv/')){
-        const code=error instanceof Error&&/^(DERIV_[A-Z0-9_]+)$/.test(error.message)?error.message:'DERIV_CONNECTION_FAILED';
+        const code=error instanceof Error&&/^(DERIV|DEMO)_[A-Z0-9_]+$/.test(error.message)
+          ?error.message:'DERIV_CONNECTION_FAILED';
         console.error(JSON.stringify({type:'deriv_demo_connection_failed',path:url.pathname,code}));
         if(url.pathname==='/api/deriv/callback')return new Response(null,{status:303,headers:{...security,Location:url.origin+'/?deriv=verification_failed',
           'Set-Cookie':'ecopiensa_deriv_state=; Path=/api/deriv; Secure; HttpOnly; SameSite=Lax; Max-Age=0'}});
-        return json({error:'No se pudo verificar la cuenta demo de Deriv',code},503);
+        return json({error:'Operación o verificación DEMO no completada',code},503);
       }
       const code=url.pathname==='/api/market'
         ? error instanceof Error&&/^(PUBLIC_MARKET_HTTP_[1-5][0-9]{2}|EMPTY_MARKET_RESPONSE|MARKET_RESPONSE_TOO_LARGE|INVALID_MARKET_RESPONSE|INVALID_CANDLES)$/.test(error.message)
