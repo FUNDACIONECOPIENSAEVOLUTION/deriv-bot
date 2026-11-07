@@ -18,6 +18,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.8 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:20:36.530Z (UTC).
+- **Commit de origen:** `9e84213f07c8`.
+- Distinguir cron DEMO autorizado de compra manual con cotización previa, sin ruta real
+- No permitir compra manual DEMO sin propuesta oficial aceptada y reciente para señal e importe exactos
+
 ## v2.7 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:05:38.950Z (UTC).

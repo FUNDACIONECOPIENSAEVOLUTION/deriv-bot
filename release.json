@@ -1,10 +1,11 @@
 {
-  "version": "2.7",
-  "updatedAt": "2026-11-07T20:05:38.950Z",
-  "summary": "Documentar arranque de 50 compras DEMO tras primera validación y activación privada, sin dinero real",
+  "version": "2.8",
+  "updatedAt": "2026-11-07T20:20:36.530Z",
+  "summary": "Distinguir cron DEMO autorizado de compra manual con cotización previa, sin ruta real",
   "changes": [
-    "Documentar arranque de 50 compras DEMO tras primera validación y activación privada, sin dinero real"
+    "Distinguir cron DEMO autorizado de compra manual con cotización previa, sin ruta real",
+    "No permitir compra manual DEMO sin propuesta oficial aceptada y reciente para señal e importe exactos"
   ],
-  "sourceCommit": "39e7af1271b8277c779fcc6f65ed1044a5fbf6f0",
+  "sourceCommit": "9e84213f07c893c7ba01075e6a4e44d694b3ba5b",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
