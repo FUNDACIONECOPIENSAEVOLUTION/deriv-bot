@@ -44,6 +44,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.4 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:29:17.447Z (UTC).
+- **Commit de origen:** `a8b841c2e486`.
+- Desplegar puente manual DEMO y aceptar bloqueo confirmado de egreso Cloudflare como diagnóstico
+- Probar que puente navegador DEMO no permite compras sin autenticación ni importes obsoletos
+
 ## v5.3 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:28:36.248Z (UTC).

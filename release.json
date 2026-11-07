@@ -1,10 +1,11 @@
 {
-  "version": "5.3",
-  "updatedAt": "2026-11-07T23:28:36.248Z",
-  "summary": "Reparar primera compra DEMO con puente autenticado de navegador ante fallo WebSocket Cloudflare",
+  "version": "5.4",
+  "updatedAt": "2026-11-07T23:29:17.447Z",
+  "summary": "Desplegar puente manual DEMO y aceptar bloqueo confirmado de egreso Cloudflare como diagnóstico",
   "changes": [
-    "Reparar primera compra DEMO con puente autenticado de navegador ante fallo WebSocket Cloudflare"
+    "Desplegar puente manual DEMO y aceptar bloqueo confirmado de egreso Cloudflare como diagnóstico",
+    "Probar que puente navegador DEMO no permite compras sin autenticación ni importes obsoletos"
   ],
-  "sourceCommit": "b556ebdf057ce49788957b95d109afd2c37afe3f",
+  "sourceCommit": "a8b841c2e48681590e173f9c7c012b2339e41e25",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
