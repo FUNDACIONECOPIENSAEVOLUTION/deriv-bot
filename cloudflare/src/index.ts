@@ -204,7 +204,7 @@ function privateDashboard() {
     .replaceAll('__RELEASE_SUMMARY__',escapeHtml(release.summary))
     .replaceAll('__RELEASE_CHANGES__',changes);
   return new Response(html,{headers:{...security,'Content-Type':'text/html; charset=utf-8',
-    'Content-Security-Policy':"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"}});
+    'Content-Security-Policy':"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; connect-src 'self' wss://api.derivws.com; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"}});
 }
 
 export default {
@@ -226,7 +226,7 @@ export default {
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -254,6 +254,43 @@ export default {
           if(typeof stakeCents!=='number'||!DEMO_STAKES_CENTS.some(allowed=>allowed===stakeCents))
             return json({error:'Importe virtual no permitido'},400);
           return json(await demo.preflightDemo(direction,stakeCents));
+        }
+        if(url.pathname.startsWith('/api/deriv/demo/browser/')){
+          // Owner authenticated + same origin, DEMO account only.
+          const raw=await request.text();
+          if(raw.length>8192)return json({error:'Solicitud demasiado grande'},413);
+          let parsed:unknown;
+          try{parsed=JSON.parse(raw);}catch{return json({error:'Formato de sesión inválido'},400);}
+          if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))return json({error:'Formato de sesión inválido'},400);
+          const data=parsed as Record<string,unknown>;
+          const action=url.pathname.split('/').at(-1);
+          if(action==='begin'){
+            if((data.signal!=='UP'&&data.signal!=='DOWN')||typeof data.stakeCents!=='number'
+              ||!DEMO_STAKES_CENTS.some(n=>n===data.stakeCents))
+              return json({error:'Dirección o importe DEMO inválido'},400);
+            return json(await demo.beginBrowserPilot(data.signal,data.stakeCents));
+          }
+          if(action==='check')return json(await demo.beginBrowserSettlement());
+          const nonce=typeof data.nonce==='string'&&/^[A-Za-z0-9_-]{43}$/.test(data.nonce)?data.nonce:null;
+          if(!nonce)return json({error:'Identificador de sesión inválido'},400);
+          if(action==='reserve'){
+            if((data.signal!=='UP'&&data.signal!=='DOWN')||typeof data.stakeCents!=='number'
+              ||!DEMO_STAKES_CENTS.some(n=>n===data.stakeCents)
+              ||typeof data.proposalId!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(data.proposalId)
+              ||typeof data.askPrice!=='number'||typeof data.payout!=='number')
+              return json({error:'Propuesta DEMO inválida'},400);
+            return json(await demo.reserveBrowserPilot({
+              nonce,signal:data.signal,stakeCents:data.stakeCents,proposalId:data.proposalId,
+              askPrice:data.askPrice,payout:data.payout
+            }));
+          }
+          if(typeof data.id!=='number'||!Number.isSafeInteger(data.id)||data.id<=0
+            ||!data.response||typeof data.response!=='object'||Array.isArray(data.response))
+            return json({error:'Respuesta del broker inválida'},400);
+          const payload={nonce,id:data.id,response:data.response};
+          if(action==='ack')return json(await demo.acknowledgeBrowserPilot(payload));
+          if(action==='settle')return json(await demo.settleBrowserPilot(payload));
+          return json({error:'Acción no autorizada'},404);
         }
         if(url.pathname==='/api/deriv/demo/buy-once'){
           // A browser click alone is NOT permission to trade: the broker is

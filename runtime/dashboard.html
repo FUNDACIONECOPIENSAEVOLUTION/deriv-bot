@@ -72,7 +72,7 @@
 <script nonce="__NONCE__">
 'use strict';
 const $=id=>document.getElementById(id),ns='http://www.w3.org/2000/svg';
-let demoManualApproval=null; // Never persists across reloads; server verifies a one-use approval too.
+let demoManualApproval=null,demoCurrent=null; // Never persists across reloads; server verifies a one-use approval too.
 const money=c=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'USD'}).format(c/100);
 const price=v=>Number.isFinite(v)?new Intl.NumberFormat('es-CO',{maximumFractionDigits:5}).format(v):'—';
 const time=t=>new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(t*1000));
@@ -100,7 +100,8 @@ const demoErrorDescriptions={
   DERIV_AUTHORIZATION_EXPIRED:'La autorización de Deriv caducó: vuelve a conectarla.',
   DERIV_DEMO_REQUIRED:'No se encontró una cuenta DEMO USD autorizada.',
   DEMO_BATCH_BUDGET:'Se agotó el presupuesto del lote actual.',
-  DERIV_CONNECTION_FAILED:'No se pudo completar la conexión con Deriv. Consulta el diagnóstico del servidor.'
+  DERIV_CONNECTION_FAILED:'No se pudo completar la conexión con Deriv. Consulta el diagnóstico del servidor.',
+  DERIV_SOCKET_CONNECT_ERROR:'Cloudflare no pudo abrir el canal; se probará desde el navegador.'
 };
 async function demoResponseError(response){
   let code='DERIV_CONNECTION_FAILED';
@@ -111,6 +112,133 @@ async function demoResponseError(response){
   }catch{}
   return {code,message:demoErrorDescriptions[code]||'Respuesta no disponible; comprueba la cuenta DEMO.'};
 }
+
+/** Browser-only Deriv fallback when Cloudflare outbound WebSocket egress fails.
+ * OTP remains in the private owner's page memory; only /ws/demo is allowed.
+ */
+async function browserSocket(url,channel){
+ const u=new URL(url);
+ if(u.protocol!=='wss:'||u.hostname!=='api.derivws.com'
+    ||u.pathname!=='/trading/v1/options/ws/'+channel
+    ||(channel==='demo'&&(u.searchParams.size!==1||!u.searchParams.get('otp')))
+    ||(channel==='public'&&u.searchParams.size!==0))throw Error('DEMO_BROWSER_CHANNEL_FORBIDDEN');
+ return new Promise((resolve,reject)=>{
+  let ws;try{ws=new WebSocket(url);}catch{reject(Error('DEMO_BROWSER_SOCKET_UNAVAILABLE'));return;}
+  let done=false;const finish=(err)=>{
+   if(done)return;done=true;clearTimeout(timer);
+   ws.removeEventListener('open',open);ws.removeEventListener('close',closed);ws.removeEventListener('error',failed);
+   if(err){try{ws.close();}catch{}reject(Error(err));}else resolve(ws);
+  };
+  const open=()=>finish(null),closed=()=>finish('DEMO_BROWSER_SOCKET_CLOSED'),failed=()=>finish('DEMO_BROWSER_SOCKET_UNAVAILABLE');
+  const timer=setTimeout(()=>finish('DEMO_BROWSER_SOCKET_TIMEOUT'),10000);
+  ws.addEventListener('open',open);ws.addEventListener('close',closed);ws.addEventListener('error',failed);
+ });
+}
+async function brokerMessage(ws,request,timeoutMs=9000){
+ return new Promise((resolve,reject)=>{
+  let done=false;const finish=(error,result)=>{
+   if(done)return;done=true;clearTimeout(timer);
+   ws.removeEventListener('message',received);ws.removeEventListener('error',failed);ws.removeEventListener('close',closed);
+   if(error)reject(Error(error));else resolve(result);
+  };
+  const received=e=>{
+   try{
+    if(typeof e.data!=='string'||e.data.length>32768)throw Error();
+    const data=JSON.parse(e.data);
+    if(data.req_id!==request.req_id)return;
+    finish(null,data);
+   }catch{finish('DEMO_BROWSER_REPLY_INVALID');}
+  };
+  const failed=()=>finish('DEMO_BROWSER_SOCKET_UNAVAILABLE'),closed=()=>finish('DEMO_BROWSER_SOCKET_CLOSED');
+  const timer=setTimeout(()=>finish('DEMO_BROWSER_REPLY_TIMEOUT'),timeoutMs);
+  ws.addEventListener('message',received);ws.addEventListener('error',failed);ws.addEventListener('close',closed);
+  try{ws.send(JSON.stringify(request));}catch{finish('DEMO_BROWSER_SEND_FAILED');}
+ });
+}
+async function browserPrivate(action,data){
+ const r=await fetch('/api/deriv/demo/browser/'+action,{method:'POST',
+  headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+  body:JSON.stringify(data),signal:AbortSignal.timeout(16000)});
+ if(!r.ok){const e=await demoResponseError(r);throw Error(e.code);}
+ return r.json();
+}
+const proposalRequest=(direction,stakeCents)=>({
+ proposal:1,amount:stakeCents/100,basis:'stake',currency:'USD',
+ contract_type:direction==='UP'?'CALL':'PUT',underlying_symbol:'R_100',
+ duration:5,duration_unit:'t',req_id:1
+});
+async function directPublicQuote(direction,stakeCents){
+ const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public');
+ try{return await brokerMessage(ws,proposalRequest(direction,stakeCents));}
+ finally{try{ws.close();}catch{}}
+}
+async function browserCheckDemoSettlement(msg){
+ const session=await browserPrivate('check',{});
+ if(session.mode!=='DEMO_BROWSER_SETTLEMENT'||session.accountType!=='demo'||!session.noOrders)
+  throw Error('DEMO_BROWSER_SETTLEMENT_INVALID');
+ const ws=await browserSocket(session.wsUrl,'demo');
+ try{
+  const reply=await brokerMessage(ws,{
+   proposal_open_contract:1,contract_id:session.contractId,req_id:3
+  });
+  if(reply.error||reply.errors||reply.msg_type!=='proposal_open_contract')
+   throw Error('DEMO_BROWSER_SETTLEMENT_UNAVAILABLE');
+  if([1,true].includes(reply.proposal_open_contract?.is_sold)){
+   const result=await browserPrivate('settle',{
+    nonce:session.nonce,id:session.id,response:reply
+   });
+   msg.textContent='Contrato DEMO '+session.contractId+' cerrado · '+money(result.settlement.profitCents)+
+    '. Resultado observado en navegador, no verificado independientemente por Cloudflare.';
+  }else{
+   msg.textContent='El contrato DEMO '+session.contractId+' todavía aparece abierto en Deriv.';
+  }
+ }finally{try{ws.close();}catch{}}
+}
+
+async function oneBrowserDemoBuy(approved,msg){
+ const {direction,stakeCents}=approved;
+ const session=await browserPrivate('begin',{signal:direction,stakeCents});
+ if(session.mode!=='DEMO_BROWSER_PILOT'||session.accountType!=='demo'
+  ||session.signal!==direction||session.stakeCents!==stakeCents)throw Error('DEMO_BROWSER_SESSION_INVALID');
+ const ws=await browserSocket(session.wsUrl,'demo');let reserved=null;
+ try{
+  const q=await brokerMessage(ws,proposalRequest(direction,stakeCents));
+  const p=q.proposal||{},ask=Number(p.ask_price),payout=Number(p.payout);
+  if(q.msg_type!=='proposal'||q.error||q.errors||typeof p.id!=='string'
+   ||!/^[A-Za-z0-9_-]{32,128}$/.test(p.id)
+   ||!Number.isFinite(ask)||Math.abs(ask-stakeCents/100)>0.000001
+   ||!Number.isFinite(payout)||payout<ask)
+    throw Error('DEMO_BROWSER_PROPOSAL_REJECTED');
+  reserved=await browserPrivate('reserve',{
+   nonce:session.nonce,signal:direction,stakeCents,
+   proposalId:p.id,askPrice:ask,payout
+  });
+  if(reserved.mode!=='DEMO_BROWSER_RESERVED'||reserved.request?.price!==stakeCents/100)
+   throw Error('DEMO_BROWSER_RESERVATION_INVALID');
+  // Exactly one buy; reserve UNKNOWN before sending. Never retry a lost acknowledgement.
+  const ack=await brokerMessage(ws,reserved.request,10000);
+  const result=await browserPrivate('ack',{nonce:session.nonce,id:reserved.id,response:ack});
+  if(result.accepted!==true){
+   msg.textContent='Deriv rechazó la compra DEMO. No se repitió ni se subió el importe.';
+   return;
+  }
+  msg.textContent='Compra DEMO observada: contrato '+result.contractId+
+   ', importe '+money(stakeCents)+'. Comprobando el cierre...';
+  for(let i=0;i<8;i++){
+   await new Promise(resolve=>setTimeout(resolve,2500));
+   const reply=await brokerMessage(ws,{proposal_open_contract:1,contract_id:result.contractId,req_id:3});
+   if(reply.error||reply.errors)throw Error('DEMO_BROWSER_SETTLEMENT_UNAVAILABLE');
+   if(reply.msg_type==='proposal_open_contract'&&[1,true].includes(reply.proposal_open_contract?.is_sold)){
+    const settled=await browserPrivate('settle',{nonce:session.nonce,id:reserved.id,response:reply});
+    msg.textContent='Contrato DEMO '+result.contractId+' cerrado · resultado '+money(settled.settlement.profitCents)+
+     '. Observado desde el navegador; aún sin verificación independiente en Cloudflare.';
+    return;
+   }
+  }
+  msg.textContent='Compra DEMO '+result.contractId+' observada; el cierre sigue pendiente. No repitas la compra.';
+ }finally{try{ws.close();}catch{}}
+}
+
 const reasons={WARMUP:'Espera al menos 30 precios.',HIGH_VOLATILITY:'La volatilidad supera el filtro de 0,45 %.',NO_TREND:'Las medias todavía no muestran una dirección suficiente.',RSI_CONFLICT:'La dirección de las medias y el RSI no coinciden.',TREND_AND_MOMENTUM:'Las medias y el RSI coinciden dentro del filtro de volatilidad.'};
 const feedLabels={stopped:'Detenida',live:'Recibiendo precios',connecting:'Conectando',syncing:'Cargando historial',disconnected:'Desconectada',recovering:'Recuperando'};
 let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0,arbFetched=0;
@@ -198,6 +326,7 @@ async function refresh(){
 $('provider').onchange=async()=>{marketView=null;marketError='';marketFetched=0;render();await loadMarket(true);render();};$('window').onchange=drawCandles;
 for(const action of ['start','stop'])$('paper-'+action).onclick=async()=>{const out=$('paper-control-status');$('paper-start').disabled=true;$('paper-stop').disabled=true;try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();out.textContent=action==='start'?'Deriv: simulación iniciada.':'Deriv: simulación pausada.';await refresh();}catch{out.textContent='No se pudo confirmar el cambio. Comprueba el estado antes de reintentar.';}};
 function renderDemo(data){
+  demoCurrent=data;
   chip('demo-state',data.connected?'Demo verificada':'Sin conexión demo',data.connected?'live':'warn');
   $('deriv-refresh').disabled=!data.connected;
   $('deriv-quote').disabled=!data.connected;
@@ -217,7 +346,7 @@ function renderDemo(data){
     $('chart-demo-balance').textContent='Saldo DEMO del broker: '+label+(fresh?'':' (desactualizado)');
     $('chart-demo-locked').textContent='Comprometido en '+(report.openCount||0)+' contratos: '
       +money(report.activeExposureCents||0)+' virtuales';
-    $('chart-demo-pnl').textContent='P&L bot DEMO verificado: '+money(report.pnlCents||0)
+    $('chart-demo-pnl').textContent='P&L DEMO registrado (incluye resultados del navegador sin verificación independiente): '+money(report.pnlCents||0)
       +' · '+(report.settled||0)+' liquidados';
     const trades=(report.history||[]).slice(0,5);
     $('chart-demo-last-trades').textContent=trades.length
@@ -258,7 +387,7 @@ function renderDemo(data){
     &&Number(report.pilotRemainingPurchases)>0&&Number(report.pilotRemainingBudgetCents)>=35;
   $('demo-buy-once').disabled=!canBuy;
   $('demo-auto-start').disabled=!(data.connected&&data.demoAutomationAvailable
-    &&data.demoTradingEnabled&&daily.allowed===true&&(report.settled||0)>=1&&
+    &&data.demoTradingEnabled&&daily.allowed===true&&(report.brokerVerifiedSettled||0)>=1&&
     !data.demoAutomationRequested);
   $('demo-auto-stop').disabled=!(data.connected&&data.demoAutomationRequested);
   $('demo-check').disabled=!(data.connected&&(report.openCount||0)>0);
@@ -413,9 +542,39 @@ $('deriv-quote').onclick=async()=>{
     }else throw Error('QUOTE_INVALID');
   }catch(error){
     demoManualApproval=null;
-    const detail=error instanceof Error&&/^(?:DERIV|DEMO)_[A-Z0-9_]+ · /.test(error.message)
-      ?error.message:'FALLO_DE_CONSULTA · Conexión o formato de cotización no verificado.';
-    out.textContent='No se realizó ninguna compra. Diagnóstico: '+detail+'. No se aumentó el importe.';
+    const detail=error instanceof Error?error.message:'FALLO_DE_CONSULTA';
+    const transportBlocked=/^(?:DERIV_SOCKET_CONNECT_[A-Z_]+|DERIV_QUOTE_UPGRADE_FAILED|DERIV_QUOTE_SOCKET_ERROR)/.test(detail);
+    if(transportBlocked&&demoCurrent?.connected){
+      // Do not treat a PUBLIC quote as an authenticated broker purchase.
+      try{
+        const direction=$('demo-quote-direction').value;
+        const stakeCents=Number($('demo-quote-stake').value);
+        const publicAnswer=await directPublicQuote(direction,stakeCents);
+        const publicPrice=publicAnswer.proposal;
+        if(publicAnswer.msg_type!=='proposal'||publicAnswer.error||publicAnswer.errors
+          ||!publicPrice||!Number.isFinite(Number(publicPrice.ask_price))
+          ||!Number.isFinite(Number(publicPrice.payout)))
+          throw Error('DEMO_BROWSER_PUBLIC_QUOTE_REJECTED');
+        const report=demoCurrent.tradeReport||{},risk=report.risk||{};
+        const canPrepare=demoCurrent.demoTradingEnabled===true&&risk.allowed===true
+          &&demoCurrent.nextManualStakeCents===stakeCents
+          &&(report.unknownCount||0)===0;
+        if(canPrepare)demoManualApproval={mode:'browser',at:Date.now(),direction,stakeCents,
+          purchases:report.pilotPurchases||0};
+        out.textContent='Deriv aceptó una cotización pública directamente desde este navegador: '+
+          (direction==='UP'?'CALL':'PUT')+' · R_100 · 5 ticks · importe '+money(stakeCents)+
+          ' · precio '+money(Math.round(Number(publicPrice.ask_price)*100))+
+          ' · pago posible '+money(Math.round(Number(publicPrice.payout)*100))+
+          '. No se compró nada. '+(canPrepare
+          ?'Puedes aprobar UNA compra DEMO: se obtendrá una cotización nueva en tu cuenta autenticada.'
+          :'La cuenta, el importe siguiente o el presupuesto impiden continuar.');
+      }catch(browserError){
+        out.textContent='Cloudflare y este navegador no pudieron abrir un WebSocket verificable con Deriv ('+
+          (browserError instanceof Error?browserError.message:'ERROR')+'). No se realizó ninguna compra.';
+      }
+    }else{
+      out.textContent='No se realizó ninguna compra. Diagnóstico: '+detail.slice(0,180)+'. No se aumentó el importe.';
+    }
   }finally{btn.disabled=false;await loadDemo();}
 };
 /** Comandos DEMO en el panel; nunca interpretan solicitudes de dinero real. */
@@ -460,10 +619,15 @@ $('demo-buy-once').onclick=async()=>{
     return;
   }
   if(!window.confirm('Confirmar UNA compra de US$0,35 a US$1 virtual (importe rotativo), duración 5 ticks, dentro de cinco tandas de 10 contratos (US$10 máximo por tanda y US$50 total). No se usará dinero real. ¿Continuar?'))return;
+  const approval=demoManualApproval;
   demoManualApproval=null;
   const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
   msg.textContent='Solicitando una sola operación en DEMO. Si se pierde la confirmación, el bot bloqueará nuevas compras.';
   try{
+    if(approval.mode==='browser'){
+      await oneBrowserDemoBuy(approval,msg);
+      return;
+    }
     const r=await fetch('/api/deriv/demo/buy-once',{
       method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
       body:'{}',signal:AbortSignal.timeout(30000)
@@ -473,8 +637,10 @@ $('demo-buy-once').onclick=async()=>{
     msg.textContent=result.state==='OPEN'
       ?'Contrato DEMO confirmado: '+result.contractId+' · importe virtual: '+money(result.buyCents||0)+'. Falta su liquidación. Puedes abrir otras posiciones hasta el límite configurado.'
       :'Deriv rechazó la propuesta o compra DEMO. No se incrementó el importe.';
-  }catch{
-    msg.textContent='No se pudo confirmar la operación DEMO. Revisa el historial y el estado del broker antes de otro intento.';
+  }catch(error){
+    const code=error instanceof Error?error.message:'DEMO_BROWSER_ERROR';
+    msg.textContent='Compra DEMO sin confirmación definitiva: '+code.slice(0,100)+
+      '. Si hubo una reserva, NO reintentes; comprueba primero el historial en Deriv.';
   }finally{await loadDemo();}
 };
 for(const kind of ['start','stop']){
@@ -510,7 +676,18 @@ $('demo-check').onclick=async()=>{
       ?'Contrato DEMO liquidado oficialmente: '+money(out.settlement.profitCents)+' netos virtuales.'
       :out.state==='OPEN'?'Contrato DEMO todavía abierto.'
       :out.state==='BUY_OUTCOME_UNKNOWN'?'Compra sin confirmación; exige conciliación manual con Deriv.':'Sin contratos DEMO pendientes.';
-  }catch{msg.textContent='Deriv no confirmó el cierre. El contrato queda pendiente; no se enviarán nuevas compras.';}
+  }catch{
+    try{
+      if(demoCurrent?.tradeReport?.unresolved?.code==='CLIENT_ACK'){
+        await browserCheckDemoSettlement(msg);
+      }else{
+        msg.textContent='El servidor no confirmó el cierre. Revisa Deriv antes de otro intento.';
+      }
+    }catch(error){
+      msg.textContent='No se pudo confirmar el cierre DEMO: '+
+        (error instanceof Error?error.message:'ERROR')+'. No repitas una compra pendiente.';
+    }
+  }
   finally{await loadDemo();}
 };
 async function loadArbitrage(){

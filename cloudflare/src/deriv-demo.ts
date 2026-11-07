@@ -246,6 +246,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const stats=sql.exec<{settled:number;wins:number;losses:number;net:number}>(
       "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents<0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED'"
     ).one();
+    const browserObservedSettlements=sql.exec<{n:number}>(
+      "SELECT COUNT(*) AS n FROM demo_trades WHERE state='SETTLED' AND code='CLIENT_OBSERVED'"
+    ).one().n;
     const raw=this.getRiskSnapshot();
     const history=sql.exec<Row>(
       'SELECT * FROM demo_trades ORDER BY id DESC LIMIT 50'
@@ -289,6 +292,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
         maxConcurrent:this.chosenMaxConcurrent()});
     const lastChecked=this.read<number>('demo-last-balance-at')||null;
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.net,
+      brokerVerifiedSettled:stats.settled-browserObservedSettlements,
+      browserObservedSettled:browserObservedSettlements,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
       virtualResearchAllocationCents:DEMO_PILOT_BUDGET_CENTS,
       pilotMaxPurchases:DEMO_PILOT_MAX_PURCHASES,
@@ -595,6 +600,22 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return {mode:'DEMO_BROWSER_OBSERVED',independentlyVerified:false,
       accepted:ack.accepted,contractId:ack.accepted?ack.contractId:null,
       code:ack.accepted?null:ack.code,tradeReport:this.reportDemo()};
+  }
+
+  /** Read-only account-scoped contract check in the owner browser.
+   * Used only after an acknowledged DEMO contract; never sends a buy.
+   */
+  async beginBrowserSettlement() {
+    const r=this.read<{id:number;nonce:string;state:string}>('demo-browser-reservation');
+    if(!r||r.state!=='OPEN')throw Error('DEMO_BROWSER_NO_OPEN_CONTRACT');
+    const entry=this.ctx.storage.sql.exec<{contract_id:number}>(
+      "SELECT contract_id FROM demo_trades WHERE id=? AND state='OPEN' AND code='CLIENT_ACK'",r.id
+    ).toArray()[0];
+    if(!entry||!Number.isSafeInteger(entry.contract_id))throw Error('DEMO_BROWSER_NO_OPEN_CONTRACT');
+    const creds=await this.verifiedDemoCredentials();
+    const url=await this.otpDemoUrl(creds);
+    return {mode:'DEMO_BROWSER_SETTLEMENT',noOrders:true,accountType:'demo',
+      wsUrl:url,nonce:r.nonce,id:r.id,contractId:entry.contract_id};
   }
 
   async settleBrowserPilot(input:{nonce:string;id:number;response:unknown}) {
