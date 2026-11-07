@@ -153,7 +153,7 @@ export default {
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/demo/buy-once','/api/deriv/demo/check'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -164,6 +164,19 @@ export default {
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
         if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
         if(url.pathname==='/api/deriv/quote')return json(await demo.quote());
+        if(url.pathname==='/api/deriv/demo/buy-once'){
+          // A browser click alone is NOT permission to trade: the broker is
+          // DEMO-only, the feature switch defaults OFF, and the local rule
+          // must have a fresh confirmed upward signal from real public ticks.
+          if(env.DEMO_BUY_ENABLED!=='true')return json({error:'Ejecución DEMO desactivada'},403);
+          const paper=await env.PAPER.getByName(EXPERIMENT).status();
+          const ready=paper.running===true&&paper.market.state==='live'
+            &&paper.config.symbol==='R_100'&&paper.decision.direction===1
+            &&typeof paper.quoteAgeSeconds==='number'
+            &&paper.quoteAgeSeconds>=0&&paper.quoteAgeSeconds<=10;
+          return json(await demo.buyDemoOnce(ready?'UP':'HOLD'));
+        }
+        if(url.pathname==='/api/deriv/demo/check')return json(await demo.checkDemoSettlement());
         if(url.pathname==='/api/deriv/connect'){
           // Read at most 1 KiB; this route accepts only a public application id.
           const reader=request.body?.getReader();if(!reader)return json({error:'Falta el identificador de aplicación'},400);
