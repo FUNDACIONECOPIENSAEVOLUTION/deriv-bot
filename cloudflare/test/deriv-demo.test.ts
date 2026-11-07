@@ -139,7 +139,7 @@ it('permits owner-only manual DEMO after OAuth while blocking unauthenticated ca
   expect((await request('/api/deriv/demo/check',{method:'POST'})).r.status).toBe(401);
   expect((await request('/api/deriv/demo/buy-once',{method:'POST',headers,body:'{}'})).r.status).toBe(403);
   expect(await errorFrom(env.DERIV_DEMO.getByName('safety-state'),d=>d.buyDemoOnce('UP')))
-    .toBe('DERIV_DEMO_REQUIRED');
+    .toBe('DEMO_EXECUTION_DISABLED');
   expect(calls).toEqual([]);
 });
 it('persists virtual settlement reports separately from PAPER while leaving unresolved orders blocked',async()=>{
