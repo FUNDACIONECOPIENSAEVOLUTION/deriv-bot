@@ -1,0 +1,51 @@
+name: Publicar Deriv DEMO en Cloudflare — aprobación manual
+on:
+  workflow_dispatch:
+    inputs:
+      confirmacion:
+        description: 'Escribir PUBLICAR_SOLO_LECTURA para subir el panel con las compras DEMO APAGADAS'
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: cloudflare-demo-manual-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: ${{ inputs.confirmacion == 'PUBLICAR_SOLO_LECTURA' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: deriv-demo
+    defaults:
+      run:
+        working-directory: cloudflare
+    env:
+      CF_SEND_TELEMETRY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Instalar herramientas oficiales con dependencias fijadas
+        run: npm ci --no-audit --no-fund
+      - name: Verificar compilación, reglas DEMO y protección de dinero real
+        run: |
+          npm run typecheck
+          npm test
+          npm run build
+          npx cf deploy --prebuilt --mode production --dry-run
+      - name: Confirmar que las compras DEMO automáticas siguen desactivadas
+        run: |
+          grep -F 'DEMO_BUY_ENABLED: bindings.text("false")' cloudflare.config.ts
+          grep -F 'DEMO_AUTO_ENABLED: bindings.text("false")' cloudflare.config.ts
+      - name: Validar acceso seguro y publicar panel sin operaciones
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Configura las credenciales SOLO en GitHub Actions Secrets; no en código."
+            exit 1
+          fi
+          npx cf deploy --prebuilt --mode production --message "Deriv DEMO preflight; compra desactivada por seguridad"
