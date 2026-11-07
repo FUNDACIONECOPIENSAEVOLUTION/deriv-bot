@@ -5,6 +5,7 @@ import { PublicFeed, type MarketStatus } from '../../runtime/feed.mjs';
 import dashboard from '../../runtime/dashboard.html?raw';
 import release from '../../release.json';
 import { PublicSocket } from './public-socket';
+import { checkPublicContractCompatibility } from './deriv-contracts';
 import { readPublicArbitrageSnapshot } from '../../runtime/cross-exchange.mjs';
 export { DerivDemoConnection } from './deriv-demo';
 
@@ -199,7 +200,7 @@ export default {
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -209,6 +210,10 @@ export default {
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
         if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
+        if(url.pathname==='/api/deriv/market-check'){
+          // Public, READ ONLY contracts_for; never sends a buy or changes the broker account.
+          return json(await checkPublicContractCompatibility());
+        }
         if(url.pathname==='/api/deriv/quote'){
           // Price discovery only; no purchase, select CALL or PUT explicitly.
           const raw=await request.text();
