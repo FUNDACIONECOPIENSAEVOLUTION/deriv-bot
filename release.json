@@ -1,11 +1,10 @@
 {
-  "version": "5.2",
-  "updatedAt": "2026-11-07T23:22:56.186Z",
-  "summary": "Usar snapshot de riesgo persistente en reserva DEMO y bloquear sesiones pendientes",
+  "version": "5.3",
+  "updatedAt": "2026-11-07T23:28:36.248Z",
+  "summary": "Reparar primera compra DEMO con puente autenticado de navegador ante fallo WebSocket Cloudflare",
   "changes": [
-    "Usar snapshot de riesgo persistente en reserva DEMO y bloquear sesiones pendientes",
-    "Crear puente DEMO manual con OTP temporal, reserva durable y liquidación marcada como observada por navegador"
+    "Reparar primera compra DEMO con puente autenticado de navegador ante fallo WebSocket Cloudflare"
   ],
-  "sourceCommit": "88d8949c44dfd27dc1f21d27094a8ba2fdf6bf5f",
+  "sourceCommit": "b556ebdf057ce49788957b95d109afd2c37afe3f",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

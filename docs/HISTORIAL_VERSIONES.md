@@ -43,6 +43,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.3 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:28:36.248Z (UTC).
+- **Commit de origen:** `b556ebdf057c`.
+- Reparar primera compra DEMO con puente autenticado de navegador ante fallo WebSocket Cloudflare
+
 ## v5.2 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:22:56.186Z (UTC).
