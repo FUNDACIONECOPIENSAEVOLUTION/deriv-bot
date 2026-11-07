@@ -137,6 +137,22 @@ it('allows quote requests only to the owner and never quotes without a connected
   expect(calls).toEqual([]);
 });
 
+it('accepts current 35/50/75/100-cent DEMO stakes at the HTTP boundary and rejects obsolete stakes',async()=>{
+  for(const stakeCents of [35,50,75,100]){
+    const result=await request('/api/deriv/quote',{method:'POST',headers,
+      body:JSON.stringify({direction:'UP',stakeCents})});
+    // No DEMO OAuth in test: reaches the broker-only guard rather than rejecting the stake.
+    expect(result.r.status).toBe(503);
+    expect(JSON.parse(result.body).code).toBe('DERIV_DEMO_REQUIRED');
+  }
+  for(const stakeCents of [10,25,30,200]){
+    const result=await request('/api/deriv/quote',{method:'POST',headers,
+      body:JSON.stringify({direction:'UP',stakeCents})});
+    expect(result.r.status).toBe(400);
+    expect(JSON.parse(result.body).error).toBe('Importe virtual no permitido');
+  }
+  expect(calls).toEqual([]);
+});
 it('permits owner-only manual DEMO after OAuth while blocking unauthenticated calls',async()=>{
   const status=await env.DERIV_DEMO.getByName('safety-state').status();
   // Miniflare intentionally leaves DEMO_BUY_ENABLED unset to test fail-closed behavior.
