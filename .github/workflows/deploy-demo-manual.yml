@@ -41,6 +41,8 @@ jobs:
           npm test
           npm run build
           npx cf deploy --prebuilt --mode production --dry-run
+      - name: Rechazar HTML DEMO roto o scripts duplicados antes de desplegar
+        run: (cd .. && node tests/test_html.mjs)
       - name: Bloquear importes obsoletos y exigir la misma lista en HTTP y riesgo DEMO
         run: |
           grep -F 'DEMO_STAKES_CENTS=Object.freeze([35,50,75,100]' src/demo-risk-policy.ts
@@ -63,3 +65,28 @@ jobs:
             exit 1
           fi
           npx cf deploy --prebuilt --mode production --message "Deriv DEMO manual habilitada; automatización solo opt-in después de liquidación"
+      - name: Comprobar desde Internet la versión realmente servida por Cloudflare
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          const release=JSON.parse(readFileSync('../release.json','utf8'));
+          const expected=release.version+'.0';
+          const url='https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/api/health';
+          let verified=false;
+          for(let attempt=1;attempt<=6;attempt++){
+            try{
+              const response=await fetch(url,{signal:AbortSignal.timeout(10000)});
+              if(!response.ok)throw Error('HTTP_'+response.status);
+              const state=await response.json();
+              if(state.status==='ok'&&state.version===expected){
+                console.log('WORKER_LIVE_VERSION_VERIFIED '+expected+' (DEMO; no purchases)');
+                verified=true;break;
+              }
+              console.log('WORKER_VERSION_MISMATCH expected='+expected+' got='+String(state.version).slice(0,20));
+            }catch(error){
+              console.log('WORKER_HEALTH_RETRY '+attempt+' '+(error instanceof Error?error.name:'ERROR'));
+            }
+            if(attempt<6)await new Promise(resolve=>setTimeout(resolve,4000));
+          }
+          if(!verified)process.exitCode=1;
+          JS
