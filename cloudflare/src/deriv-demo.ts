@@ -8,6 +8,7 @@ const random=()=>encode(crypto.getRandomValues(new Uint8Array(32)));
 const epoch=()=>Math.floor(Date.now()/1000);
 type DemoAccount={account_id:string;account_type:'demo';currency:'USD';balance:number};
 type Credentials={accessToken:string;expiresAt:number;accountId:string};
+type Discovery={at:number;total:number;demo:number;demoUsd:number;activeDemoUsd:number;missingType:number;missingStatus:number;stringBalances:number;migration:string};
 
 export async function boundedJson(response:Response,limit=32768):Promise<unknown> {
   if(!response.ok){await response.body?.cancel();throw Error('DERIV_HTTP_'+response.status);}
@@ -54,7 +55,24 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return JSON.parse(new TextDecoder().decode(raw)) as T;
   }
   private async accounts(accessToken:string,accountId?:string){
-    return selectDemo(await boundedJson(await fetch(API,{headers:{Authorization:'Bearer '+accessToken},redirect:'manual',signal:AbortSignal.timeout(8000)})),accountId);
+    const payload=await boundedJson(await fetch(API,{headers:{Authorization:'Bearer '+accessToken},redirect:'manual',signal:AbortSignal.timeout(8000)}));
+    const rows=payload&&typeof payload==='object'&&'data' in payload&&Array.isArray(payload.data)?payload.data:[];
+    const discovery:Discovery={at:epoch(),total:rows.length,demo:rows.filter(a=>a?.account_type==='demo').length,
+      demoUsd:rows.filter(a=>a?.account_type==='demo'&&a?.currency==='USD').length,
+      activeDemoUsd:rows.filter(a=>a?.account_type==='demo'&&a?.currency==='USD'&&a?.status==='active').length,
+      missingType:rows.filter(a=>!a||typeof a.account_type!=='string').length,missingStatus:rows.filter(a=>!a||typeof a.status!=='string').length,
+      stringBalances:rows.filter(a=>typeof a?.balance==='string').length,migration:'not_checked'};
+    this.write('discovery',discovery);
+    try{return selectDemo(payload,accountId);}catch(error){
+      // Diagnose only the migration state. Never expose a token, raw account list or real balance.
+      try{const migration=await boundedJson(await fetch('https://api.derivws.com/trading/v1/options/legacy/migration-status',{
+        headers:{Authorization:'Bearer '+accessToken},redirect:'manual',signal:AbortSignal.timeout(4500)}),8192);
+        if(migration&&typeof migration==='object'&&'data' in migration&&migration.data&&typeof migration.data==='object'&&'status' in migration.data
+          &&typeof migration.data.status==='string'&&['pending','complete','failed','not_applicable'].includes(migration.data.status))discovery.migration=migration.data.status;
+        else discovery.migration='unknown';
+      }catch{discovery.migration='unavailable';}
+      this.write('discovery',discovery);throw error;
+    }
   }
   async begin(clientId:string,origin:string){
     if(!/^[A-Za-z0-9_-]{1,128}$/.test(clientId))throw Error('DERIV_CLIENT_ID_REQUIRED');
@@ -92,7 +110,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const connected=!!saved&&saved.expiresAt>epoch()&&!!this.read('credentials');
     return {mode:'DERIV_DEMO',connected,executionEnabled:false,aiConnected:false,clientId:this.read<string>('clientId')||'',
       account:connected&&saved?{type:'demo',currency:'USD',label:'Demo · …'+saved.account.account_id.slice(-4),balance:saved.account.balance,checkedAt:saved.checkedAt}:null,
-      state:connected?'DEMO_VERIFIED':saved?'AUTHORIZATION_EXPIRED':'NOT_CONNECTED'};
+      discovery:this.read<Discovery>('discovery'),state:connected?'DEMO_VERIFIED':saved?'AUTHORIZATION_EXPIRED':this.read('discovery')?'DEMO_ACCOUNT_NOT_VERIFIED':'NOT_CONNECTED'};
   }
   async refresh(){
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');

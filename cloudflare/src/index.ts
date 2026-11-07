@@ -208,6 +208,8 @@ export default {
       if(url.pathname.startsWith('/api/deriv/')){
         const code=error instanceof Error&&/^(DERIV_[A-Z0-9_]+)$/.test(error.message)?error.message:'DERIV_CONNECTION_FAILED';
         console.error(JSON.stringify({type:'deriv_demo_connection_failed',path:url.pathname,code}));
+        if(url.pathname==='/api/deriv/callback')return new Response(null,{status:303,headers:{...security,Location:url.origin+'/?deriv=verification_failed',
+          'Set-Cookie':'ecopiensa_deriv_state=; Path=/api/deriv; Secure; HttpOnly; SameSite=Lax; Max-Age=0'}});
         return json({error:'No se pudo verificar la cuenta demo de Deriv',code},503);
       }
       const code=url.pathname==='/api/market'
