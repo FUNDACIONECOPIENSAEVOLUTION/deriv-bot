@@ -1,5 +1,11 @@
 name: Publicar Deriv DEMO en Cloudflare — aprobación manual
 on:
+  # One deployment attempt after the workflow is installed or revised on main.
+  # Every deployment keeps both broker DEMO buy switches OFF.
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-demo-manual.yml
   workflow_dispatch:
     inputs:
       confirmacion:
@@ -13,7 +19,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   deploy:
-    if: ${{ inputs.confirmacion == 'PUBLICAR_SOLO_LECTURA' }}
+    if: ${{ github.event_name == 'push' || inputs.confirmacion == 'PUBLICAR_SOLO_LECTURA' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: deriv-demo
