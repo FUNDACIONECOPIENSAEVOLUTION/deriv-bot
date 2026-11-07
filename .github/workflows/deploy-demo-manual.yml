@@ -55,6 +55,13 @@ jobs:
           grep -F 'DEMO_AUTO_ENABLED: bindings.text("true")' cloudflare.config.ts
           grep -F "if(!await demo.isDemoAutoEnabled())return;" src/index.ts
           grep -F "/trading/v1/options/ws/demo" src/demo-trade-guards.ts
+      - name: Validar la ruta alternativa DEMO sin habilitar cuenta REAL
+        run: |
+          grep -F 'oneBrowserDemoBuy' ../runtime/dashboard.html
+          grep -F "connect-src 'self' wss://api.derivws.com;" src/index.ts
+          grep -F 'beginBrowserPilot' src/deriv-demo.ts
+          grep -F 'requireFirstDemoSettlement(verified)' src/deriv-demo.ts
+          grep -F 'DEMO_BROWSER_CHANNEL_FORBIDDEN' ../runtime/dashboard.html
       - name: Validar acceso seguro y publicar panel sin operaciones
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -90,7 +97,7 @@ jobs:
           }
           if(!verified)process.exitCode=1;
           JS
-      - name: Verificar WebSocket saliente real desde Cloudflare sin comprar
+      - name: Diagnosticar WebSocket Cloudflare y su fallback manual desde el navegador
         run: |
           node --input-type=module <<'JS'
           const url='https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/api/health/deriv-socket';
@@ -100,7 +107,13 @@ jobs:
             status:result.status,version:result.version,code:result.code||null,
             markets:Array.isArray(result.markets)?result.markets.map(({symbol,state,call,put})=>({symbol,state,call,put})):null
           }));
-          if(!response.ok||result.status!=='CONNECTED'||result.mode!=='PUBLIC_READ_ONLY'||result.readOnly!==true){
+          if(result.mode!=='PUBLIC_READ_ONLY'||result.readOnly!==true){
+            process.exitCode=1;
+          }else if(result.status==='CONNECTED'){
+            console.log('Cloudflare puede conectar con Deriv directamente.');
+          }else if(result.status==='UNAVAILABLE'&&['DERIV_SOCKET_CONNECT_ERROR','DERIV_SOCKET_CONNECT_CLOSED','DERIV_SOCKET_FAILED'].includes(result.code)){
+            console.log('CLOUDFLARE_EGRESS_BLOCKED: la primera compra DEMO requiere el puente explícito de navegador; no se realizaron compras.');
+          }else{
             process.exitCode=1;
           }
           JS
