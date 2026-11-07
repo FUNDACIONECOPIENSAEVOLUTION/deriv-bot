@@ -275,6 +275,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       history:history.map(r=>({id:r.id,date:r.date,state:r.state,contractId:r.contract_id,
         buyCents:r.buy_cents,payoutCents:r.payout_cents,pnlCents:r.pnl_cents,
         code:r.code,createdAt:r.created_at,entrySpot:r.entry_spot??null,exitSpot:r.exit_spot??null,
+        contractType:r.contract_type==='PUT'?'PUT':r.contract_type==='CALL'?'CALL':null,
         decision:r.decision_json?JSON.parse(r.decision_json):null}))
     };
   }
