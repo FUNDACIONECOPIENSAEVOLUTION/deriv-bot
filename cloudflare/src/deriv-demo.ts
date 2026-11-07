@@ -270,7 +270,10 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return {mode:'DERIV_DEMO',connected,executionEnabled:false,aiConnected:false,clientId:this.read<string>('clientId')||'',
       account:connected&&saved?{type:'demo',currency:'USD',label:'Demo · …'+saved.account.account_id.slice(-4),balance:saved.account.balance,checkedAt:saved.checkedAt}:null,
       discovery:this.read<Discovery>('discovery'),state:connected?'DEMO_VERIFIED':saved?'AUTHORIZATION_EXPIRED':this.read('discovery')?'DEMO_ACCOUNT_NOT_VERIFIED':'NOT_CONNECTED',
-      demoTradingEnabled:String(this.env.DEMO_BUY_ENABLED)==='true',tradeReport:this.reportDemo()};
+      demoTradingEnabled:String(this.env.DEMO_BUY_ENABLED)==='true',
+      demoAutomationAvailable:String(this.env.DEMO_AUTO_ENABLED)==='true',
+      demoAutomationRequested:this.read<boolean>('demo-auto')===true,
+      tradeReport:this.reportDemo()};
   }
   async refresh(){
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');
@@ -328,6 +331,24 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * Cloudflare owner changes DEMO_BUY_ENABLED from its safe 'false' default.
    * PAPER signals must be fresh and upward; a real account never qualifies.
    */
+  async setDemoAutomation(enabled:boolean) {
+    if(typeof enabled!=='boolean')throw Error('DEMO_AUTO_INVALID');
+    if(enabled){
+      if(String(this.env.DEMO_AUTO_ENABLED)!=='true'||String(this.env.DEMO_BUY_ENABLED)!=='true')
+        throw Error('DEMO_AUTO_DISABLED');
+      await this.verifiedDemoCredentials();
+      if(!this.reportDemo().dayRisk.allowed)throw Error('DEMO_RISK_NOT_READY');
+    }
+    this.write('demo-auto',enabled);
+    return {mode:'DERIV_DEMO',autoEnabled:enabled,tradeReport:this.reportDemo()};
+  }
+
+  isDemoAutoEnabled(){
+    return this.read<boolean>('demo-auto')===true
+      &&String(this.env.DEMO_AUTO_ENABLED)==='true'
+      &&String(this.env.DEMO_BUY_ENABLED)==='true';
+  }
+
   async buyDemoOnce(paperSignal:'UP'|'DOWN'|'HOLD',evidence?:{
     reason?:string;fast?:number|null;slow?:number|null;rsi?:number|null;
     volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
