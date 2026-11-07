@@ -1,5 +1,5 @@
 import { dayAt } from '../../runtime/core.mjs';
-import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES } from './demo-risk-policy';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
@@ -210,11 +210,17 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const pending=this.ctx.storage.sql.exec<{state:string;buy_cents:number|null}>(
       "SELECT state,buy_cents FROM demo_trades WHERE state IN ('OPEN','UNKNOWN')"
     ).toArray();
-    // Count all broker-confirmed or unresolved purchases for the FIRST ten-trade pilot.
-    // Rejections do not consume the virtual pilot budget.
-    const pilot=this.ctx.storage.sql.exec<{trades:number;spent:number}>(
-      "SELECT COUNT(*) AS trades, COALESCE(SUM(buy_cents),0) AS spent FROM demo_trades WHERE state IN ('OPEN','UNKNOWN','SETTLED')"
-    ).one();
+    // Rejections do not consume the campaign budget; unknown orders count
+    // provisionally, to prevent a reconnect from generating duplicate buys.
+    const booked=this.ctx.storage.sql.exec<{state:string;buy_cents:number|null}>(
+      "SELECT state,buy_cents FROM demo_trades WHERE state IN ('OPEN','UNKNOWN','SETTLED') ORDER BY id ASC"
+    ).toArray();
+    const pilot={trades:booked.length,spent:booked.reduce((sum,r)=>sum+(r.buy_cents??100),0)};
+    const batchStart=Math.floor(pilot.trades/DEMO_REVIEW_INTERVAL)*DEMO_REVIEW_INTERVAL;
+    const batchCommittedCents=booked.slice(batchStart).reduce((sum,r)=>sum+(r.buy_cents??100),0);
+    const batchSettlementPending=pilot.trades>0&&pilot.trades<DEMO_PILOT_MAX_PURCHASES
+      &&pilot.trades%DEMO_REVIEW_INTERVAL===0
+      &&booked.slice(-DEMO_REVIEW_INTERVAL).some(r=>r.state!=='SETTLED');
     return {brokerBalanceCents:currentBalance??null,
       baselineBalanceCents:DEMO_BASELINE_EXPECTED_CENTS,
       halted:this.read<boolean>('demo-loss-halt')===true,
@@ -222,7 +228,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
       openContracts:pending.filter(p=>p.state==='OPEN').length,
       unknownCount:pending.filter(p=>p.state==='UNKNOWN').length,
       exposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||100),0),
-      pilotPurchases:pilot.trades,pilotCommittedCents:pilot.spent};
+      pilotPurchases:pilot.trades,pilotCommittedCents:pilot.spent,
+      batchCommittedCents,batchSettlementPending};
   }
   private chosenMaxConcurrent(){
     const value=this.read<number>('demo-max-concurrent')??10;
@@ -259,6 +266,20 @@ export class DerivDemoConnection extends DurableObject<Env> {
       "SELECT buy_cents AS stake, COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED' GROUP BY buy_cents ORDER BY buy_cents"
     ).toArray().map(r=>({stakeCents:r.stake,settled:r.settled,wins:r.wins,
       netCents:r.net,winRatePct:r.settled?Math.round(r.wins/r.settled*10000)/100:null}));
+    const bookedTrades=sql.exec<{state:string;buy_cents:number|null;pnl_cents:number|null}>(
+      "SELECT state,buy_cents,pnl_cents FROM demo_trades WHERE state IN ('OPEN','UNKNOWN','SETTLED') ORDER BY id ASC"
+    ).toArray();
+    const batches=Array.from({length:DEMO_BATCH_COUNT},(_,i)=>{
+      const entries=bookedTrades.slice(i*DEMO_REVIEW_INTERVAL,(i+1)*DEMO_REVIEW_INTERVAL);
+      const settled=entries.filter(r=>r.state==='SETTLED');
+      const wins=settled.filter(r=>(r.pnl_cents??0)>0).length;
+      const losses=settled.filter(r=>(r.pnl_cents??0)<0).length;
+      return {number:i+1,purchases:entries.length,settled:settled.length,wins,losses,
+        committedCents:entries.reduce((sum,r)=>sum+(r.buy_cents??100),0),
+        pnlCents:settled.reduce((sum,r)=>sum+(r.pnl_cents??0),0),
+        complete:entries.length===DEMO_REVIEW_INTERVAL&&settled.length===DEMO_REVIEW_INTERVAL,
+        winRatePct:settled.length?Math.round(wins/settled.length*10000)/100:null};
+    });
     const quoteRejections=sql.exec<{stake:number;attempts:number;rejections:number}>(
       "SELECT stake_cents AS stake, COUNT(*) AS attempts, COALESCE(SUM(CASE WHEN accepted=0 THEN 1 ELSE 0 END),0) AS rejections FROM demo_quote_checks GROUP BY stake_cents ORDER BY stake_cents"
     ).toArray().map(r=>({...r,stakeCents:r.stake}));
@@ -273,6 +294,13 @@ export class DerivDemoConnection extends DurableObject<Env> {
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
       virtualResearchAllocationCents:DEMO_PILOT_BUDGET_CENTS,
       pilotMaxPurchases:DEMO_PILOT_MAX_PURCHASES,
+      batchCount:DEMO_BATCH_COUNT,
+      batchMaxPurchases:DEMO_REVIEW_INTERVAL,
+      batchBudgetCents:DEMO_BATCH_BUDGET_CENTS,
+      batchNumber:Math.min(DEMO_BATCH_COUNT,1+Math.floor(raw.pilotPurchases/DEMO_REVIEW_INTERVAL)),
+      batchSettlementPending:raw.batchSettlementPending,
+      batchCommittedCents:raw.batchCommittedCents,
+      batches,
       pilotPurchases:raw.pilotPurchases,
       pilotRemainingPurchases:Math.max(0,DEMO_PILOT_MAX_PURCHASES-raw.pilotPurchases),
       pilotCommittedCents:raw.pilotCommittedCents,
@@ -485,7 +513,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
           lifetimeNetCents:risk.lifetimeNetCents,brokerBalanceCents:risk.brokerBalanceCents,
           baselineBalanceCents:risk.baselineBalanceCents,halted:risk.halted,
           maxConcurrent:this.chosenMaxConcurrent(),
-          pilotPurchases:risk.pilotPurchases,pilotCommittedCents:risk.pilotCommittedCents
+          pilotPurchases:risk.pilotPurchases,pilotCommittedCents:risk.pilotCommittedCents,
+          batchCommittedCents:risk.batchCommittedCents,batchSettlementPending:risk.batchSettlementPending
         });
         if(answer.price!==stakeCents/100)throw Error('DEMO_STAKE_CHANGED');
         this.ctx.storage.sql.exec(
@@ -517,7 +546,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
         exposureCents:current.exposureCents,lifetimeNetCents:current.lifetimeNetCents,
         brokerBalanceCents:current.brokerBalanceCents,baselineBalanceCents:current.baselineBalanceCents,
         halted:current.halted,maxConcurrent:this.chosenMaxConcurrent(),
-        pilotPurchases:current.pilotPurchases,pilotCommittedCents:current.pilotCommittedCents
+        pilotPurchases:current.pilotPurchases,pilotCommittedCents:current.pilotCommittedCents,
+        batchCommittedCents:current.batchCommittedCents,batchSettlementPending:current.batchSettlementPending
       },reserve,acknowledge
     });
     this.ctx.storage.sql.exec(
@@ -558,6 +588,10 @@ export class DerivDemoConnection extends DurableObject<Env> {
         result.profitCents,result.payoutCents,result.entrySpot??null,result.exitSpot??null,
         pending.id,pending.contractId
       );
+      const batchState=this.getRiskSnapshot();
+      if(batchState.pilotPurchases>=DEMO_PILOT_MAX_PURCHASES
+         &&batchState.openContracts===0&&batchState.unknownCount===0)
+        this.write('demo-auto',false);
       return {state:'SETTLED',settlement:result,tradeReport:this.reportDemo()};
     }
     return {state:'OPEN',tradeReport:this.reportDemo()};
