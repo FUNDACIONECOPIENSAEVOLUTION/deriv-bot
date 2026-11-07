@@ -43,7 +43,7 @@
 <p id="demo-quote" class="note" role="status">Solo se consultará un precio al broker. No se comprará ningún contrato y no se incrementará el importe si Deriv lo rechaza.</p>
 <div class="divider"></div>
 <h2>Prueba con operaciones reales en la cuenta DEMO (saldo virtual)</h2>
-<p class="note">Primera prueba: 10 compras virtuales como máximo, US$10 de presupuesto bruto total, con importes de US$0,10, US$0,25, US$0,50 y US$1. Elige entre 1 y 10 posiciones simultáneas. Una vez termine la primera tanda, el bot bloquea nuevas compras para revisar los aciertos y pérdidas. Existe además un límite de seguridad de US$100 frente al saldo oficial de US$10.000. La cuenta real permanece deshabilitada.</p>
+<p class="note">Entrenamiento ampliado: cinco tandas de diez contratos DEMO (50 en total), con máximo US$10 virtuales por tanda y US$50 de compras acumuladas. Importes individuales US$0,10, US$0,25, US$0,50 y US$1. Configura de 1 a 10 posiciones simultáneas. El bot espera que los diez contratos de cada tanda queden liquidados por Deriv antes de iniciar la siguiente. Parada adicional al llegar a US$9.900 de saldo oficial o ante operaciones sin confirmación. Cuenta real permanentemente excluida.</p>
 <div class="tools">
   <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
   <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
@@ -53,7 +53,7 @@
 </div>
 <p id="demo-trade-status" class="note" role="status">Sin operaciones DEMO verificadas.</p>
 <p id="demo-trade-summary" class="note">El historial PAPER superior no equivale a resultados de contratos del broker.</p>
-<p id="demo-daily-risk" class="note">Esperando saldo oficial DEMO.</p><p id="demo-stake-stats" class="note">Importes: sin resultados aún.</p>
+<p id="demo-daily-risk" class="note">Esperando saldo oficial DEMO.</p><p id="demo-stake-stats" class="note">Importes: sin resultados aún.</p><p id="demo-batch-stats" class="note">Tandas: sin contratos DEMO confirmados.</p>
 <div class="divider"></div>
 <h2>Diagnóstico del rendimiento · DEMO</h2>
 <p id="demo-diagnostics" class="note">El informe de entrenamiento aparecerá después de registrar contratos realmente liquidados por Deriv.</p>
@@ -205,8 +205,9 @@ function renderDemo(data){
     !data.demoAutomationRequested);
   $('demo-auto-stop').disabled=!(data.connected&&data.demoAutomationRequested);
   $('demo-check').disabled=!(data.connected&&(report.openCount||0)>0);
-  $('demo-trade-summary').textContent='Primera prueba: '+(report.pilotPurchases||0)+'/10 compras DEMO'
-    +' · Presupuesto bruto virtual restante: '+money(report.pilotRemainingBudgetCents??1000)
+  $('demo-trade-summary').textContent='Entrenamiento: '+(report.pilotPurchases||0)+'/50 compras DEMO'
+    +' · Tanda '+(report.batchNumber||1)+'/5 (10 compras cada una, máximo US$10 por tanda)'
+    +' · Presupuesto bruto virtual restante de las cinco tandas: '+money(report.pilotRemainingBudgetCents??5000)
     +' · Segunda protección: parada del saldo DEMO al llegar a US$9.900'
      +' · Abiertos: '+(report.openCount||0)+'/'+selectedConcurrent
     +' · Saldo DEMO comprobado: '+(report.brokerBalanceCents===null?'sin verificar':money(report.brokerBalanceCents))
@@ -223,7 +224,13 @@ function renderDemo(data){
     :eligible?'Señal válida '+(state.decision.direction===1?'CALL ↑':'PUT ↓')+
       (data.demoAutomationRequested?' · modo automático solicitado.':' · puedes enviar una operación DEMO.')
     :'Sin señal reciente verificable: no se permite comprar.';
-  $('demo-daily-risk').textContent='Primera tanda: '+(report.pilotRemainingPurchases??10)+' operaciones por comprar, presupuesto máximo US$10 virtuales. Se bloqueará al completar diez compras o agotar el presupuesto. Parada adicional por pérdida de US$100 respecto de US$10.000, contando contratos abiertos. Automatización: '+(data.demoAutomationRequested?'solicitada':'detenida')+'.';
+  $('demo-daily-risk').textContent='Cinco tandas: '+(report.pilotRemainingPurchases??50)+' contratos por comprar, presupuesto de cada tanda US$10 virtuales, total máximo US$50. Al completar diez compras se espera su liquidación y se calcula el rendimiento antes del siguiente bloque. Parada adicional si el saldo oficial cae US$100 desde US$10.000, contando exposición. Automatización: '+(data.demoAutomationRequested?'solicitada':'detenida')+'.';
+  const batchSummary=report.batches||[];
+  $('demo-batch-stats').textContent=batchSummary.length
+    ?batchSummary.map(b=>'Tanda '+b.number+': '+b.purchases+'/10 comprados, '+b.settled+' liquidados'
+        +', '+b.wins+' aciertos, '+b.losses+' pérdidas, neto '+money(b.pnlCents)
+        +', '+(b.complete?'completa':'en espera')).join(' | ')
+    :'Tandas: sin contratos DEMO verificados.';
   const stakes=report.byStake||[],quotes=report.quoteAcceptance||[];
   $('demo-stake-stats').textContent=[10,25,50,100].map(n=>{
     const x=stakes.find(s=>s.stakeCents===n),q=quotes.find(t=>t.stakeCents===n);
@@ -303,7 +310,7 @@ $('deriv-quote').onclick=async()=>{
   finally{btn.disabled=false;}
 };
 $('demo-buy-once').onclick=async()=>{
-  if(!window.confirm('Confirmar UNA compra de US$0,10 a US$1 virtual (importe rotativo), duración 20 ticks, dentro de la primera tanda de 10 contratos y US$10 de presupuesto total. No se usará dinero real. ¿Continuar?'))return;
+  if(!window.confirm('Confirmar UNA compra de US$0,10 a US$1 virtual (importe rotativo), duración 20 ticks, dentro de cinco tandas de 10 contratos (US$10 máximo por tanda y US$50 total). No se usará dinero real. ¿Continuar?'))return;
   const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
   msg.textContent='Solicitando una sola operación en DEMO. Si se pierde la confirmación, el bot bloqueará nuevas compras.';
   try{
@@ -325,7 +332,7 @@ for(const kind of ['start','stop']){
     const start=kind==='start';
     const maxConcurrent=Number($('demo-max-concurrent').value);
     if(start&&(!Number.isSafeInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>10))return;
-    if(start&&!window.confirm('Autorizar únicamente DEMO, importes de US$0,10, US$0,25, US$0,50 y US$1, máximo '+maxConcurrent+' contratos simultáneos, PRIMERA TANDA máximo 10 compras con presupuesto US$10 virtuales y límite adicional de pérdida de US$100 del saldo de US$10.000. Nunca dinero real. ¿Activar?'))return;
+    if(start&&!window.confirm('Autorizar únicamente DEMO, importes de US$0,10, US$0,25, US$0,50 y US$1, máximo '+maxConcurrent+' contratos simultáneos, CINCO TANDAS de 10 compras (máximo US$10 por tanda; US$50 total) con espera de liquidación, y límite adicional de pérdida de US$100 del saldo de US$10.000. Nunca dinero real. ¿Activar?'))return;
     const btn=$('demo-auto-'+kind);btn.disabled=true;
     try{
       const r=await fetch('/api/deriv/demo/auto-'+kind,{
