@@ -63,7 +63,7 @@ export function requestDemoMessage(socket:WebSocket,message:Record<string,unknow
 }
 
 export function parseDemoProposalForBuy(raw:Record<string,unknown>,quotedAt:number,
-  direction:'UP'|'DOWN'='UP'):DemoQuoteForBuy {
+  direction:'UP'|'DOWN'='UP',stakeCents:number=100):DemoQuoteForBuy {
   const priced=parseDemoQuote(raw,direction);
   if(!priced.accepted)throw Error('DEMO_PROPOSAL_REJECTED');
   if(typeof priced.askPrice!=='number'||typeof priced.payout!=='number')throw Error('DEMO_PROPOSAL_INVALID_PRICE');
@@ -71,7 +71,7 @@ export function parseDemoProposalForBuy(raw:Record<string,unknown>,quotedAt:numb
   if(typeof proposal.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(proposal.id))
     throw Error('DEMO_PROPOSAL_ID_INVALID');
   return {id:proposal.id,askPrice:priced.askPrice,payout:priced.payout,
-    quotedAt,symbol:'R_100',contractType:direction==='UP'?'CALL':'PUT',durationTicks:20,stake:1};
+    quotedAt,symbol:'R_100',contractType:direction==='UP'?'CALL':'PUT',durationTicks:20,stakeCents};
 }
 
 export type DemoAttemptOutcome =
@@ -82,24 +82,25 @@ export type DemoAttemptOutcome =
 export type DemoBuySessionArgs={
   wsUrl:string;
   gate:Omit<DemoTradeGate,'socketUrl'|'quote'|'now'>;
+  stakeCents:number;
   reserve:(quote:DemoQuoteForBuy)=>Promise<number>;
   acknowledge:(intentId:number,ack:DemoBuyAck)=>Promise<void>;
 };
 export async function buyDemoOverSocket(socket:WebSocket,args:DemoBuySessionArgs):Promise<DemoAttemptOutcome> {
     if(args.gate.signal!=='UP'&&args.gate.signal!=='DOWN')throw Error('NO_APPROVED_SIGNAL');
-    const proposal=await requestDemoMessage(socket,{...demoQuoteRequest(args.gate.signal)});
+    const proposal=await requestDemoMessage(socket,{...demoQuoteRequest(args.gate.signal,args.stakeCents)});
     if(proposal.error||proposal.errors||proposal.msg_type!=='proposal'){
       // A rejected amount is never increased: report the denial and stop.
       return {state:'REJECTED',code:safeCode(proposal.error||(proposal.errors as unknown[])?.[0])};
     }
-    const quote=parseDemoProposalForBuy(proposal,Math.floor(Date.now()/1000),args.gate.signal);
+    const quote=parseDemoProposalForBuy(proposal,Math.floor(Date.now()/1000),args.gate.signal,args.stakeCents);
     const buy=buildDemoBuyRequest({...args.gate,quote,socketUrl:args.wsUrl,now:Math.floor(Date.now()/1000)});
     // reserve() creates a durable BUY_UNKNOWN intent and enforces daily quotas
     // synchronously. If it throws, no buy message is ever sent.
     const intent=await args.reserve(quote);
     try{
       const reply=await requestDemoMessage(socket,{...buy});
-      const ack=parseDemoBuyResponse(reply);
+      const ack=parseDemoBuyResponse(reply,args.stakeCents);
       await args.acknowledge(intent,ack);
       if(!ack.accepted)return {state:'REJECTED',code:ack.code};
       return {state:'OPEN',contractId:ack.contractId,buyCents:ack.buyCents,purchaseTime:ack.purchaseTime};
@@ -113,11 +114,11 @@ export async function buySingleDemoContract(args:DemoBuySessionArgs):Promise<Dem
   return withDemoSocket(args.wsUrl,socket=>buyDemoOverSocket(socket,args));
 }
 
-export async function readDemoSettlement(wsUrl:string,contractId:number,expectedType?:'CALL'|'PUT'):Promise<DemoSettlement|null> {
+export async function readDemoSettlement(wsUrl:string,contractId:number,expectedType?:'CALL'|'PUT',expectedStakeCents?:number):Promise<DemoSettlement|null> {
   if(!Number.isSafeInteger(contractId)||contractId<=0)throw Error('DEMO_CONTRACT_INVALID_ID');
   return withDemoSocket(wsUrl,async(socket)=>{
     const raw=await requestDemoMessage(socket,{proposal_open_contract:1,contract_id:contractId,req_id:3});
     if(raw.error||raw.errors)throw Error('DEMO_CONTRACT_STATUS_REJECTED');
-    return parseDemoSettlement(raw,contractId,expectedType);
+    return parseDemoSettlement(raw,contractId,expectedType,expectedStakeCents);
   });
 }
