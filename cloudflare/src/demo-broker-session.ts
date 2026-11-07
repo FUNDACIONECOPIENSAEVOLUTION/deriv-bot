@@ -65,6 +65,7 @@ export function requestDemoMessage(socket:WebSocket,message:Record<string,unknow
 export function parseDemoProposalForBuy(raw:Record<string,unknown>,quotedAt:number):DemoQuoteForBuy {
   const priced=parseDemoQuote(raw);
   if(!priced.accepted)throw Error('DEMO_PROPOSAL_REJECTED');
+  if(typeof priced.askPrice!=='number'||typeof priced.payout!=='number')throw Error('DEMO_PROPOSAL_INVALID_PRICE');
   const proposal=raw.proposal as Record<string,unknown>;
   if(typeof proposal.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(proposal.id))
     throw Error('DEMO_PROPOSAL_ID_INVALID');
