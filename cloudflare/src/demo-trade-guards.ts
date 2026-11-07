@@ -56,8 +56,9 @@ export function buildDemoBuyRequest(gate:DemoTradeGate){
   if(!/^[A-Za-z0-9_-]{32,128}$/.test(q.id))throw Error('DEMO_PROPOSAL_ID_INVALID');
   if(!Number.isSafeInteger(gate.now)||!Number.isSafeInteger(q.quotedAt)
     ||gate.now<q.quotedAt||gate.now-q.quotedAt>MAX_QUOTE_AGE_SECONDS)throw Error('DEMO_QUOTE_STALE');
-  if(cents(q.askPrice)===null||cents(q.askPrice)!==MAX_STAKE_CENTS
-    ||cents(q.payout)===null||cents(q.payout)!<MAX_STAKE_CENTS)throw Error('DEMO_PRICE_NOT_ALLOWED');
+  const askCents=cents(q.askPrice),payoutCents=cents(q.payout);
+  if(askCents!==MAX_STAKE_CENTS||payoutCents===null||payoutCents<MAX_STAKE_CENTS)
+    throw Error('DEMO_PRICE_NOT_ALLOWED');
   return Object.freeze({buy:q.id,price:0.10,req_id:2} as const);
 }
 
