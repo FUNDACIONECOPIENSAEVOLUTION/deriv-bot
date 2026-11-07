@@ -1,12 +1,10 @@
 {
-  "version": "4.2",
-  "updatedAt": "2026-11-07T22:32:11.753Z",
-  "summary": "Hacer test de aceptación de stakes robusto al estado OAuth no determinista; seguir rechazando valores antiguos",
+  "version": "4.3",
+  "updatedAt": "2026-11-07T22:34:47.638Z",
+  "summary": "Documentar diseño seguro de conexión MCP desde ChatGPT a Deriv DEMO",
   "changes": [
-    "Hacer test de aceptación de stakes robusto al estado OAuth no determinista; seguir rechazando valores antiguos",
-    "Comandos DEMO por texto en panel privado con mismas confirmaciones y bloqueo de cuenta real",
-    "Probar importes 0.35/0.50/0.75/1 en API de cotización para no volver a bloquear el primer contrato DEMO"
+    "Documentar diseño seguro de conexión MCP desde ChatGPT a Deriv DEMO"
   ],
-  "sourceCommit": "9f711ecf2f8d9a4486c004687e5a96e5f95088be",
+  "sourceCommit": "153218db35570f72e3057726308d8fe1b1e5e4ca",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

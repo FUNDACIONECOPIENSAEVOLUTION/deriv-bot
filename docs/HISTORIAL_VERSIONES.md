@@ -33,6 +33,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.3 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T22:34:47.638Z (UTC).
+- **Commit de origen:** `153218db3557`.
+- Documentar diseño seguro de conexión MCP desde ChatGPT a Deriv DEMO
+
 ## v4.2 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T22:32:11.753Z (UTC).
