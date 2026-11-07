@@ -1,3 +1,4 @@
+import { openDerivSocket } from './deriv-websocket';
 import { demoQuoteRequest, demoSocketUrl, parseDemoQuote } from './deriv-demo';
 import { buildDemoBuyRequest, parseDemoBuyResponse, parseDemoSettlement,
   type DemoBuyAck, type DemoQuoteForBuy, type DemoSettlement, type DemoTradeGate } from './demo-trade-guards';
@@ -18,15 +19,7 @@ export function validateDemoBrokerUrl(url:string):string {
 
 export async function withDemoSocket<T>(wsUrl:string,work:(socket:WebSocket)=>Promise<T>):Promise<T> {
   validateDemoBrokerUrl(wsUrl);
-  const response=await fetch(wsUrl.replace(/^wss:/,'https:'),{
-    headers:{Upgrade:'websocket'},redirect:'manual',signal:AbortSignal.timeout(8000)
-  });
-  const socket=response.webSocket;
-  if(response.status!==101||!socket) {
-    await response.body?.cancel();
-    throw Error('DEMO_WEBSOCKET_UNAVAILABLE');
-  }
-  socket.accept();
+  const socket=await openDerivSocket(wsUrl,'demo',8000);
   try{return await work(socket);}
   finally{try{socket.close(1000,'Demo session finished');}catch{/* already closed */}}
 }
