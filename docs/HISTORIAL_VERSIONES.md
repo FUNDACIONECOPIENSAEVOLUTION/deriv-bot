@@ -7,6 +7,17 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 **Importante:** el número de versión del software **no significa** que el bot haya comprado contratos o mejorado su porcentaje de aciertos. PAPER, DEMO y dinero real se mantienen distinguidos. La versión en el Worker se informa directamente mediante `/api/health`. Si la publicación de una plataforma falla, puede conservar una versión anterior: esta diferencia se debe mostrar, no ocultar.
 
 
+
+## v1.7 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T19:53:23.600Z (UTC).
+- **Commit de origen:** `b4a43690ac1b`.
+- Probar cinco tandas de diez, sus liquidaciones y parada tras 50 contratos DEMO
+- Mostrar en el panel cinco tandas DEMO, aciertos, pérdidas y límite de US$10 por tanda
+- Registrar cinco lotes de 10, revisar resultados al liquidar y detener tras 50 operaciones DEMO
+- Aplicar límites de cada tanda y bloqueo hasta conciliar diez contratos DEMO
+- Preparar 5 tandas de 10 compras Deriv DEMO, presupuesto virtual US$10 por tanda y límite total 50
+
 ## v1.6 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T19:43:13.220Z (UTC).

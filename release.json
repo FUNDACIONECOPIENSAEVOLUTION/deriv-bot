@@ -1,21 +1,14 @@
 {
-  "version": "1.6",
-  "updatedAt": "2026-11-07T19:43:13.220Z",
-  "summary": "Activar actualización incremental +0,1, changelog y despliegue sincronizado Pages/Cloudflare",
+  "version": "1.7",
+  "updatedAt": "2026-11-07T19:53:23.600Z",
+  "summary": "Probar cinco tandas de diez, sus liquidaciones y parada tras 50 contratos DEMO",
   "changes": [
-    "Activar actualización incremental +0,1, changelog y despliegue sincronizado Pages/Cloudflare",
-    "Exigir prueba de incremento v1.9 a v2.0 y manifiesto compartido en CI",
-    "Sincronizar automáticamente versión del paquete con manifiesto y changelog",
-    "Sincronizar versión de paquete y añadir validación del incremento automático",
-    "Comprobar versión del Worker desde release.json y registro de cambios real en HTML",
-    "Corregir expresión regular de versión en pruebas de manifest",
-    "Verificar manifiesto incremental y novedades visibles en GitHub Pages y panel Cloudflare",
-    "Publicar versión de manifiesto en Cloudflare HTML y health con escapado seguro de texto",
-    "Mostrar versión publicada y detalle de mejoras en panel privado de Cloudflare",
-    "Corregir validación de versiones decimales en portada pública",
-    "Mostrar versión incremental y última mejora con historial desde release.json en GitHub Pages",
-    "Añadir regla de incremento automático de 0,1 y changelog acumulativo para publicaciones"
+    "Probar cinco tandas de diez, sus liquidaciones y parada tras 50 contratos DEMO",
+    "Mostrar en el panel cinco tandas DEMO, aciertos, pérdidas y límite de US$10 por tanda",
+    "Registrar cinco lotes de 10, revisar resultados al liquidar y detener tras 50 operaciones DEMO",
+    "Aplicar límites de cada tanda y bloqueo hasta conciliar diez contratos DEMO",
+    "Preparar 5 tandas de 10 compras Deriv DEMO, presupuesto virtual US$10 por tanda y límite total 50"
   ],
-  "sourceCommit": "b0083dd3d2c61cb8f56556b96aadddcf5d7dc35d",
+  "sourceCommit": "b4a43690ac1b6bf72bab617bffddce0fc2236f34",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
