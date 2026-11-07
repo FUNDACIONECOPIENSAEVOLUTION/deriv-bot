@@ -53,6 +53,10 @@
   <button id="demo-auto-start" disabled>Activar evaluación automática DEMO</button>
   <button id="demo-auto-stop" disabled>Pausar evaluación automática</button>
 </div>
+<div class="tools" aria-label="Comandos seguros para la cuenta demo"><label for="demo-command">Comando de entrenamiento (solo DEMO)</label>
+<input id="demo-command" type="text" maxlength="80" autocomplete="off" placeholder="estado, cotizar, comprar demo, verificar, iniciar demo 3, pausar demo"/>
+<button type="button" id="demo-command-submit">Ejecutar comando seguro</button></div>
+<p id="demo-command-output" class="note" role="status">Estos comandos utilizan los botones, la autenticación y las confirmaciones existentes. No realizan operaciones reales.</p>
 <p id="demo-trade-status" class="note" role="status">Sin operaciones DEMO verificadas.</p>
 <p id="demo-trade-summary" class="note">El historial PAPER superior no equivale a resultados de contratos del broker.</p>
 <p id="demo-daily-risk" class="note">Esperando saldo oficial DEMO.</p><p id="demo-stake-stats" class="note">Importes: sin resultados aún.</p><p id="demo-batch-stats" class="note">Tandas: sin contratos DEMO confirmados.</p>
@@ -405,6 +409,40 @@ $('deriv-quote').onclick=async()=>{
     out.textContent='No se realizó ninguna compra. Diagnóstico: '+detail+'. No se aumentó el importe.';
   }finally{btn.disabled=false;await loadDemo();}
 };
+/** Comandos DEMO en el panel; nunca interpretan solicitudes de dinero real. */
+function runDemoPanelCommand(raw){
+  const out=$('demo-command-output');
+  const cleaned=raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .trim().toLowerCase().replace(/\s+/g,' ');
+  if(!cleaned||cleaned.length>80){out.textContent='Escribe un comando válido de hasta 80 caracteres.';return;}
+  if(/\breal\b|retiro|transferencia|deposito|apalancamiento/.test(cleaned)){
+    out.textContent='BLOQUEADO: no se permiten operaciones reales, depósitos ni retiros.';return;
+  }
+  const click=(id,label)=>{
+    const b=$(id);
+    if(!b||b.disabled){out.textContent=label+' no disponible: comprueba conexión, cotización y límites.';return;}
+    out.textContent=label+': activado el control existente; confirma en la ventana cuando corresponda.';
+    b.click();
+  };
+  if(cleaned==='estado'||cleaned==='saldo'){out.textContent='Consultando saldo oficial DEMO.';loadDemo();return;}
+  if(cleaned==='cotizar'||cleaned==='cotizar demo')return click('deriv-quote','Cotización DEMO');
+  if(cleaned==='mercados'||cleaned==='contratos')return click('deriv-market-check','Comprobación pública');
+  if(cleaned==='comprar demo'||cleaned==='una compra demo')return click('demo-buy-once','Una compra DEMO');
+  if(cleaned==='verificar'||cleaned==='liquidar'||cleaned==='verificar demo')return click('demo-check','Liquidación DEMO');
+  if(cleaned==='pausar demo'||cleaned==='detener demo')return click('demo-auto-stop','Pausa DEMO');
+  const start=/^iniciar demo(?: (10|[1-9]))?$/.exec(cleaned);
+  if(start){
+    const max=start[1]?Number(start[1]):Number($('demo-max-concurrent').value);
+    if(!Number.isInteger(max)||max<1||max>10){out.textContent='Simultáneos permitidos: 1 a 10.';return;}
+    $('demo-max-concurrent').value=String(max);
+    return click('demo-auto-start','Entrenamiento DEMO');
+  }
+  out.textContent='Comando desconocido. Ejemplos: estado, cotizar, comprar demo, verificar, iniciar demo 3, pausar demo.';
+}
+$('demo-command-submit').onclick=()=>runDemoPanelCommand($('demo-command').value);
+$('demo-command').addEventListener('keydown',event=>{
+  if(event.key==='Enter'){event.preventDefault();runDemoPanelCommand(event.currentTarget.value);}
+});
 $('demo-quote-direction').onchange=()=>{demoManualApproval=null;};
 $('demo-quote-stake').onchange=()=>{demoManualApproval=null;};
 $('demo-buy-once').onclick=async()=>{
