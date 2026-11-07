@@ -31,6 +31,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.1 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T22:29:06.581Z (UTC).
+- **Commit de origen:** `0ba9f9e00dcf`.
+- Corregir validación API cotización: aceptar 0.35/0.50/0.75/1 USD conforme a UI y Deriv DEMO
+
 ## v4.0 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T22:26:10.627Z (UTC).

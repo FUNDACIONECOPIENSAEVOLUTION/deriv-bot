@@ -1,10 +1,10 @@
 {
-  "version": "4.0",
-  "updatedAt": "2026-11-07T22:26:10.627Z",
-  "summary": "Inspeccionar metadatos seguros de cotización pública para detectar incompatibilidades con la compra DEMO, sin transmitir credenciales",
+  "version": "4.1",
+  "updatedAt": "2026-11-07T22:29:06.581Z",
+  "summary": "Corregir validación API cotización: aceptar 0.35/0.50/0.75/1 USD conforme a UI y Deriv DEMO",
   "changes": [
-    "Inspeccionar metadatos seguros de cotización pública para detectar incompatibilidades con la compra DEMO, sin transmitir credenciales"
+    "Corregir validación API cotización: aceptar 0.35/0.50/0.75/1 USD conforme a UI y Deriv DEMO"
   ],
-  "sourceCommit": "2029e1461c02249aacdc8d916b433f7febe87358",
+  "sourceCommit": "0ba9f9e00dcf1ba98dcb451cf75327e1f66f6f48",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
