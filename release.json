@@ -1,10 +1,10 @@
 {
-  "version": "2.9",
-  "updatedAt": "2026-11-07T20:21:13.052Z",
-  "summary": "Bloquear compra DEMO ante cotización rechazada; exigir propuesta aceptada de mismo stake y señal con 45s de validez",
+  "version": "3.0",
+  "updatedAt": "2026-11-07T20:21:48.030Z",
+  "summary": "Evaluar límite de riesgo con importe real de la siguiente operación DEMO",
   "changes": [
-    "Bloquear compra DEMO ante cotización rechazada; exigir propuesta aceptada de mismo stake y señal con 45s de validez"
+    "Evaluar límite de riesgo con importe real de la siguiente operación DEMO"
   ],
-  "sourceCommit": "0937f1d00e9bca817cbd847d6759f6f3533d3f73",
+  "sourceCommit": "99dcfea581cb4e61a5415124bfb4ffa8dc8c0cda",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

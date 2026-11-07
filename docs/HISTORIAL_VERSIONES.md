@@ -20,6 +20,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.0 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:21:48.030Z (UTC).
+- **Commit de origen:** `99dcfea581cb`.
+- Evaluar límite de riesgo con importe real de la siguiente operación DEMO
+
 ## v2.9 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:21:13.052Z (UTC).
