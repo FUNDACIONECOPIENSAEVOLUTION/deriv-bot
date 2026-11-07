@@ -490,6 +490,24 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * virtual cents for scientific comparisons; never doubles after losses.
    * Each call verifies the authenticated broker account balance via REST.
    */
+  /**
+   * For an explicit owner click only. A recent accepted DEMO quote is required.
+   * Unlike unattended automation, manual pilot research must not depend on
+   * PAPER daily-loss stops or SMA/RSI signal availability.
+   */
+  manualApprovedSignal(): 'UP'|'DOWN'|'HOLD' {
+    const a=this.read<{at:number;signal:string;stakeCents:number;accountId:string;purchases:number}>('demo-manual-preflight');
+    const snap=this.read<{account:DemoAccount}>('snapshot');
+    const planned=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
+    const count=this.getRiskSnapshot().pilotPurchases;
+    if(!snap||!a||!['UP','DOWN'].includes(a.signal))return 'HOLD';
+    const direction=a.signal as 'UP'|'DOWN';
+    return validManualDemoApproval(a,{
+      now:epoch(),signal:direction,stakeCents:planned,
+      accountId:snap.account.account_id,purchases:count
+    })?direction:'HOLD';
+  }
+
   async buyDemoOnce(paperSignal:'UP'|'DOWN'|'HOLD',evidence?:{
     reason?:string;fast?:number|null;slow?:number|null;rsi?:number|null;
     volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
