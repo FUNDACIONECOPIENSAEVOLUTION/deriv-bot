@@ -127,3 +127,29 @@ it('allows quote requests only to the owner and never quotes without a connected
   expect(await errorFrom(isolated,instance=>instance.quote())).toBe('DERIV_DEMO_REQUIRED');
   expect(calls).toEqual([]);
 });
+
+it('keeps all broker orders disabled by default and blocks unauthenticated calls',async()=>{
+  const status=await env.DERIV_DEMO.getByName('safety-state').status();
+  expect(status.demoTradingEnabled).toBe(false);
+  expect(status.tradeReport.settled).toBe(0);
+  expect(status.tradeReport.unresolved).toBeNull();
+  expect((await request('/api/deriv/demo/buy-once',{method:'POST'})).r.status).toBe(401);
+  expect((await request('/api/deriv/demo/check',{method:'POST'})).r.status).toBe(401);
+  expect((await request('/api/deriv/demo/buy-once',{method:'POST',headers,body:'{}'})).r.status).toBe(403);
+  expect(await errorFrom(env.DERIV_DEMO.getByName('safety-state'),d=>d.buyDemoOnce('UP')))
+    .toBe('DEMO_EXECUTION_DISABLED');
+  expect(calls).toEqual([]);
+});
+it('persists virtual settlement reports separately from PAPER while leaving unresolved orders blocked',async()=>{
+  const stub=env.DERIV_DEMO.getByName('ledger-state');
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',100,'SETTLED',123,10,18,8)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',101,'SETTLED',124,10,0,-10)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,buy_cents) VALUES('2026-11-07',102,'UNKNOWN',10)");
+  });
+  const report=(await stub.status()).tradeReport;
+  expect(report).toMatchObject({settled:2,wins:1,losses:1,pnlCents:-2,winRatePct:50});
+  expect(report.unresolved?.state).toBe('UNKNOWN');
+  expect((await stub.checkDemoSettlement()).state).toBe('BUY_OUTCOME_UNKNOWN');
+  expect(calls).toEqual([]);
+});
