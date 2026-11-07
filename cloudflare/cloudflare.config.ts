@@ -14,7 +14,9 @@ const paperWorker = defineWorker({
 			// Solo compras virtuales DEMO bajo solicitud manual y autenticación privada.
 			// Automatización queda bloqueada hasta validar una compra y liquidación.
 			DEMO_BUY_ENABLED: bindings.text("true"),
-			DEMO_AUTO_ENABLED: bindings.text("false"),
+			// Al pulsar Iniciar en el panel privado: disponible SOLO después de
+			// una liquidación DEMO confirmada. Por defecto demo-auto en SQLite=false.
+			DEMO_AUTO_ENABLED: bindings.text("true"),
 			INITIAL_USD: bindings.text("10"),
 			STAKE_USD: bindings.text("0.10"),
 			DAILY_LOSS_USD: bindings.text("0.30"),
