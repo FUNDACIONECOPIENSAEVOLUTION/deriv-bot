@@ -36,17 +36,20 @@
 <p>Este saldo pertenece a la cuenta demo de Deriv y se muestra por separado de la simulación de USD 10. Esta conexión verifica la cuenta; la ejecución de contratos y la IA todavía no están activadas.</p>
 <div class="tools"><label>Identificador público de la aplicación <input id="deriv-client" maxlength="128" autocomplete="off" spellcheck="false" placeholder="App ID de Deriv"></label><button id="deriv-connect">Autorizar conexión con Deriv</button><button id="deriv-refresh" disabled>Actualizar saldo demo</button></div>
 <p id="demo-balance">Saldo demo oficial: pendiente de conexión.</p>
-<div class="tools"><button id="deriv-quote" disabled>Consultar precio DEMO: USD 0,10 · CALL · 20 ticks</button></div>
+<div class="tools"><label>Dirección a cotizar <select id="demo-quote-direction"><option value="UP">Sube (CALL)</option><option value="DOWN">Baja (PUT)</option></select></label><button id="deriv-quote" disabled>Consultar precio DEMO · USD 0,10 · 20 ticks</button></div>
 <p id="demo-quote" class="note" role="status">Solo se consultará un precio al broker. No se comprará ningún contrato y no se incrementará el importe si Deriv lo rechaza.</p>
 <div class="divider"></div>
 <h2>Prueba con operaciones reales en la cuenta DEMO (saldo virtual)</h2>
-<p class="note">La ejecución está desactivada hasta aprobar la configuración del servidor. Presupuesto interno de investigación: USD 10 del saldo DEMO; como máximo tres contratos virtuales CALL/R_100 simultáneos, USD 0,10 por contrato y 20 ticks. Ningún uso de dinero real.</p>
+<p class="note">La ejecución DEMO permanece desactivada hasta validar el servidor. Presupuesto interno de investigación: USD 10 del saldo virtual; máximo diez contratos CALL/PUT de R_100 simultáneos a USD 0,10 durante 20 ticks. Pausa diaria si después de diez liquidaciones el resultado neto es cero o negativo, o si se supera el riesgo de USD 1 virtual contando posiciones abiertas. No utiliza saldo real.</p>
 <div class="tools">
   <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
   <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
+  <button id="demo-auto-start" disabled>Activar evaluación automática DEMO</button>
+  <button id="demo-auto-stop" disabled>Pausar evaluación automática</button>
 </div>
 <p id="demo-trade-status" class="note" role="status">Sin operaciones DEMO verificadas.</p>
 <p id="demo-trade-summary" class="note">El historial PAPER superior no equivale a resultados de contratos del broker.</p>
+<p id="demo-daily-risk" class="note">Reglas del día: esperando estado. Se calculan sobre resultados virtuales liquidados, no sobre porcentaje de aciertos.</p>
 <div class="divider"></div>
 <h2>Diagnóstico del rendimiento · DEMO</h2>
 <p id="demo-diagnostics" class="note">El informe de entrenamiento aparecerá después de registrar contratos realmente liquidados por Deriv.</p>
@@ -156,26 +159,38 @@ function renderDemo(data){
   $('deriv-quote').disabled=!data.connected;
   const report=data.tradeReport||{},pending=report.unresolved;
   const eligible=state?.running===true&&state?.market?.state==='live'
-    &&state?.config?.symbol==='R_100'&&state?.decision?.direction===1
+    &&state?.config?.symbol==='R_100'&&[1,-1].includes(state?.decision?.direction)
     &&Number.isFinite(state?.quoteAgeSeconds)&&state.quoteAgeSeconds>=0&&state.quoteAgeSeconds<=10;
-  $('demo-buy-once').disabled=!(data.connected&&data.demoTradingEnabled&&eligible
-    &&(report.unknownCount||0)===0&&(report.openCount||0)<3
-    &&Number(report.virtualResearchRemainingCents)>=10);
+  const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&eligible
+    &&daily.allowed===true&&(report.openCount||0)<10
+    &&Number(report.virtualResearchRemainingCents)>=10;
+  $('demo-buy-once').disabled=!canBuy;
+  $('demo-auto-start').disabled=!(data.connected&&data.demoAutomationAvailable
+    &&data.demoTradingEnabled&&daily.allowed===true&&
+    !data.demoAutomationRequested);
+  $('demo-auto-stop').disabled=!(data.connected&&data.demoAutomationRequested);
   $('demo-check').disabled=!(data.connected&&(report.openCount||0)>0);
   $('demo-trade-summary').textContent='Asignación virtual inicial: USD 10'
     +' · Disponibilidad estimada de la asignación: '+money(report.virtualResearchRemainingCents??1000)
-    +' · Abiertos: '+(report.openCount||0)+'/3'
+     +' · Abiertos: '+(report.openCount||0)+'/10'
     +' · Compras sin confirmación: '+(report.unknownCount||0)
     +' · DEMO liquidadas: '+(report.settled||0)
     +' · Ganadas: '+(report.wins||0)+' · Perdidas: '+(report.losses||0)
     +' · Acierto: '+(report.winRatePct===null?'sin datos':String(report.winRatePct)+' %')
     +' · Resultado neto virtual: '+money(report.pnlCents||0)+'.';
   $('demo-trade-status').textContent=!data.demoTradingEnabled
-    ?'Las compras DEMO siguen deshabilitadas en el servidor hasta validar la integración.'
-    :(report.unknownCount||0)>0?'Compra DEMO sin confirmar: quedan bloqueadas todas las nuevas compras hasta conciliarla con Deriv.'
-    :(report.openCount||0)>=3?'Tres contratos DEMO pendientes: espera una liquidación antes de comprar más.'
-    :eligible?'Señal alcista reciente: puedes decidir si compras UN contrato virtual. Se permiten hasta tres simultáneos.'
-    :'Esperando señal alcista actual y datos verificables de Deriv.';
+    ?'El modo de compra DEMO sigue desactivado hasta validar la integración.'
+    :(report.unknownCount||0)>0?'Una compra no fue confirmada por Deriv: nuevas compras bloqueadas hasta conciliarla.'
+    :daily.allowed===false?'Pausa de riesgo DEMO: '+String(daily.reason||daily.haltReason||'revisión pendiente')
+    :(report.openCount||0)>=10?'Hay diez contratos virtuales pendientes; no se aceptan más.'
+    :eligible?'Señal válida '+(state.decision.direction===1?'CALL ↑':'PUT ↓')+
+      (data.demoAutomationRequested?' · modo automático solicitado.':' · puedes enviar una operación DEMO.')
+    :'Sin señal reciente verificable: no se permite comprar.';
+  $('demo-daily-risk').textContent='Resultado neto del día: '+money(daily.netCents||0)
+    +' · Liquidadas hoy: '+(daily.settled||0)
+    +' · Saldo diario mínimo protegido: −USD 1,00 (incluida exposición abierta)'
+    +' · Evaluación automática: '+(data.demoAutomationRequested?'solicitada':'detenida')
+    +' · Límite de posiciones: 10. Un día detenido por pérdidas no se reactiva automáticamente hasta el siguiente día.';
   const a=report.analysis;
   if(a){
     $('demo-diagnostics').textContent='Contratos DEMO liquidados analizados: '+a.sampleSize
@@ -218,13 +233,13 @@ $('deriv-quote').onclick=async()=>{
   try{
     const response=await fetch('/api/deriv/quote',{method:'POST',
       headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
-      body:'{}',signal:AbortSignal.timeout(28000)});
+      body:JSON.stringify({direction:$('demo-quote-direction').value}),signal:AbortSignal.timeout(28000)});
     if(!response.ok)throw Error('QUOTE_UNAVAILABLE');
     const quote=await response.json();
     if(quote.accepted===false){
-      out.textContent='Deriv rechazó CALL · R_100 · 20 ticks · USD 0,10 (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.';
+      out.textContent='Deriv rechazó '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · USD 0,10 (código '+String(quote.code||'REJECTED')+'). No se aumentó el importe ni se hizo ninguna compra.';
     }else if(quote.accepted===true&&Number.isFinite(quote.askPrice)&&Number.isFinite(quote.payout)){
-      out.textContent='Cotización DEMO, sin compra · CALL · R_100 · 20 ticks · Importe solicitado USD 0,10 · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.';
+      out.textContent='Cotización DEMO, sin compra · '+(quote.contractType||'CALL')+' · R_100 · 20 ticks · Importe solicitado USD 0,10 · Precio de contrato: '+money(Math.round(quote.askPrice*100))+' · Pago posible: '+money(Math.round(quote.payout*100))+' · Beneficio posible: '+money(Math.round(quote.potentialProfit*100))+'. El resultado no está garantizado.';
     }else throw Error('QUOTE_INVALID');
   }catch{out.textContent='No se pudo obtener una cotización DEMO verificable. El importe sigue en USD 0,10 y no se realizó ninguna compra.';}
   finally{btn.disabled=false;}
@@ -247,6 +262,23 @@ $('demo-buy-once').onclick=async()=>{
     msg.textContent='No se pudo confirmar la operación DEMO. Revisa el historial y el estado del broker antes de otro intento.';
   }finally{await loadDemo();}
 };
+for(const kind of ['start','stop']){
+  $('demo-auto-'+kind).onclick=async()=>{
+    const start=kind==='start';
+    if(start&&!window.confirm('Autorizar evaluación automática SOLO con saldo virtual Deriv, una oportunidad por minuto como máximo; máximo 10 simultáneas de USD 0,10, riesgo diario limitado y pausa si el P&L neto no es positivo tras 10 liquidaciones. No se operará con dinero real. ¿Activar?'))return;
+    const btn=$('demo-auto-'+kind);btn.disabled=true;
+    try{
+      const r=await fetch('/api/deriv/demo/auto-'+kind,{
+        method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+        body:'{}',signal:AbortSignal.timeout(12000)});
+      if(!r.ok)throw Error();
+      $('demo-trade-status').textContent=start
+        ?'Evaluación automática DEMO solicitada. Solo operará si el servidor está autorizado y existe una señal reciente.'
+        :'Evaluación automática DEMO pausada. No abre nuevas posiciones; los contratos existentes podrán liquidarse.';
+    }catch{$('demo-trade-status').textContent='No se pudo confirmar el cambio de automatización. Verifica los permisos privados del servidor.';}
+    finally{await loadDemo();}
+  };
+}
 $('demo-check').onclick=async()=>{
   const btn=$('demo-check'),msg=$('demo-trade-status');btn.disabled=true;
   msg.textContent='Comprobando el resultado del contrato directamente con Deriv...';
