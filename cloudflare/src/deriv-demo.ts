@@ -294,7 +294,17 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');
     const credentials=await this.unseal<Credentials>(sealed);if(credentials.expiresAt<=epoch())throw Error('DERIV_AUTHORIZATION_EXPIRED');
     const account=await this.accounts(credentials.accessToken,credentials.accountId);
-    this.write('snapshot',{account,checkedAt:epoch(),expiresAt:credentials.expiresAt});return this.status();
+    if(account.account_type!=='demo'||account.currency!=='USD'||!Number.isFinite(account.balance))
+      throw Error('DEMO_ACCOUNT_UNAVAILABLE');
+    const balanceCents=Math.round(account.balance*100);
+    if(Math.abs(account.balance*100-balanceCents)>0.00001)throw Error('DEMO_BALANCE_INVALID');
+    this.write('demo-last-balance-cents',balanceCents);
+    this.write('demo-last-balance-at',epoch());
+    this.write('snapshot',{account,checkedAt:epoch(),expiresAt:credentials.expiresAt});
+    if(balanceCents<=DEMO_BASELINE_EXPECTED_CENTS-DEMO_MAX_LOSS_CENTS){
+      this.write('demo-loss-halt',true);this.write('demo-auto',false);
+    }
+    return this.status();
   }
 
   async quote(signal:'UP'|'DOWN'='UP',stakeCents=100) {
@@ -335,6 +345,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
       throw Error('DEMO_BALANCE_INVALID');
     this.write('demo-last-balance-cents',balanceCents);
     this.write('demo-last-balance-at',epoch());
+    // The UI must show the broker's latest verified balance rather than
+    // the original OAuth snapshot or a synthetic PAPER-equity estimate.
+    this.write('snapshot',{account:latest,checkedAt:epoch(),expiresAt:creds.expiresAt});
     if(balanceCents<=DEMO_BASELINE_EXPECTED_CENTS-DEMO_MAX_LOSS_CENTS){
       this.write('demo-loss-halt',true);
       this.write('demo-auto',false);
@@ -356,8 +369,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * PAPER signals must be fresh and upward; a real account never qualifies.
    */
   async refreshDemoRisk(){
-    if(!this.isDemoAutoEnabled()&&this.getRiskSnapshot().openContracts===0)
-      return {state:'NOT_MONITORING',tradeReport:this.reportDemo()};
+    if(!this.status().connected)
+      return {state:'NOT_CONNECTED',tradeReport:this.reportDemo()};
     await this.verifiedDemoCredentials();
     return {state:'BROKER_BALANCE_VERIFIED',tradeReport:this.reportDemo()};
   }
