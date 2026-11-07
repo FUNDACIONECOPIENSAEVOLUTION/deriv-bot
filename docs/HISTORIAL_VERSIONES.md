@@ -26,6 +26,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.6 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:44:47.568Z (UTC).
+- **Commit de origen:** `f145f0ab7d09`.
+- Ejecutar sondeo real de la API pública Deriv para diagnosticar rechazo ContractBuyValidationError
+- Agregar sondeo público sin compras para validar R_100, 1HZ100V y propuestas DEMO sin credenciales
+
 ## v3.5 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:43:13.601Z (UTC).

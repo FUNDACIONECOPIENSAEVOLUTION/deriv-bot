@@ -1,13 +1,11 @@
 {
-  "version": "3.5",
-  "updatedAt": "2026-11-07T20:43:13.601Z",
-  "summary": "Corregir sintaxis de mensaje ContractBuyValidationError y restaurar dashboard validable",
+  "version": "3.6",
+  "updatedAt": "2026-11-07T20:44:47.568Z",
+  "summary": "Ejecutar sondeo real de la API pública Deriv para diagnosticar rechazo ContractBuyValidationError",
   "changes": [
-    "Corregir sintaxis de mensaje ContractBuyValidationError y restaurar dashboard validable",
-    "Probar que diagnóstico de contratos está protegido, no acepta origen externo y no envía órdenes",
-    "Probar comprobación pública de contratos Deriv y sanitización de mensajes sin realizar compras",
-    "Mostrar causa exacta del error, próximo importe y diagnóstico de CALL/PUT sin compras en Deriv"
+    "Ejecutar sondeo real de la API pública Deriv para diagnosticar rechazo ContractBuyValidationError",
+    "Agregar sondeo público sin compras para validar R_100, 1HZ100V y propuestas DEMO sin credenciales"
   ],
-  "sourceCommit": "41b0e23468de59505f41baddbdb8f0225689bb94",
+  "sourceCommit": "f145f0ab7d096da87563cbca3f1f8b43be03ea41",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
