@@ -1,6 +1,6 @@
 /**
  * Reproducible DEMO-trading postmortem.
- * This module summarizes VERIFIED broker outcomes, never predicts future returns,
+ * This module summarizes recorded DEMO settlements with independent verification labels, never predicts future returns,
  * never changes strategy parameters, and never grants permission to trade real money.
  */
 const mean=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
@@ -28,6 +28,9 @@ function metrics(rows,start=1000){
     expectancyCents:mean(net),maxDrawdownCents:maxDrawdown,
     profitFactor:grossLoss>0?Math.round(grossWin/grossLoss*1000)/1000:null};
 }
+const directionBand=d=>
+  d?.contractType==='CALL'||d?.direction==='UP'?'CALL':
+  d?.contractType==='PUT'||d?.direction==='DOWN'?'PUT':'UNKNOWN_DIRECTION';
 const rsiBand=d=>typeof d?.rsi==='number'&&Number.isFinite(d.rsi)
   ?d.rsi<40?'RSI_LT_40':d.rsi<=60?'RSI_40_60':'RSI_GT_60':'NO_VALID_RSI';
 const volBand=d=>typeof d?.volatility==='number'&&Number.isFinite(d.volatility)
@@ -60,13 +63,20 @@ export function analyzeBrokerDemoHistory(rows,{startingAllocationCents=1000}={})
   const outcomeReasons=settled.map(t=>{
     if(t.pnlCents>=0)return null;
     if(t.entrySpot===null||t.exitSpot===null)return 'LOSS_CAUSE_NOT_VERIFIED';
-    return t.exitSpot<=t.entrySpot?'CALL_DID_NOT_RISE_BY_EXPIRY':'LOSS_WITH_SPOT_RISE_REVIEW_CONTRACT_RULES';
+    const side=t.decision?.contractType==='CALL'||t.decision?.direction==='UP'?'CALL':
+      t.decision?.contractType==='PUT'||t.decision?.direction==='DOWN'?'PUT':null;
+    if(side==='CALL')return t.exitSpot<=t.entrySpot?'CALL_DID_NOT_RISE_BY_EXPIRY':
+      'CALL_LOSS_WITH_SPOT_RISE_REVIEW_BROKER_RULES';
+    if(side==='PUT')return t.exitSpot>=t.entrySpot?'PUT_DID_NOT_FALL_BY_EXPIRY':
+      'PUT_LOSS_WITH_SPOT_FALL_REVIEW_BROKER_RULES';
+    return 'LOSS_DIRECTION_NOT_RECORDED';
   }).filter(Boolean);
   const lossReasons=Object.entries(outcomeReasons.reduce((m,k)=>(m[k]=(m[k]||0)+1,m),{}))
     .map(([code,count])=>({code,count})).sort((a,b)=>b.count-a.count);
   return {mode:'POSTMORTEM_DEMO_ONLY',sampleSize:overall.n,overall,
     training:{...metrics(train,startingAllocationCents),portion:0.7},
     chronologicalHoldout:{...holdoutMetrics,portion:0.3},
+    byDirection:groupOutcomes(settled,directionBand),
     byRsi:groupOutcomes(settled,rsiBand),
     byVolatility:groupOutcomes(settled,volBand),
     losingContractsReasons:lossReasons,
@@ -74,7 +84,7 @@ export function analyzeBrokerDemoHistory(rows,{startingAllocationCents=1000}={})
     holdoutSampleSufficient:holdoutMetrics.n>=100,
     tradeRealAutomatically:false,
     interpretation:'Historical correlations do not establish causality. No strategy tuning based on holdout.',
-    caveats:['Only broker-confirmed SETTLED trades, not PAPER simulations.',
+    caveats:['Only recorded SETTLED trades, not PAPER simulations; browser-reported outcomes require separate broker verification.',
       'Chronological split is descriptive; strategy selection must be confined to training data.',
       'Win rate alone is not proof of profitability. Check costs, net expectancy and drawdown.',
       'A separate out-of-sample forward evaluation and explicit owner approval are required for any real account.']};
