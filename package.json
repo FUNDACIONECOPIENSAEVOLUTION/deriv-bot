@@ -1,6 +1,6 @@
 {
   "name": "ecopiensa-paper-runtime",
-  "version": "4.6.0",
+  "version": "4.7.0",
   "private": true,
   "description": "Cotizaciones públicas y simulación persistente sin cuentas financieras",
   "engines": {

@@ -37,6 +37,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.7 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T22:58:46.955Z (UTC).
+- **Commit de origen:** `98dab1b103e8`.
+- Desplegar reparaciones DEMO y comprobar versión pública de Cloudflare tras publicación
+
 ## v4.6 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T22:57:58.113Z (UTC).

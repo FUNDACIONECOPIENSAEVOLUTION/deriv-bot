@@ -1,13 +1,10 @@
 {
-  "version": "4.6",
-  "updatedAt": "2026-11-07T22:57:58.113Z",
-  "summary": "Corregir sintaxis de prueba de regresión del HTML DEMO",
+  "version": "4.7",
+  "updatedAt": "2026-11-07T22:58:46.955Z",
+  "summary": "Desplegar reparaciones DEMO y comprobar versión pública de Cloudflare tras publicación",
   "changes": [
-    "Corregir sintaxis de prueba de regresión del HTML DEMO",
-    "Reprobar CALL y PUT con cuatro importes DEMO en API pública sin compras",
-    "Añadir regresión para HTML duplicado y el selector del importe DEMO",
-    "Reparar HTML DEMO duplicado y sincronizar selector con próxima compra autorizada"
+    "Desplegar reparaciones DEMO y comprobar versión pública de Cloudflare tras publicación"
   ],
-  "sourceCommit": "ce851d07ef0757ffe42073f39b8ee3330b82dab9",
+  "sourceCommit": "98dab1b103e8a08f2289396493b106e97a53aebd",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
