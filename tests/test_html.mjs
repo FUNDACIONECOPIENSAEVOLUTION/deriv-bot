@@ -7,7 +7,8 @@ for(const name of ['index.html','laboratorio.html','operaciones.html','conexion.
  if(name==='index.html'){
    assert.ok(html.includes('https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/'),'Acceso principal al bot DEMO privado');
    assert.ok(html.includes('El saldo no se lee desde GitHub Pages'),'No presentar PAPER como saldo oficial');
-   assert.ok(html.includes('TRADER LAB · V1.4'),'Mostrar versión actualizada del portal');
+   assert.ok(html.includes('/api/health'),'El portal debe enlazar al comprobador de versión del Worker');
+   assert.ok(html.includes('TRADER LAB · V1.5'),'Mostrar versión actualizada del portal');
    assert.ok(!html.includes('href="https://api.derivws.com/trading/v1/options/ws/real'),'Nunca enlazar canal real');
  }
  const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
