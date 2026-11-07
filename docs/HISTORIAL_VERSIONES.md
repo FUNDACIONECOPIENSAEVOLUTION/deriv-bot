@@ -10,6 +10,15 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.0 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T19:59:26.974Z (UTC).
+- **Commit de origen:** `827ac61b0c9a`.
+- Verificar que solo compra manual DEMO está permitida y automatización apagada
+- Probar que compras manuales requieren DEMO OAuth y autorización privada
+- Habilitar exclusivamente una compra manual DEMO; mantener la automatización y dinero real apagados
+
 ## v1.9 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T19:57:11.082Z (UTC).

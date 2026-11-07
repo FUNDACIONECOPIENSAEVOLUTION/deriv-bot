@@ -1,10 +1,12 @@
 {
-  "version": "1.9",
-  "updatedAt": "2026-11-07T19:57:11.082Z",
-  "summary": "Evitar colisiones de versiones: refrescar main y reintentar de forma segura antes de publicar",
+  "version": "2.0",
+  "updatedAt": "2026-11-07T19:59:26.974Z",
+  "summary": "Verificar que solo compra manual DEMO está permitida y automatización apagada",
   "changes": [
-    "Evitar colisiones de versiones: refrescar main y reintentar de forma segura antes de publicar"
+    "Verificar que solo compra manual DEMO está permitida y automatización apagada",
+    "Probar que compras manuales requieren DEMO OAuth y autorización privada",
+    "Habilitar exclusivamente una compra manual DEMO; mantener la automatización y dinero real apagados"
   ],
-  "sourceCommit": "d9cf42ba76e2c38e691031fdb3dc17e68dce37cf",
+  "sourceCommit": "827ac61b0c9af5883b9ebf1c71343d7fc1712c7e",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
