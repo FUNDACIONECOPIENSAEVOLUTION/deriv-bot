@@ -24,7 +24,7 @@ describe('future demo-only order gating',()=>{
     [{userEnabledDemoExecution:false},'DEMO_EXECUTION_DISABLED'],
     [{signal:'HOLD'},'NO_APPROVED_SIGNAL'],
     [{signal:'DOWN'},'DEMO_CONTRACT_NOT_ALLOWED'],
-    [{openContracts:10,activeExposureCents:10000},'DEMO_MAX_OPEN'],
+    [{openContracts:10,activeExposureCents:1000},'DEMO_MAX_OPEN'],
     [{unresolvedBuy:true},'DEMO_BUY_OUTCOME_UNKNOWN'],
     [{dailyNetPnlCents:-10,dailySettled:10,lifetimePnlCents:-10},'DEMO_DAY_NOT_PROFITABLE'],
     [{dailyNetPnlCents:80,dailySettled:20,haltedToday:true},'DEMO_DAY_HALTED'],
@@ -55,7 +55,7 @@ describe('buy and payout record parsing',()=>{
       .toEqual({accepted:false,code:'StakeTooSmall'});
     expect(()=>parseDemoBuyResponse({msg_type:'buy',req_id:3,buy:{contract_id:1,buy_price:1,purchase_time:1750000000}}))
       .toThrow('DEMO_BUY_WRONG_REQUEST');
-    expect(()=>parseDemoBuyResponse({msg_type:'buy',req_id:2,buy:{contract_id:123,buy_price:1.0,purchase_time:1750000000}}))
+    expect(()=>parseDemoBuyResponse({msg_type:'buy',req_id:2,buy:{contract_id:123,buy_price:2.0,purchase_time:1750000000}}))
       .toThrow('DEMO_BUY_INVALID_RESPONSE');
   });
   it('records only settled contracts with the exact ID, keeping amounts signed',()=>{
@@ -78,7 +78,7 @@ describe('up to ten concurrent virtual DEMO contracts under USD 10',()=>{
    const tenth={...gate,openContracts:9,activeExposureCents:900,
      lifetimePnlCents:0,dailyNetPnlCents:0,dailySettled:0};
    expect(buildDemoBuyRequest(tenth)).toEqual({buy:proposalId,price:1,req_id:2});
-   expect(()=>buildDemoBuyRequest({...tenth,openContracts:10,activeExposureCents:10000}))
+   expect(()=>buildDemoBuyRequest({...tenth,openContracts:10,activeExposureCents:1000}))
      .toThrow('DEMO_MAX_OPEN');
    expect(()=>buildDemoBuyRequest({...tenth,openContracts:2,activeExposureCents:100}))
      .toThrow('DEMO_RISK_INVALID');
