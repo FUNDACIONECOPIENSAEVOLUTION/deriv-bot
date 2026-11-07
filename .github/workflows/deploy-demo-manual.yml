@@ -58,6 +58,7 @@ jobs:
       - name: Validar la ruta alternativa DEMO sin habilitar cuenta REAL
         run: |
           grep -F 'oneBrowserDemoBuy' ../runtime/dashboard.html
+          grep -F 'browserPublicContracts' ../runtime/dashboard.html
           grep -F "connect-src 'self' wss://api.derivws.com;" src/index.ts
           grep -F 'beginBrowserPilot' src/deriv-demo.ts
           grep -F 'requireFirstDemoSettlement(verified)' src/deriv-demo.ts
