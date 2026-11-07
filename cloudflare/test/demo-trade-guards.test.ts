@@ -1,0 +1,69 @@
+import { describe,it,expect } from 'vitest';
+import { buildDemoBuyRequest, parseDemoBuyResponse, parseDemoSettlement, demoPerformance, type DemoTradeGate } from '../src/demo-trade-guards';
+
+const proposalId='A'.repeat(40);
+const demoSocket='wss://api.derivws.com/trading/v1/options/ws/demo?otp=ephemeral-token';
+const gate:DemoTradeGate={
+  accountType:'demo',currency:'USD',socketUrl:demoSocket,userEnabledDemoExecution:true,
+  signal:'UP',quote:{id:proposalId,askPrice:0.10,payout:0.18,quotedAt:1750000100,
+    stake:0.10,symbol:'R_100',contractType:'CALL',durationTicks:20},
+  now:1750000101,todayTrades:0,todayLossCents:0,hasOpenContract:false,unresolvedBuy:false
+};
+
+describe('future demo-only order gating',()=>{
+  it('builds a single proposal-id buy with fixed USD 0.10 price without sending anything',()=>{
+    expect(buildDemoBuyRequest(gate)).toEqual({buy:proposalId,price:0.10,req_id:2});
+  });
+  it.each([
+    [{accountType:'real'},'DEMO_ONLY'],
+    [{accountType:'unknown'},'DEMO_ONLY'],
+    [{currency:'EUR'},'DEMO_ONLY'],
+    [{socketUrl:'wss://api.derivws.com/trading/v1/options/ws/real?otp=secret'},'DEMO_SOCKET_REQUIRED'],
+    [{socketUrl:'wss://attacker.example/trading/v1/options/ws/demo?otp=secret'},'DEMO_SOCKET_REQUIRED'],
+    [{socketUrl:'wss://api.derivws.com/trading/v1/options/ws/demo?otp=secret&redirect=evil'},'DEMO_SOCKET_REQUIRED'],
+    [{userEnabledDemoExecution:false},'DEMO_EXECUTION_DISABLED'],
+    [{signal:'HOLD'},'NO_APPROVED_SIGNAL'],
+    [{signal:'DOWN'},'NO_APPROVED_SIGNAL'],
+    [{hasOpenContract:true},'DEMO_POSITION_UNRESOLVED'],
+    [{unresolvedBuy:true},'DEMO_POSITION_UNRESOLVED'],
+    [{todayTrades:12},'DEMO_TRADE_LIMIT'],
+    [{todayLossCents:30},'DEMO_LOSS_LIMIT'],
+    [{todayLossCents:21},'DEMO_LOSS_LIMIT'],
+    [{now:1750000110},'DEMO_QUOTE_STALE'],
+    [{quote:{...gate.quote,id:'short'}},'DEMO_PROPOSAL_ID_INVALID'],
+    [{quote:{...gate.quote,askPrice:0.11}},'DEMO_PRICE_NOT_ALLOWED'],
+    [{quote:{...gate.quote,askPrice:0.09}},'DEMO_PRICE_NOT_ALLOWED'],
+    [{quote:{...gate.quote,stake:0.20}},'DEMO_CONTRACT_NOT_ALLOWED'],
+    [{quote:{...gate.quote,durationTicks:40}},'DEMO_CONTRACT_NOT_ALLOWED'],
+  ] as const)('blocks unsafe input %#',([change,code])=>{
+    expect(()=>buildDemoBuyRequest({...gate,...change} as DemoTradeGate)).toThrow(code);
+  });
+});
+describe('buy and payout record parsing',()=>{
+  it('recognizes a broker-confirmed demo purchase',()=>{
+    expect(parseDemoBuyResponse({msg_type:'buy',req_id:2,buy:{
+      contract_id:1234567,buy_price:'0.10',purchase_time:1750000101
+    }})).toEqual({accepted:true,contractId:1234567,buyCents:10,purchaseTime:1750000101});
+  });
+  it('distinguishes a broker rejection from a purchase',()=>{
+    expect(parseDemoBuyResponse({msg_type:'buy',req_id:2,error:{code:'StakeTooSmall',message:'Increase amount'}}))
+      .toEqual({accepted:false,code:'StakeTooSmall'});
+    expect(()=>parseDemoBuyResponse({msg_type:'buy',req_id:3,buy:{contract_id:1,buy_price:0.1,purchase_time:1750000000}}))
+      .toThrow('DEMO_BUY_WRONG_REQUEST');
+    expect(()=>parseDemoBuyResponse({msg_type:'buy',req_id:2,buy:{contract_id:123,buy_price:1.0,purchase_time:1750000000}}))
+      .toThrow('DEMO_BUY_INVALID_RESPONSE');
+  });
+  it('records only settled contracts with the exact ID, keeping amounts signed',()=>{
+    const open={msg_type:'proposal_open_contract',proposal_open_contract:{
+      contract_id:123, currency:'USD', buy_price:'0.10',payout:'0.18', profit:'0.08',is_sold:0
+    }};
+    expect(parseDemoSettlement(open,123)).toBeNull();
+    const won=parseDemoSettlement({...open,proposal_open_contract:{...open.proposal_open_contract,is_sold:1}},123);
+    expect(won).toEqual({contractId:123,sold:true,profitCents:8,buyCents:10,payoutCents:18,outcome:'WIN'});
+    const lost=parseDemoSettlement({...open,proposal_open_contract:{...open.proposal_open_contract,is_sold:1,profit:'-0.10'}},123);
+    expect(lost?.outcome).toBe('LOSS');
+    expect(demoPerformance([won!,lost!])).toEqual({settled:2,wins:1,losses:1,flats:0,pnlCents:-2,winRatePct:50,avgProfitCents:-1});
+    expect(()=>parseDemoSettlement({...open,proposal_open_contract:{...open.proposal_open_contract,contract_id:999,is_sold:1}},123))
+      .toThrow('DEMO_CONTRACT_ID_MISMATCH');
+  });
+});
