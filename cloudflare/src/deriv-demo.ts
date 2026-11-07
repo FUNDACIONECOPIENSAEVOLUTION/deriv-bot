@@ -1,8 +1,8 @@
 import { dayAt } from '../../runtime/core.mjs';
-import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
-import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
+import { buildDemoBuyRequest, parseDemoBuyResponse, parseDemoSettlement, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
 import { DurableObject } from 'cloudflare:workers';
 import { openDerivSocket } from './deriv-websocket';
 
@@ -465,7 +465,11 @@ export class DerivDemoConnection extends DurableObject<Env> {
         throw Error('DEMO_AUTO_DISABLED');
       // Never launch the 50-trade campaign until a real broker DEMO settlement
       // from a single owner-approved manual order has been reconciled.
-      requireFirstDemoSettlement(this.reportDemo().settled);
+      // Browser-supplied acknowledgements are not independent broker evidence.
+       const verified=this.ctx.storage.sql.exec<{n:number}>(
+         "SELECT COUNT(*) AS n FROM demo_trades WHERE state='SETTLED' AND COALESCE(code,'')!='CLIENT_OBSERVED'"
+       ).one().n;
+       requireFirstDemoSettlement(verified);
       await this.verifiedDemoCredentials();
       const next=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
       const snapshot=this.getRiskSnapshot();
@@ -483,6 +487,135 @@ export class DerivDemoConnection extends DurableObject<Env> {
       &&String(this.env.DEMO_AUTO_ENABLED)==='true'
       &&String(this.env.DEMO_BUY_ENABLED)==='true'
       &&this.read<boolean>('demo-loss-halt')!==true;
+  }
+
+  /**
+   * Browser-side one-contract recovery bridge for an origin that rejects
+   * Cloudflare outbound WebSocket handshakes. A new 120-second broker OTP
+   * authorizes ONLY the verified demo account; never /ws/real.
+   * The private browser receives a single-use ephemeral OTP URL: it is
+   * NEVER written into public HTML, console output or GitHub.
+   *
+   * The broker responses are delivered by the owner's browser, not
+   * independently attested by our Worker. Such trades remain excluded
+   * from eligibility for unattended automation.
+   */
+  async beginBrowserPilot(signal:'UP'|'DOWN',stakeCents:number) {
+    if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
+    if((signal!=='UP'&&signal!=='DOWN')||!DEMO_STAKES_CENTS.some(s=>s===stakeCents))
+      throw Error('DEMO_BROWSER_PARAMETERS_INVALID');
+    const planned=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
+    if(stakeCents!==planned)throw Error('DEMO_QUOTE_WRONG_NEXT_STAKE');
+    const existing=this.read<{id:number;at:number}>('demo-browser-reservation');
+    if(existing&&epoch()-existing.at<180)throw Error('DEMO_BROWSER_ORDER_PENDING');
+    const creds=await this.verifiedDemoCredentials();
+    const risk=this.riskFor(stakeCents);
+    if(!risk.allowed)throw Error(risk.reason);
+    const url=await this.otpDemoUrl(creds);
+    const nonce=random();
+    // The socket URL is a credential, stored encrypted, never returned in status.
+    const sealed=await this.seal({nonce,url,accountId:creds.accountId,signal,stakeCents,at:epoch(),used:false});
+    this.write('demo-browser-session',sealed);
+    return {mode:'DEMO_BROWSER_PILOT',readOnly:false,noOrders:true,
+      wsUrl:url,nonce,signal,stakeCents,expiresInSeconds:60,accountType:'demo'};
+  }
+
+  async reserveBrowserPilot(input:{
+    nonce:string;signal:'UP'|'DOWN';stakeCents:number;
+    proposalId:string;askPrice:number;payout:number;
+  }) {
+    const sealed=this.read<{iv:string;data:string}>('demo-browser-session');
+    if(!sealed)throw Error('DEMO_BROWSER_SESSION_REQUIRED');
+    const session=await this.unseal<{nonce:string;url:string;accountId:string;signal:string;stakeCents:number;at:number;used:boolean}>(sealed);
+    if(!input||input.nonce!==session.nonce||session.used||session.at>epoch()
+      ||epoch()-session.at>60||input.signal!==session.signal
+      ||input.stakeCents!==session.stakeCents)throw Error('DEMO_BROWSER_SESSION_INVALID');
+    const creds=await this.verifiedDemoCredentials();
+    if(creds.accountId!==session.accountId)throw Error('DEMO_ONLY');
+    const risk=this.riskFor(input.stakeCents);
+    if(!risk.allowed)throw Error(risk.reason);
+    const quote:DemoQuoteForBuy={
+      id:input.proposalId,askPrice:input.askPrice,payout:input.payout,
+      symbol:'R_100',durationTicks:5,contractType:session.signal==='UP'?'CALL':'PUT',
+      quotedAt:epoch(),stakeCents:input.stakeCents
+    };
+    const buy=buildDemoBuyRequest({
+      accountType:'demo',currency:'USD',socketUrl:session.url,
+      userEnabledDemoExecution:true,signal:input.signal,quote,now:epoch(),
+      openContracts:risk.openContracts,unknownCount:risk.unknownCount,
+      exposureCents:risk.openExposureCents,lifetimeNetCents:this.getRiskSnapshot().lifetimeNetCents,
+      brokerBalanceCents:risk.brokerBalanceCents,baselineBalanceCents:risk.baselineBalanceCents,
+      halted:this.getRiskSnapshot().halted,maxConcurrent:this.chosenMaxConcurrent(),
+      pilotPurchases:risk.pilotPurchases,pilotCommittedCents:risk.pilotCommittedCents,
+      batchCommittedCents:risk.batchCommittedCents,batchSettlementPending:risk.batchSettlementPending
+    });
+    const today=dayAt(epoch());
+    const id=this.ctx.storage.transactionSync(()=>{
+      const fresh=this.read<{iv:string;data:string}>('demo-browser-session');
+      if(!fresh||fresh.data!==sealed.data)throw Error('DEMO_BROWSER_SESSION_ALREADY_USED');
+      // No second browser bridge while a response may be uncertain.
+      if(this.getRiskSnapshot().unknownCount>0)throw Error('DEMO_BUY_OUTCOME_UNKNOWN');
+      this.ctx.storage.sql.exec(
+        "INSERT INTO demo_trades(date,created_at,state,buy_cents,contract_type,decision_json,code) VALUES(?,?,'UNKNOWN',?,?,?,'CLIENT_PENDING')",
+        today,epoch(),input.stakeCents,quote.contractType,
+        JSON.stringify({strategy:'manual-browser-pilot-v1',source:'owner-browser',
+          direction:session.signal,stakeCents:input.stakeCents,recordedAt:epoch()})
+      );
+      const inserted=this.ctx.storage.sql.exec<{id:number}>('SELECT last_insert_rowid() AS id').one().id;
+      this.write('demo-browser-reservation',{id:inserted,nonce:session.nonce,at:epoch(),state:'UNKNOWN'});
+      this.write('demo-browser-session',null);
+      return inserted;
+    });
+    return {mode:'DEMO_BROWSER_RESERVED',id,request:buy,accountType:'demo'};
+  }
+
+  async acknowledgeBrowserPilot(input:{nonce:string;id:number;response:unknown}) {
+    const reservation=this.read<{id:number;nonce:string;at:number;state:string}>('demo-browser-reservation');
+    if(!reservation||reservation.nonce!==input?.nonce||reservation.id!==input.id
+      ||reservation.state!=='UNKNOWN')throw Error('DEMO_BROWSER_RESERVATION_INVALID');
+    const row=this.ctx.storage.sql.exec<{buy_cents:number}>(
+      "SELECT buy_cents FROM demo_trades WHERE id=? AND state='UNKNOWN'",input.id
+    ).toArray()[0];
+    if(!row)throw Error('DEMO_BROWSER_RESERVATION_INVALID');
+    const ack=parseDemoBuyResponse(input.response,row.buy_cents);
+    this.ctx.storage.transactionSync(()=>{
+      if(ack.accepted){
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET state='OPEN',contract_id=?,code='CLIENT_ACK' WHERE id=? AND state='UNKNOWN'",
+          ack.contractId,input.id);
+      }else{
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET state='REJECTED',code=? WHERE id=? AND state='UNKNOWN'",
+          ack.code,input.id);
+      }
+      this.write('demo-browser-reservation',{...reservation,state:ack.accepted?'OPEN':'REJECTED'});
+      if(ack.accepted)this.write('demo-stake-index',(this.read<number>('demo-stake-index')||0)+1);
+    });
+    return {mode:'DEMO_BROWSER_OBSERVED',independentlyVerified:false,
+      accepted:ack.accepted,contractId:ack.accepted?ack.contractId:null,
+      code:ack.accepted?null:ack.code,tradeReport:this.reportDemo()};
+  }
+
+  async settleBrowserPilot(input:{nonce:string;id:number;response:unknown}) {
+    const reservation=this.read<{id:number;nonce:string;at:number;state:string}>('demo-browser-reservation');
+    if(!reservation||reservation.nonce!==input?.nonce||reservation.id!==input.id
+      ||reservation.state!=='OPEN')throw Error('DEMO_BROWSER_RESERVATION_INVALID');
+    const row=this.ctx.storage.sql.exec<{contract_id:number;buy_cents:number;contract_type:string}>(
+      "SELECT contract_id,buy_cents,contract_type FROM demo_trades WHERE id=? AND state='OPEN'",input.id
+    ).toArray()[0];
+    if(!row)throw Error('DEMO_BROWSER_RESERVATION_INVALID');
+    const settlement=parseDemoSettlement(input.response,row.contract_id,
+      row.contract_type==='PUT'?'PUT':'CALL',row.buy_cents);
+    if(!settlement)return {state:'OPEN',independentlyVerified:false};
+    this.ctx.storage.transactionSync(()=>{
+      this.ctx.storage.sql.exec(
+        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=?,code='CLIENT_OBSERVED' WHERE id=? AND state='OPEN'",
+        settlement.profitCents,settlement.payoutCents,
+        settlement.entrySpot??null,settlement.exitSpot??null,input.id);
+      this.write('demo-browser-reservation',{...reservation,state:'SETTLED'});
+    });
+    return {state:'CLIENT_OBSERVED_SETTLEMENT',independentlyVerified:false,
+      settlement,tradeReport:this.reportDemo()};
   }
 
   /**
