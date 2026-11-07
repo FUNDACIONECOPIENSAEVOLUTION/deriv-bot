@@ -1,0 +1,36 @@
+name: Ensayo PAPER · diez decisiones del bot (sin Deriv demo)
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/paper_ten_replay.mjs
+      - tests/test_paper_ten_replay.mjs
+      - .github/workflows/paper-ten-replay.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  replay-paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verificar reglas PAPER deterministas (sin cuenta ni órdenes)
+        run: node --test tests/test_paper_ten_replay.mjs
+      - name: Diez decisiones cronológicas con últimos ticks públicos R_100
+        env:
+          PAPER_REPORT_PATH: paper-ten-report.json
+          PAPER_SOURCE_PATH: paper-ten-public-ticks.json
+        run: node scripts/paper_ten_replay.mjs
+      - name: Guardar evidencia pública del replay para auditoría
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paper-ten-replay-no-broker-orders
+          path: |
+            paper-ten-report.json
+            paper-ten-public-ticks.json
+          retention-days: 14
