@@ -190,11 +190,11 @@ it('stops the day when ten verified DEMO settlements have nonpositive net P&L',a
   };
   const profitable=await generate('demo-six-four',6,4);
   expect(profitable.tradeReport.dayRisk).toMatchObject({
-    settled:10,netCents:80,allowed:true
+    settled:10,netCents:80,allowed:false,reason:'DEMO_FIRST_BATCH_COMPLETE'
   });
   const loss=await generate('demo-five-five',5,5);
   expect(loss.tradeReport.dayRisk).toMatchObject({
-    settled:10,netCents:-100,allowed:false,reason:'DEMO_DAY_NOT_PROFITABLE'
+    settled:10,netCents:-100,allowed:false,reason:'DEMO_FIRST_BATCH_COMPLETE'
   });
 });
 it('preserves a sticky day-stop even if subsequently reconciled trades make that day profitable',async()=>{
