@@ -1,12 +1,10 @@
 {
-  "version": "4.9",
-  "updatedAt": "2026-11-07T23:17:14.740Z",
-  "summary": "Habilitar primera compra DEMO manual aprobada sin exigir señal PAPER reciente",
+  "version": "5.0",
+  "updatedAt": "2026-11-07T23:17:48.220Z",
+  "summary": "Añadir diagnóstico público seguro y limitado para verificar WebSocket real desde Cloudflare",
   "changes": [
-    "Habilitar primera compra DEMO manual aprobada sin exigir señal PAPER reciente",
-    "Desvincular primera compra DEMO manual de las restricciones del simulador PAPER",
-    "Permitir piloto manual DEMO solo con preflight reciente sin depender de pérdidas PAPER"
+    "Añadir diagnóstico público seguro y limitado para verificar WebSocket real desde Cloudflare"
   ],
-  "sourceCommit": "1256c18c39601f8ea3c2081b2a7dc67733f062dd",
+  "sourceCommit": "bc198a2eca90c80591d1b1190340cf7557f96ea3",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

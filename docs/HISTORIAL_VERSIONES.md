@@ -40,6 +40,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.0 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:17:48.220Z (UTC).
+- **Commit de origen:** `bc198a2eca90`.
+- Añadir diagnóstico público seguro y limitado para verificar WebSocket real desde Cloudflare
+
 ## v4.9 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:17:14.740Z (UTC).
