@@ -1,3 +1,4 @@
+import { openDerivSocket } from './deriv-websocket';
 /**
  * DEMO market compatibility diagnostics. READ ONLY and public WebSocket only.
  * Never receives OAuth credentials, OTP, or order references.
@@ -38,15 +39,7 @@ export function parseContractsFor(raw:unknown,symbol:MarketSymbol,reqId:number):
   return {symbol,state:'AVAILABLE',count:list.length,call:names.has('CALL'),put:names.has('PUT')};
 }
 export async function checkPublicContractCompatibility():Promise<{readOnly:true;results:ContractSummary[]}>{
-  const response=await fetch(CONTRACTS_PUBLIC_URL.replace(/^wss:/,'https:'),{
-    headers:{Upgrade:'websocket'},redirect:'manual',signal:AbortSignal.timeout(8000)
-  });
-  const socket=response.webSocket;
-  if(response.status!==101||!socket){
-    await response.body?.cancel();
-    throw Error('DERIV_MARKET_SOCKET_UNAVAILABLE');
-  }
-  socket.accept();
+  const socket=await openDerivSocket(CONTRACTS_PUBLIC_URL,'public',8000);
   return new Promise((resolve,reject)=>{
     let finished=false;
     const pending=new Map<number,MarketSymbol>([[51,'R_100'],[52,'1HZ100V']]);
