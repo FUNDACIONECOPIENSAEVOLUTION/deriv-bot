@@ -67,3 +67,25 @@ describe('buy and payout record parsing',()=>{
       .toThrow('DEMO_CONTRACT_ID_MISMATCH');
   });
 });
+
+describe('up to three concurrent virtual DEMO contracts under the USD 10 allocation',()=>{
+ it('allows second and third DEMO exposures while respecting an aggregate daily risk of USD 0.30',()=>{
+   const second={...gate,hasOpenContract:true,openContracts:1,activeExposureCents:10,
+     lifetimePnlCents:0};
+   expect(buildDemoBuyRequest(second)).toEqual({buy:proposalId,price:0.10,req_id:2});
+   const third={...second,openContracts:2,activeExposureCents:20};
+   expect(buildDemoBuyRequest(third).price).toBe(0.10);
+   expect(()=>buildDemoBuyRequest({...third,openContracts:3,activeExposureCents:30}))
+     .toThrow('DEMO_POSITION_UNRESOLVED');
+   expect(()=>buildDemoBuyRequest({...third,todayLossCents:10}))
+     .toThrow('DEMO_LOSS_LIMIT');
+ });
+ it('rejects unknown buys, invalid exposure and an exhausted USD 10 research allocation',()=>{
+   expect(()=>buildDemoBuyRequest({...gate,openContracts:1,activeExposureCents:10,unresolvedBuy:true}))
+     .toThrow('DEMO_POSITION_UNRESOLVED');
+   expect(()=>buildDemoBuyRequest({...gate,openContracts:2,activeExposureCents:10}))
+     .toThrow('DEMO_EXPOSURE_INVALID');
+   expect(()=>buildDemoBuyRequest({...gate,lifetimePnlCents:-995}))
+     .toThrow('DEMO_ALLOCATION_EXHAUSTED');
+ });
+});
