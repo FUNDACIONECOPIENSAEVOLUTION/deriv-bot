@@ -1,9 +1,15 @@
 import {describe,it,expect} from 'vitest';
 import {DEMO_STAKES_CENTS,DEMO_MAX_OPEN,DEMO_MAX_LOSS_CENTS,
- DEMO_BASELINE_EXPECTED_CENTS,pickDemoStakeCents,evaluateDemoRisk} from '../src/demo-risk-policy';
+ DEMO_BASELINE_EXPECTED_CENTS,pickDemoStakeCents,evaluateDemoRisk,requireFirstDemoSettlement} from '../src/demo-risk-policy';
 const base={openContracts:0,unknownCount:0,exposureCents:0,lifetimeNetCents:0,
   stakeCents:10,brokerBalanceCents:1_000_000,baselineBalanceCents:1_000_000,halted:false};
 describe('Deriv DEMO only: controlled variation and loss stop',()=>{
+ it('requires a verified manual DEMO settlement before authorizing automation',()=>{
+   expect(()=>requireFirstDemoSettlement(0)).toThrow('DEMO_FIRST_SETTLEMENT_REQUIRED');
+   expect(()=>requireFirstDemoSettlement(-1)).toThrow('DEMO_FIRST_SETTLEMENT_REQUIRED');
+   expect(()=>requireFirstDemoSettlement(NaN)).toThrow('DEMO_FIRST_SETTLEMENT_REQUIRED');
+   expect(requireFirstDemoSettlement(1)).toBeUndefined();
+ });
  it('uses the four fixed experimental amounts with no doubling after a loss',()=>{
    expect(DEMO_STAKES_CENTS).toEqual([10,25,50,100]);
    expect([0,1,2,3,4,5].map(pickDemoStakeCents)).toEqual([10,25,50,100,10,25]);
