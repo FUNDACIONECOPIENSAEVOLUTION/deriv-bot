@@ -191,7 +191,17 @@ export default {
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
         if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
-        if(url.pathname==='/api/deriv/quote')return json(await demo.quote());
+        if(url.pathname==='/api/deriv/quote'){
+          // Price discovery only; no purchase, select CALL or PUT explicitly.
+          const raw=await request.text();
+          if(raw.length>256)return json({error:'Solicitud demasiado grande'},413);
+          let choice:unknown={};
+          try{choice=raw?JSON.parse(raw):{};}catch{return json({error:'Dirección inválida'},400);}
+          const direction=choice&&typeof choice==='object'&&'direction' in choice?
+            (choice as {direction?:unknown}).direction:'UP';
+          if(direction!=='UP'&&direction!=='DOWN')return json({error:'Dirección inválida'},400);
+          return json(await demo.quote(direction));
+        }
         if(url.pathname==='/api/deriv/demo/buy-once'){
           // A browser click alone is NOT permission to trade: the broker is
           // DEMO-only, the feature switch defaults OFF, and the local rule
@@ -199,10 +209,10 @@ export default {
           if(String(env.DEMO_BUY_ENABLED)!=='true')return json({error:'Ejecución DEMO desactivada'},403);
           const paper=await env.PAPER.getByName(EXPERIMENT).status();
           const ready=paper.running===true&&paper.market.state==='live'
-            &&paper.config.symbol==='R_100'&&paper.decision.direction===1
+            &&paper.config.symbol==='R_100'&&[1,-1].includes(paper.decision.direction)
             &&typeof paper.quoteAgeSeconds==='number'
             &&paper.quoteAgeSeconds>=0&&paper.quoteAgeSeconds<=10;
-          return json(await demo.buyDemoOnce(ready?'UP':'HOLD',{
+          return json(await demo.buyDemoOnce(ready?(paper.decision.direction===1?'UP':'DOWN'):'HOLD',{
             reason:paper.decision.reason,
             fast:paper.decision.fast,slow:paper.decision.slow,
             rsi:paper.decision.rsi,volatility:paper.decision.volatility,
