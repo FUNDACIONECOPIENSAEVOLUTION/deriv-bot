@@ -1,12 +1,10 @@
 {
-  "version": "2.3",
-  "updatedAt": "2026-11-07T20:03:28.052Z",
-  "summary": "Validar automatización DEMO exclusivamente opt-in y previa liquidación",
+  "version": "2.4",
+  "updatedAt": "2026-11-07T20:03:56.126Z",
+  "summary": "Alinear publicación manual con automatización DEMO opt-in y bloqueo de primera liquidación",
   "changes": [
-    "Validar automatización DEMO exclusivamente opt-in y previa liquidación",
-    "Permitir control de 50 operaciones DEMO por botón, después de validar compra inicial",
-    "Restringir botón de automatización hasta comprobar un contrato DEMO liquidado"
+    "Alinear publicación manual con automatización DEMO opt-in y bloqueo de primera liquidación"
   ],
-  "sourceCommit": "b3c63f0f2c9b05ef8c1c64678a98905b7e03c56f",
+  "sourceCommit": "293d6068b7ad647c3a1a549b2f6bbb10cf93440e",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

@@ -14,6 +14,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.4 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:03:56.126Z (UTC).
+- **Commit de origen:** `293d6068b7ad`.
+- Alinear publicación manual con automatización DEMO opt-in y bloqueo de primera liquidación
+
 ## v2.3 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:03:28.052Z (UTC).
