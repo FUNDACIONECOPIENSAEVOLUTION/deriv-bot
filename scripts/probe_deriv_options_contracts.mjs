@@ -53,6 +53,14 @@ const result=await new Promise(resolve=>{
     row.contractType=source?.contract_type??null;
     row.proposalAccepted=!!obj.proposal&&!code;
     row.priceAvailable=obj.proposal?.ask_price!==undefined;
+    if(obj.proposal&&!code){
+      const p=obj.proposal;
+      row.proposalIdLength=typeof p.id==='string'?p.id.length:null;
+      row.proposalIdType=typeof p.id;
+      row.askPrice=typeof p.ask_price==='string'||typeof p.ask_price==='number'?p.ask_price:null;
+      row.payout=typeof p.payout==='string'||typeof p.payout==='number'?p.payout:null;
+      row.hasPurchaseTime=Object.hasOwn(p,'purchase_time');
+    }
     // Public endpoint only: safe bounded diagnostic text; no credentials exist here.
     row.brokerExplanation=typeof err?.message==='string'
       ?err.message.replace(/[^a-zA-Z0-9 .,;:()_-]/g,' ').slice(0,200):null;
