@@ -15,6 +15,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v2.5 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:04:26.967Z (UTC).
+- **Commit de origen:** `fd8dabf6bc92`.
+- Validar primera liquidación DEMO con compuerta testeable antes de permitir la automatización
+- Exigir liquidación DEMO real previa antes de iniciar tandas automatizadas
+
 ## v2.4 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:03:56.126Z (UTC).

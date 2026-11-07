@@ -1,10 +1,11 @@
 {
-  "version": "2.4",
-  "updatedAt": "2026-11-07T20:03:56.126Z",
-  "summary": "Alinear publicación manual con automatización DEMO opt-in y bloqueo de primera liquidación",
+  "version": "2.5",
+  "updatedAt": "2026-11-07T20:04:26.967Z",
+  "summary": "Validar primera liquidación DEMO con compuerta testeable antes de permitir la automatización",
   "changes": [
-    "Alinear publicación manual con automatización DEMO opt-in y bloqueo de primera liquidación"
+    "Validar primera liquidación DEMO con compuerta testeable antes de permitir la automatización",
+    "Exigir liquidación DEMO real previa antes de iniciar tandas automatizadas"
   ],
-  "sourceCommit": "293d6068b7ad647c3a1a549b2f6bbb10cf93440e",
+  "sourceCommit": "fd8dabf6bc92190540441a56c84fe5b3e822672b",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
