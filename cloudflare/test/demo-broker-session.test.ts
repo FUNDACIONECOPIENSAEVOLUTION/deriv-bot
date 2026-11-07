@@ -62,7 +62,7 @@ it('never retries an uncertain purchase on lost connection',async()=>{
    {msg_type:'proposal',req_id:1,proposal:{id:'Q'.repeat(40),ask_price:'1.00',payout:'1.80'}}:null);
  let reserved=0;
  await expect(buyDemoOverSocket(broker as unknown as WebSocket,{
-   wsUrl:socketUrl,gate:{...gate,signal:'DOWN'},stakeCents:350,
+   wsUrl:socketUrl,gate:{...gate,signal:'DOWN'},stakeCents:100,
    reserve:async()=>{reserved++;return 1;},acknowledge:async()=>{}
  })).rejects.toThrow('DEMO_BUY_OUTCOME_UNKNOWN');
  expect(reserved).toBe(1);

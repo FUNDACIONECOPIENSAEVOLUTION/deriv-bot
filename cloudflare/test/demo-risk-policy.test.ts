@@ -10,7 +10,7 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
    expect(validManualDemoApproval(approval,valid)).toBe(true);
    expect(validManualDemoApproval(approval,{...valid,now:1046})).toBe(false);
    expect(validManualDemoApproval(approval,{...valid,signal:'DOWN'})).toBe(false);
-   expect(validManualDemoApproval(approval,{...valid,stakeCents:350})).toBe(false);
+   expect(validManualDemoApproval(approval,{...valid,stakeCents:100})).toBe(false);
    expect(validManualDemoApproval(approval,{...valid,accountId:'REAL1'})).toBe(false);
    expect(validManualDemoApproval(approval,{...valid,purchases:1})).toBe(false);
    expect(validManualDemoApproval(null,valid)).toBe(false);
@@ -35,9 +35,9 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
    expect(evaluateDemoRisk({...base,brokerBalanceCents:990_100,stakeCents:35}).allowed).toBe(true);
  });
  it('reserves open contract exposure and the planned stake before buying',()=>{
-   expect(evaluateDemoRisk({...base,brokerBalanceCents:990_200,openContracts:2,exposureCents:700,stakeCents:35})
+   expect(evaluateDemoRisk({...base,brokerBalanceCents:990_200,openContracts:2,exposureCents:200,stakeCents:35})
      .reason).toBe('DEMO_LOSS_RISK_LIMIT');
-   expect(evaluateDemoRisk({...base,brokerBalanceCents:991_200,openContracts:9,exposureCents:900,stakeCents:350})
+   expect(evaluateDemoRisk({...base,brokerBalanceCents:991_200,openContracts:9,exposureCents:900,stakeCents:100})
      .allowed).toBe(true);
  });
  it('enforces a user-configured simultaneous DEMO limit from one through ten',()=>{
@@ -51,7 +51,7 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
    expect(()=>evaluateDemoRisk({...base,maxConcurrent:0})).toThrow('DEMO_RISK_INVALID');
  });
  it('runs five blocks of ten with US$10 maximum per block and 50 purchases overall',()=>{
-   expect(evaluateDemoRisk({...base,pilotPurchases:9,pilotCommittedCents:900,batchCommittedCents:900,stakeCents:350}).allowed)
+   expect(evaluateDemoRisk({...base,pilotPurchases:9,pilotCommittedCents:900,batchCommittedCents:900,stakeCents:100}).allowed)
       .toBe(true);
    const boundary={...base,pilotPurchases:10,pilotCommittedCents:1000,batchCommittedCents:0};
    expect(evaluateDemoRisk({...boundary,batchSettlementPending:true}).reason)
@@ -60,9 +60,9 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
    expect(following.allowed).toBe(true);
    expect(following.batchNumber).toBe(2);
    expect(following.pilotRemainingPurchases).toBe(40);
-   expect(evaluateDemoRisk({...base,pilotPurchases:18,pilotCommittedCents:1900,batchCommittedCents:900,stakeCents:350})
+   expect(evaluateDemoRisk({...base,pilotPurchases:18,pilotCommittedCents:1900,batchCommittedCents:900,stakeCents:100})
       .allowed).toBe(true);
-   expect(evaluateDemoRisk({...base,pilotPurchases:18,pilotCommittedCents:1950,batchCommittedCents:950,stakeCents:350})
+   expect(evaluateDemoRisk({...base,pilotPurchases:18,pilotCommittedCents:1950,batchCommittedCents:950,stakeCents:100})
       .reason).toBe('DEMO_BATCH_BUDGET');
    const finish=evaluateDemoRisk({...base,pilotPurchases:50,pilotCommittedCents:5000,batchCommittedCents:0});
    expect(finish.reason).toBe('DEMO_PILOT_COMPLETE');
@@ -71,8 +71,8 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
  });
  it('allows at most ten concurrent contracts',()=>{
    expect(DEMO_MAX_OPEN).toBe(10);
-   expect(evaluateDemoRisk({...base,openContracts:9,exposureCents:900,stakeCents:350}).allowed).toBe(true);
-   expect(evaluateDemoRisk({...base,openContracts:10,exposureCents:3500}).reason).toBe('DEMO_MAX_OPEN');
+   expect(evaluateDemoRisk({...base,openContracts:9,exposureCents:900,stakeCents:100}).allowed).toBe(true);
+   expect(evaluateDemoRisk({...base,openContracts:10,exposureCents:1000}).reason).toBe('DEMO_MAX_OPEN');
  });
  it('halts on any unknown broker acknowledgement, and sticky risk stop',()=>{
    expect(evaluateDemoRisk({...base,unknownCount:1,exposureCents:350}).reason).toBe('DEMO_BUY_OUTCOME_UNKNOWN');
