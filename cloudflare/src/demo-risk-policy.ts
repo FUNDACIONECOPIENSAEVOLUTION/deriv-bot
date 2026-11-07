@@ -32,6 +32,11 @@ export type DemoRiskInput={
  baselineBalanceCents:number;
  halted:boolean;
 };
+/** An automated DEMO campaign can only follow a broker-verified manual settlement. */
+export function requireFirstDemoSettlement(settled:number){
+ if(!Number.isSafeInteger(settled)||settled<1)
+   throw Error('DEMO_FIRST_SETTLEMENT_REQUIRED');
+}
 export function pickDemoStakeCents(index:number){
  if(!Number.isSafeInteger(index)||index<0)throw Error('DEMO_STAKE_INDEX_INVALID');
  return DEMO_STAKES_CENTS[index%DEMO_STAKES_CENTS.length];
