@@ -4,6 +4,12 @@ const panel=readFileSync('runtime/dashboard.html','utf8');
 for(const script of panel.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(script[1]);
 for(const name of ['index.html','laboratorio.html','operaciones.html','conexion.html']){
  const html=readFileSync(name,'utf8');
+ if(name==='index.html'){
+   assert.ok(html.includes('https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/'),'Acceso principal al bot DEMO privado');
+   assert.ok(html.includes('El saldo no se lee desde GitHub Pages'),'No presentar PAPER como saldo oficial');
+   assert.ok(html.includes('TRADER LAB · V1.4'),'Mostrar versión actualizada del portal');
+   assert.ok(!html.includes('href="https://api.derivws.com/trading/v1/options/ws/real'),'Nunca enlazar canal real');
+ }
  const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)];
  assert.equal(scripts.length,1,'Un script inline esperado para '+name);
  new Function(scripts[0][1]);

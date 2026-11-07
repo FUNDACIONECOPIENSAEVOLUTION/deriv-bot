@@ -33,3 +33,46 @@ El despliegue requiere comprobar el acceso a la cuenta Cloudflare, revisar que c
 El plan Free tiene límites compartidos de solicitudes, duración y almacenamiento; al excederlos falla la operación afectada. Una conexión saliente no hiberna. Este diseño reduce escrituras y usa un solo objeto, pero no garantiza ejecución gratuita ilimitada ni mide rentabilidad.
 
 Referencias oficiales: https://developers.cloudflare.com/durable-objects/platform/pricing/ , https://developers.cloudflare.com/cf/projects/cloudflare-config/ , https://developers.cloudflare.com/workers/testing/vitest-integration/ , https://developers.deriv.com/es/docs/options/ws-public/
+
+## Deriv DEMO — preparación para entrenamiento controlado (07/11/2026)
+
+**Estado real: PR #11 en borrador, sin fusionar ni desplegar, sin órdenes autenticadas con la cuenta del titular.** La página pública GitHub Pages ejecuta un simulador PAPER distinto, no el saldo oficial de Deriv.
+
+La integración en preparación consulta únicamente la cuenta **DEMO USD** a través de OAuth2 PKCE y un canal OTP restringido a `/trading/v1/options/ws/demo`. El bot no contiene rutas de compra de dinero real. La cuenta muestra un saldo previsto de US$10.000, que debe ser confirmado por la API autenticada antes de habilitar operaciones.
+
+### Opciones de entrenamiento
+
+- Importes virtuales rotativos fijos: **US$0,10, US$0,25, US$0,50 y US$1** por contrato; los importes rechazados no se incrementan automáticamente.
+- Instrumento inicial R_100, dirección CALL o PUT según señal confirmada, 20 ticks de duración. Se registra cada compra, entrada, resultado y señales SMA/RSI. No hay predicciones infalibles.
+- El panel ofrece un **selector de 1 a 10 contratos DEMO abiertos simultáneamente**. La selección se valida otra vez en el Durable Object antes de transmitir cada compra, para impedir carreras entre solicitudes.
+- La parada rígida se fija en **US$9.900** de saldo oficial o antes si el coste de los contratos abiertos puede superar una pérdida de US$100 con respecto a US$10.000. La pérdida realizada se consulta directamente del broker y se contrasta con el registro.
+- Ante una compra sin confirmación, bloquea todas las compras hasta conciliarla con Deriv; jamás repite automáticamente la orden incierta. Consulta liquidaciones pendientes sin emitir nuevas compras.
+- Muestra en el panel **separadamente** saldo oficial de Deriv, exposición de contratos abiertos, P&L verificado y saldo ficticio PAPER. Junto a las velas se muestra el estado oficial con marca de actualización; datos no verificados llevan ese aviso.
+- Métricas por importe: intentos aceptados/rechazados, ganancias, pérdidas, acierto y resultado neto. Atribuir la causa a indicadores requiere pruebas prospectivas adicionales.
+
+### Activación aún pendiente
+
+1. Obtener acceso autorizado al proyecto Cloudflare que hospeda `ecopiensa-paper-10`, verificar que existen los recursos, los secretos y los límites disponibles. GitHub CI solo prepara la compilación, **no despliega**.
+2. Validar `ADMIN_TOKEN` privado, HTTPS, la URL real del Worker, la app Deriv y su redirect OAuth. No registrar tokens ni contraseñas en este repositorio público ni compartirlos por chat.
+3. Desplegar la rama revisada, verificar el acceso real a una cuenta **DEMO USD** y el saldo oficial de US$10.000, sin conectar cuenta real.
+4. Validar **cotizaciones** con los cuatro importes. Activar `DEMO_BUY_ENABLED` solo para una **compra virtual de prueba** y comprobar el contrato y su liquidación. Ante respuestas desconocidas, detener y conciliar.
+5. Tras esa prueba, autorizar opcionalmente `DEMO_AUTO_ENABLED` **solo para DEMO** y pulsar el botón del panel. El cron evalúa oportunidades cada minuto; no garantiza que haya señal, ejecución en ese momento ni ganancias.
+6. Si hay una caída de US$100 respecto de US$10.000, detener y reportar con datos verificados. No cambiar a capital real por ningún porcentaje de acierto.
+
+**No existe activación remota desde este chat sin un servicio conectado y autorizado.** La apertura de una pestaña de Deriv en el navegador no transfiere la sesión OAuth al Worker. La puesta en marcha requiere una sesión de Cloudflare y una autorización de Deriv DEMO efectuadas por el titular.
+
+Documentación: https://developers.deriv.com/docs/options/ws-demo/ , https://developers.deriv.com/docs/trading/proposal/ , https://developers.deriv.com/docs/trading/buy/ , https://developers.deriv.com/docs/trading/proposal-open-contract/ .
+
+### Despliegue guiado desde GitHub (sin operaciones al publicar)
+
+Se ha añadido `.github/workflows/deploy-demo-manual.yml`. Este flujo **solo se ejecuta a petición expresa**, requiere escribir `PUBLICAR_SOLO_LECTURA`, compila y ejecuta las pruebas antes de cargar la nueva versión de `ecopiensa-paper-10`. La versión desplegada tendrá ambos interruptores desactivados, `DEMO_BUY_ENABLED=false` y `DEMO_AUTO_ENABLED=false`, de modo que **publicar el panel no inicia ninguna compra**.
+
+Una vez que el archivo esté en la rama principal, se podrá ejecutar desde **GitHub → Actions → Publicar Deriv DEMO en Cloudflare → Run workflow**. La acción requiere los secretos de GitHub `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`, con permiso mínimo de editar Workers; configurar además, si procede, revisión obligatoria en el entorno `deriv-demo`. **No enviar esos valores por chat ni subirlos al repositorio**.
+
+Precaución: **conservar exactamente el valor vigente de `ADMIN_TOKEN` en Cloudflare**; sirve para descifrar la autorización OAuth DEMO guardada. Si se reemplaza, se necesitará autorizar la cuenta de nuevo. La clave no aparece ni se requiere en el workflow.
+
+### Comprobación antes de comenzar
+
+En el Worker privado actualizado, seleccionar CALL o PUT y un importe del laboratorio y utilizar «Consultar precio DEMO»; la nueva respuesta realiza un **preflight** de solo lectura: coteja saldo oficial, presupuesto virtual de US$10 en las diez primeras compras, posición abierta, autorización y propuesta del broker. No envía ningún `buy`.
+
+Cuando preflight, OAuth y permisos funcionen, habilitar `DEMO_BUY_ENABLED` para efectuar **una sola compra virtual** desde el botón privado y verificar por contrato su liquidación. La automatización posterior requiere además `DEMO_AUTO_ENABLED` y activación privada explícita. El código no implementa operaciones reales en ningún estado. Mantener el registro de ejecuciones para comprobar P&L y aciertos.

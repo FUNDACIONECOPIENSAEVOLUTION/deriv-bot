@@ -4,7 +4,8 @@ import { setupNetwork } from '@msw/cloudflare';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, afterAll, expect, it } from 'vitest';
 import worker from '../src/index';
-import { selectDemo, DerivDemoConnection } from '../src/deriv-demo';
+import { selectDemo, DerivDemoConnection, DEMO_QUOTE_REQUEST, parseDemoQuote, demoQuoteRequest, demoSocketUrl } from '../src/deriv-demo';
+import { dayAt } from '../../runtime/core.mjs';
 
 const token='test-only-token-with-at-least-32-characters';
 const headers={Authorization:'Bearer '+token,'Content-Type':'application/json','X-Paper-Control':'1'};
@@ -87,4 +88,125 @@ it('bounds request bodies and refuses invalid ids, overwritten state and arbitra
   expect(await errorFrom(stub,instance=>instance.begin('app-123','http://paper.example'))).toBe('DERIV_INVALID_ORIGIN');
   const first=await stub.begin('app-123','https://paper.example');await stub.begin('app-123','https://paper.example');
   expect(await errorFrom(stub,instance=>instance.complete(first.state,'fixture-code'))).toBe('DERIV_OAUTH_STATE_INVALID');expect(calls).toEqual([]);
+});
+
+
+it('keeps the DEMO proposal fixed at USD 1 for CALL R_100 at 20 ticks and never sends buy',()=>{
+  expect(DEMO_QUOTE_REQUEST).toEqual({proposal:1,amount:1,basis:'stake',contract_type:'CALL',
+    currency:'USD',duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1});
+  expect(JSON.stringify(DEMO_QUOTE_REQUEST)).not.toContain('"buy"');
+  expect(JSON.stringify(DEMO_QUOTE_REQUEST)).not.toContain('"sell"');
+});
+it('parses only valid broker quotes, omits the actionable proposal id and never increases rejected stakes',()=>{
+  const accepted=parseDemoQuote({msg_type:'proposal',req_id:1,
+    proposal:{id:'do-not-expose-this-id',ask_price:'1.00',payout:1.80}});
+  expect(accepted).toMatchObject({accepted:true,stake:1,durationTicks:20,askPrice:1,payout:1.80,potentialProfit:0.80});
+  expect(JSON.stringify(accepted)).not.toContain('do-not-expose-this-id');
+  const denied=parseDemoQuote({msg_type:'proposal',req_id:1,error:{code:'ContractTooSmall',message:'Raise amount'}});
+  expect(denied).toEqual({accepted:false,code:'ContractTooSmall',stake:1,durationTicks:20,symbol:'R_100',contractType:'CALL'});
+  expect(JSON.stringify(denied)).not.toContain('Raise amount');
+  for(const price of ['NaN','1e5','0.000000001',-1,null]) {
+    expect(()=>parseDemoQuote({msg_type:'proposal',proposal:{ask_price:price,payout:0.2}})).toThrow('DERIV_QUOTE_INVALID_RESPONSE');
+  }
+  expect(()=>parseDemoQuote({msg_type:'proposal',req_id:2,proposal:{ask_price:0.1,payout:0.2}})).toThrow('DERIV_QUOTE_WRONG_REQUEST');
+});
+it('accepts OTP WebSocket URLs only for the official demo endpoint, never for real or unrelated hosts',()=>{
+  expect(demoSocketUrl({data:{url:'wss://api.derivws.com/trading/v1/options/ws/demo?otp=example-otp'}}))
+    .toBe('wss://api.derivws.com/trading/v1/options/ws/demo?otp=example-otp');
+  for(const url of ['wss://api.derivws.com/trading/v1/options/ws/real?otp=xxx',
+    'wss://evil.example/trading/v1/options/ws/demo?otp=xxx','https://api.derivws.com/trading/v1/options/ws/demo?otp=xxx',
+    'wss://api.derivws.com/trading/v1/options/ws/demo?otp=xxx&redirect=evil',
+    'wss://api.derivws.com/trading/v1/options/ws/demo']) {
+    expect(()=>demoSocketUrl({data:{url}})).toThrow();
+  }
+});
+it('allows quote requests only to the owner and never quotes without a connected demo',async()=>{
+  expect((await request('/api/deriv/quote')).r.status).toBe(401);
+  expect((await request('/api/deriv/quote',{method:'GET',headers})).r.status).toBe(404);
+  expect((await request('/api/deriv/quote',{method:'POST',headers:{...headers,Origin:'https://evil.example'},body:'{}'})).r.status).toBe(403);
+  const isolated=env.DERIV_DEMO.getByName('quote-not-connected');
+  expect(await errorFrom(isolated,instance=>instance.quote())).toBe('DERIV_DEMO_REQUIRED');
+  expect(calls).toEqual([]);
+});
+
+it('keeps all broker orders disabled by default and blocks unauthenticated calls',async()=>{
+  const status=await env.DERIV_DEMO.getByName('safety-state').status();
+  expect(status.demoTradingEnabled).toBe(false);
+  expect(status.tradeReport.settled).toBe(0);
+  expect(status.tradeReport.unresolved).toBeNull();
+  expect((await request('/api/deriv/demo/buy-once',{method:'POST'})).r.status).toBe(401);
+  expect((await request('/api/deriv/demo/check',{method:'POST'})).r.status).toBe(401);
+  expect((await request('/api/deriv/demo/buy-once',{method:'POST',headers,body:'{}'})).r.status).toBe(403);
+  expect(await errorFrom(env.DERIV_DEMO.getByName('safety-state'),d=>d.buyDemoOnce('UP')))
+    .toBe('DEMO_EXECUTION_DISABLED');
+  expect(calls).toEqual([]);
+});
+it('persists virtual settlement reports separately from PAPER while leaving unresolved orders blocked',async()=>{
+  const stub=env.DERIV_DEMO.getByName('ledger-state');
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',100,'SETTLED',123,100,180,80)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',101,'SETTLED',124,100,0,-100)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,buy_cents) VALUES('2026-11-07',102,'UNKNOWN',100)");
+  });
+  const report=(await stub.status()).tradeReport;
+  expect(report).toMatchObject({settled:2,wins:1,losses:1,pnlCents:-20,winRatePct:50});
+  expect(report.unresolved?.state).toBe('UNKNOWN');
+  expect((await stub.checkDemoSettlement()).state).toBe('BUY_OUTCOME_UNKNOWN');
+  expect(calls).toEqual([]);
+});
+
+it('issues distinct CALL and PUT quotes without buying any contract',()=>{
+  expect(demoQuoteRequest('UP')).toMatchObject({proposal:1,contract_type:'CALL',amount:1});
+  expect(demoQuoteRequest('DOWN')).toMatchObject({proposal:1,contract_type:'PUT',amount:1});
+  expect(demoQuoteRequest('DOWN')).not.toHaveProperty('buy');
+  expect(parseDemoQuote({msg_type:'proposal',req_id:1,proposal:{ask_price:'1.00',payout:'1.80'}},
+    'DOWN')).toMatchObject({accepted:true,contractType:'PUT',potentialProfit:0.80});
+});
+it('does not enable unsupervised DEMO execution when server switches are off',async()=>{
+  const stub=env.DERIV_DEMO.getByName('auto-disabled');
+  expect((await stub.status()).demoAutomationRequested).toBe(false);
+  expect((await stub.status()).demoAutomationAvailable).toBe(false);
+  expect(await errorFrom(stub,x=>x.setDemoAutomation(true))).toBe('DEMO_AUTO_DISABLED');
+  expect((await stub.setDemoAutomation(false)).autoEnabled).toBe(false);
+  expect(await stub.isDemoAutoEnabled()).toBe(false);
+  expect(calls).toEqual([]);
+});
+
+it('preflight is read-only and refuses access without a DEMO OAuth connection',async()=>{
+  const stub=env.DERIV_DEMO.getByName('preflight-requires-demo');
+  expect(await errorFrom(stub,x=>x.preflightDemo('UP',10))).toBe('DERIV_DEMO_REQUIRED');
+  expect(await errorFrom(stub,x=>x.preflightDemo('DOWN',100))).toBe('DERIV_DEMO_REQUIRED');
+  expect(calls).toEqual([]);
+});
+it('keeps demo account risk unverified until an official balance is received',async()=>{
+  const stub=env.DERIV_DEMO.getByName('risk-not-authorized');
+  const report=(await stub.status()).tradeReport;
+  expect(report.brokerBalanceCents).toBeNull();
+  expect(report.risk).toBeNull();
+  expect(report.lossHalt).toBe(false);
+  expect(report.quoteAcceptance).toEqual([]);
+});
+it('records virtual results separately by the four stakes without fabricating account balances',async()=>{
+  const stub=env.DERIV_DEMO.getByName('stake-report');
+  await runInDurableObject(stub,(_instance,ctx)=>{
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',100,'SETTLED',21,10,18,8)");
+    ctx.storage.sql.exec("INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES('2026-11-07',101,'SETTLED',22,25,0,-25)");
+    ctx.storage.sql.exec("INSERT INTO demo_quote_checks(at,stake_cents,contract_type,accepted,code) VALUES(102,10,'CALL',0,'StakeTooSmall')");
+  });
+  const report=(await stub.status()).tradeReport;
+  expect(report).toMatchObject({settled:2,wins:1,losses:1,pnlCents:-17});
+  expect(report.byStake).toEqual([
+    {stakeCents:10,settled:1,wins:1,netCents:8,winRatePct:100},
+    {stakeCents:25,settled:1,wins:0,netCents:-25,winRatePct:0}
+  ]);
+  expect(report.quoteAcceptance[0]).toMatchObject({stakeCents:10,rejections:1});
+  expect(report.brokerBalanceCents).toBeNull();
+});
+it('supports all experimental quote values without purchasing',()=>{
+ for(const stakeCents of [10,25,50,100]){
+   const q=demoQuoteRequest('DOWN',stakeCents);
+   expect(q).toMatchObject({proposal:1,contract_type:'PUT',amount:stakeCents/100});
+   expect(q).not.toHaveProperty('buy');
+ }
+ expect(()=>demoQuoteRequest('UP',200)).toThrow('DEMO_STAKE_INVALID');
 });

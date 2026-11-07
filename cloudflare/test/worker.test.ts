@@ -142,3 +142,37 @@ it('exports all rows across more than one page and streams the owner CSV',async(
   const {response,body}=await request('/api/trades.csv',{headers});
   expect(response.status).toBe(200);expect(body.trim().split('\n')).toHaveLength(206);
 });
+
+
+it('stores read-only Binance/Coinbase research separately from broker DEMO account balances',async()=>{
+  const stub=env.PAPER.getByName('owner-usd10-v1');
+  const empty=await request('/api/arbitrage',{headers});
+  expect(empty.response.status).toBe(200);
+  expect(JSON.parse(empty.body).hasData).toBe(false);
+  const snapshot={status:'RESEARCH_ONLY',pair:'BTC',capitalLimitUsd:10,estimates:[
+    {route:'BINANCE_TO_COINBASE',grossBps:15,estimatedNetBps:-20},
+    {route:'COINBASE_TO_BINANCE',grossBps:-35,estimatedNetBps:-50}
+  ]};
+  await stub.recordArbitrage(snapshot);
+  const data=JSON.parse((await request('/api/arbitrage',{headers})).body);
+  expect(data.mode).toBe('READ_ONLY_RESEARCH');
+  expect(data.hasData).toBe(true);
+  expect(data.history[0].binanceToCoinbaseNetBps).toBe(-20);
+  expect(data.snapshot.capitalLimitUsd).toBe(10);
+  expect(JSON.stringify(data)).not.toContain('accessToken');
+  expect(JSON.stringify(data)).not.toContain('buyContract');
+});
+it('keeps arbitrage refresh private and does not invent quotes on public API errors',async()=>{
+  const noAuth=await request('/api/arbitrage/refresh',{method:'POST',body:'{}'});
+  expect(noAuth.response.status).toBe(401);
+  const invalid=await request('/api/arbitrage/refresh',{method:'POST',headers});
+  expect(invalid.response.status).toBe(403);
+  const before=JSON.parse((await request('/api/arbitrage',{headers})).body);
+  const response=await request('/api/arbitrage/refresh',{method:'POST',headers:{
+    ...headers,'Content-Type':'application/json','X-Paper-Control':'1'
+  },body:'{}'});
+  expect(response.response.status).toBe(503);
+  const store=JSON.parse((await request('/api/arbitrage',{headers})).body);
+  expect(store.observationsShown).toBe(before.observationsShown);
+  expect(store.latestCapturedAt).toBe(before.latestCapturedAt);
+});

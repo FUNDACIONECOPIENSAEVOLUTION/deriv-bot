@@ -4,6 +4,7 @@ import { addCandleTick, mergeCandleHistory, validateCandles, publicMarketSnapsho
 import { PublicFeed, type MarketStatus } from '../../runtime/feed.mjs';
 import dashboard from '../../runtime/dashboard.html?raw';
 import { PublicSocket } from './public-socket';
+import { readPublicArbitrageSnapshot } from '../../runtime/cross-exchange.mjs';
 export { DerivDemoConnection } from './deriv-demo';
 
 type EngineState = ReturnType<typeof initialState>;
@@ -32,6 +33,7 @@ export class PaperExperiment extends DurableObject<Env> {
       sql.exec('CREATE TABLE IF NOT EXISTS experiment (id INTEGER PRIMARY KEY CHECK(id=1), fingerprint TEXT NOT NULL, data TEXT NOT NULL)');
       sql.exec('CREATE TABLE IF NOT EXISTS trades (id TEXT PRIMARY KEY, entry_epoch INTEGER NOT NULL, data TEXT NOT NULL)');
       sql.exec('CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY AUTOINCREMENT, epoch INTEGER NOT NULL, data TEXT NOT NULL)');
+      sql.exec('CREATE TABLE IF NOT EXISTS arb_observations (id INTEGER PRIMARY KEY AUTOINCREMENT, captured_at INTEGER NOT NULL, payload TEXT NOT NULL)');
       const saved=sql.exec<{fingerprint:string;data:string}>('SELECT fingerprint,data FROM experiment WHERE id=1').toArray()[0];
       if(saved) {
         if(saved.fingerprint!==JSON.stringify(this.config))throw Error('EXPERIMENT_CONFIG_CHANGED');
@@ -117,6 +119,32 @@ export class PaperExperiment extends DurableObject<Env> {
       trades,
       events:this.ctx.storage.sql.exec<{data:string}>('SELECT data FROM events ORDER BY id DESC LIMIT 20').toArray().map(row=>JSON.parse(row.data))};
   }
+  recordArbitrage(snapshot:unknown){
+    if(!snapshot||typeof snapshot!=='object'||(snapshot as {status?:string}).status!=='RESEARCH_ONLY'
+      ||JSON.stringify(snapshot).length>15000)throw Error('ARB_RECORD_INVALID');
+    const body=JSON.stringify(snapshot),recordedAt=now();
+    this.ctx.storage.transactionSync(()=>{
+      const sql=this.ctx.storage.sql;
+      sql.exec('INSERT INTO arb_observations(captured_at,payload) VALUES(?,?)',recordedAt,body);
+      sql.exec('DELETE FROM arb_observations WHERE id < (SELECT COALESCE(MAX(id),0)-6000 FROM arb_observations)');
+    });
+    return this.arbitrageStatus();
+  }
+  arbitrageStatus(){
+    const rows=this.ctx.storage.sql.exec<{captured_at:number;payload:string}>(
+      'SELECT captured_at,payload FROM arb_observations ORDER BY id DESC LIMIT 50'
+    ).toArray();
+    const latest=rows[0]?JSON.parse(rows[0].payload):null;
+    const history=rows.map(r=>{
+      const p=JSON.parse(r.payload),a=p.estimates as Array<{route:string;estimatedNetBps:number;grossBps:number}>;
+      return {capturedAt:r.captured_at,binanceToCoinbaseNetBps:a[0]?.estimatedNetBps??null,
+        coinbaseToBinanceNetBps:a[1]?.estimatedNetBps??null};
+    });
+    return {mode:'READ_ONLY_RESEARCH',hasData:!!latest,
+      latestCapturedAt:rows[0]?.captured_at??null,snapshot:latest,
+      history,observationsShown:rows.length,intervalHint:'scheduled every 5 minutes; not high-frequency'};
+  }
+
   exportPage(after:string|null=null):ExportPage {
     const sql=this.ctx.storage.sql;
     const rows=after===null?sql.exec<{id:string;data:string}>('SELECT id,data FROM trades ORDER BY id LIMIT 200').toArray()
@@ -152,8 +180,8 @@ export default {
     if(url.pathname==='/api/health'&&request.method==='GET')return json({status:'ok',mode:'PAPER'});
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
-    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/deriv/connect','/api/deriv/refresh'].includes(url.pathname);
+    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -163,6 +191,54 @@ export default {
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
         if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
+        if(url.pathname==='/api/deriv/quote'){
+          // Price discovery only; no purchase, select CALL or PUT explicitly.
+          const raw=await request.text();
+          if(raw.length>256)return json({error:'Solicitud demasiado grande'},413);
+          let choice:unknown={};
+          try{choice=raw?JSON.parse(raw):{};}catch{return json({error:'Dirección inválida'},400);}
+          const direction=choice&&typeof choice==='object'&&'direction' in choice?
+            (choice as {direction?:unknown}).direction:'UP';
+          if(direction!=='UP'&&direction!=='DOWN')return json({error:'Dirección inválida'},400);
+          const stakeCents=choice&&typeof choice==='object'&&'stakeCents' in choice?
+            (choice as {stakeCents?:unknown}).stakeCents:100;
+          if(typeof stakeCents!=='number'||![10,25,50,100].includes(stakeCents))
+            return json({error:'Importe virtual no permitido'},400);
+          return json(await demo.preflightDemo(direction,stakeCents));
+        }
+        if(url.pathname==='/api/deriv/demo/buy-once'){
+          // A browser click alone is NOT permission to trade: the broker is
+          // DEMO-only, the feature switch defaults OFF, and the local rule
+          // must have a fresh confirmed upward signal from real public ticks.
+          if(String(env.DEMO_BUY_ENABLED)!=='true')return json({error:'Ejecución DEMO desactivada'},403);
+          const paper=await env.PAPER.getByName(EXPERIMENT).status();
+          const ready=paper.running===true&&paper.market.state==='live'
+            &&paper.config.symbol==='R_100'&&[1,-1].includes(paper.decision.direction)
+            &&typeof paper.quoteAgeSeconds==='number'
+            &&paper.quoteAgeSeconds>=0&&paper.quoteAgeSeconds<=10;
+          return json(await demo.buyDemoOnce(ready?(paper.decision.direction===1?'UP':'DOWN'):'HOLD',{
+            reason:paper.decision.reason,
+            fast:paper.decision.fast,slow:paper.decision.slow,
+            rsi:paper.decision.rsi,volatility:paper.decision.volatility,
+            entryQuote:paper.lastQuote,quoteAgeSeconds:paper.quoteAgeSeconds
+          }));
+        }
+        if(url.pathname==='/api/deriv/demo/check')return json(await demo.checkDemoSettlement());
+        if(url.pathname==='/api/deriv/demo/auto-start'){
+          const raw=await request.text();
+          if(raw.length>64)return json({error:'Configuración demasiado grande'},413);
+          let chosen:unknown;
+          try{
+            const obj=raw?JSON.parse(raw):{};
+            if(!obj||typeof obj!=='object'||Array.isArray(obj))return json({error:'Configuración inválida'},400);
+            chosen=(obj as {maxConcurrent?:unknown}).maxConcurrent??10;
+          }catch{return json({error:'Configuración inválida'},400);}
+          if(typeof chosen!=='number'||!Number.isSafeInteger(chosen)||chosen<1||chosen>10)
+            return json({error:'Máximo simultáneo fuera de rango: 1-10'},400);
+          return json(await demo.setDemoAutomation(true,chosen));
+        }
+        if(url.pathname==='/api/deriv/demo/auto-stop')
+          return json(await demo.setDemoAutomation(false));
         if(url.pathname==='/api/deriv/connect'){
           // Read at most 1 KiB; this route accepts only a public application id.
           const reader=request.body?.getReader();if(!reader)return json({error:'Falta el identificador de aplicación'},400);
@@ -179,6 +255,11 @@ export default {
         await demo.complete(state,code);
         return new Response(null,{status:303,headers:{...security,Location:url.origin+'/',
           'Set-Cookie':'ecopiensa_deriv_state=; Path=/api/deriv; Secure; HttpOnly; SameSite=Lax; Max-Age=0'}});
+      }
+      if(url.pathname==='/api/arbitrage')return json(await env.PAPER.getByName(EXPERIMENT).arbitrageStatus());
+      if(url.pathname==='/api/arbitrage/refresh'){
+        const snapshot=await readPublicArbitrageSnapshot({budgetUsd:10});
+        return json(await env.PAPER.getByName(EXPERIMENT).recordArbitrage(snapshot));
       }
       if(url.pathname==='/api/market'){
         const provider=url.searchParams.get('provider');
@@ -206,11 +287,12 @@ export default {
       return new Response(stream.readable,{headers:{...security,'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="paper-trades.csv"'}});
     }catch(error){
       if(url.pathname.startsWith('/api/deriv/')){
-        const code=error instanceof Error&&/^(DERIV_[A-Z0-9_]+)$/.test(error.message)?error.message:'DERIV_CONNECTION_FAILED';
+        const code=error instanceof Error&&/^(DERIV|DEMO)_[A-Z0-9_]+$/.test(error.message)
+          ?error.message:'DERIV_CONNECTION_FAILED';
         console.error(JSON.stringify({type:'deriv_demo_connection_failed',path:url.pathname,code}));
         if(url.pathname==='/api/deriv/callback')return new Response(null,{status:303,headers:{...security,Location:url.origin+'/?deriv=verification_failed',
           'Set-Cookie':'ecopiensa_deriv_state=; Path=/api/deriv; Secure; HttpOnly; SameSite=Lax; Max-Age=0'}});
-        return json({error:'No se pudo verificar la cuenta demo de Deriv',code},503);
+        return json({error:'Operación o verificación DEMO no completada',code},503);
       }
       const code=url.pathname==='/api/market'
         ? error instanceof Error&&/^(PUBLIC_MARKET_HTTP_[1-5][0-9]{2}|EMPTY_MARKET_RESPONSE|MARKET_RESPONSE_TOO_LARGE|INVALID_MARKET_RESPONSE|INVALID_CANDLES)$/.test(error.message)
@@ -220,5 +302,40 @@ export default {
       return json({error:'Servicio no disponible; revisa el estado y la cuota',...(code?{code}:{})},503);
     }
   },
-  async scheduled(_event:ScheduledController,env:Env){await env.PAPER.getByName(EXPERIMENT).watchdog();},
+  async scheduled(_event:ScheduledController,env:Env){
+    const paper=env.PAPER.getByName(EXPERIMENT);
+    await paper.watchdog();
+    const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
+    // Update authoritative DEMO balance and enforce the cumulative US$100
+    // loss stop on every scheduled check while the virtual bot is enabled.
+    try{await demo.refreshDemoRisk();}
+    catch{console.log(JSON.stringify({type:'demo_balance_check_pending'}));}
+    // Read-only broker settlement, regardless of automation state.
+    try{await demo.reconcileOpenDemoOnly();}
+    catch{console.log(JSON.stringify({type:'demo_settlement_check_pending'}));}
+    // Binance/Coinbase scanning is intentionally paused for this Deriv-only stage.
+    if(String(env.DEMO_AUTO_ENABLED)==='true'&&String(env.DEMO_BUY_ENABLED)==='true'){
+      try{
+        if(!await demo.isDemoAutoEnabled())return;
+        const snapshot=await paper.status();
+        if(snapshot.running!==true||snapshot.market.state!=='live'
+          ||snapshot.config.symbol!=='R_100'
+          ||(snapshot.decision.direction!==1&&snapshot.decision.direction!==-1)
+          ||typeof snapshot.quoteAgeSeconds!=='number'
+          ||snapshot.quoteAgeSeconds<0||snapshot.quoteAgeSeconds>10)return;
+        const direction=snapshot.decision.direction===1?'UP':'DOWN';
+        await demo.buyDemoOnce(direction,{
+          reason:snapshot.decision.reason,fast:snapshot.decision.fast,
+          slow:snapshot.decision.slow,rsi:snapshot.decision.rsi,
+          volatility:snapshot.decision.volatility,entryQuote:snapshot.lastQuote,
+          quoteAgeSeconds:snapshot.quoteAgeSeconds
+        });
+      }catch(error){
+        // Logs only trusted bounded domain codes, never broker tokens or OTP URLs.
+        const code=error instanceof Error&&/^(?:DEMO|DERIV)_[A-Z0-9_]+$/.test(error.message)?
+          error.message:'DEMO_AUTO_CHECK_PENDING';
+        console.log(JSON.stringify({type:'demo_auto_check',code}));
+      }
+    }
+  },
 } satisfies ExportedHandler<Env>;

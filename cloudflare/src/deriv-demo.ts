@@ -1,3 +1,8 @@
+import { dayAt } from '../../runtime/core.mjs';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES } from './demo-risk-policy';
+import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
+import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
+import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
 import { DurableObject } from 'cloudflare:workers';
 
 const API='https://api.derivws.com/trading/v1/options/accounts';
@@ -40,10 +45,93 @@ export function selectDemo(payload:unknown,accountId?:string):DemoAccount {
   return {account_id:match.account_id,account_type:'demo',currency:'USD',balance:accountBalance(match.balance)!};
 }
 
+
+/** A quote is never an order. Deliberately discard the proposal id. */
+export const DEMO_QUOTE_REQUEST = Object.freeze({
+  proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',
+  duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1
+});
+export function demoQuoteRequest(signal:'UP'|'DOWN'='UP',stakeCents=100){
+  if(![10,25,50,100].includes(stakeCents))throw Error('DEMO_STAKE_INVALID');
+  return {...DEMO_QUOTE_REQUEST,amount:stakeCents/100,contract_type:signal==='UP'?'CALL':signal==='DOWN'?'PUT':(()=>{throw Error('DEMO_SIGNAL_INVALID')})()};
+}
+
+const quoteMoney=(value:unknown):number|null=>{
+  if(typeof value!=='number' && !(typeof value==='string' && /^(?:0|[1-9][0-9]{0,9})(?:[.][0-9]{1,8})?$/.test(value)))return null;
+  const number=Number(value);
+  return Number.isFinite(number)&&number>=0&&number<=1_000_000?number:null;
+};
+export function parseDemoQuote(payload:unknown,signal:'UP'|'DOWN'='UP',stakeCents=100) {
+  if(!payload||typeof payload!=='object')throw Error('DERIV_QUOTE_INVALID_RESPONSE');
+  const p=payload as Record<string,unknown>;
+  if(p.req_id!==undefined&&p.req_id!==1)throw Error('DERIV_QUOTE_WRONG_REQUEST');
+  const rejected=(p.error&&typeof p.error==='object'?p.error:Array.isArray(p.errors)?p.errors[0]:null) as Record<string,unknown>|null;
+  if(rejected){
+    const raw=rejected.code;
+    const code=typeof raw==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(raw)?raw:'REJECTED';
+    return {accepted:false,code,stake:stakeCents/100,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT'};
+  }
+  if(p.msg_type!=='proposal'||!p.proposal||typeof p.proposal!=='object')throw Error('DERIV_QUOTE_INVALID_RESPONSE');
+  const proposal=p.proposal as Record<string,unknown>,askPrice=quoteMoney(proposal.ask_price),payout=quoteMoney(proposal.payout);
+  if(askPrice===null||payout===null)throw Error('DERIV_QUOTE_INVALID_RESPONSE');
+  return {accepted:true,stake:stakeCents/100,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT',
+    askPrice,payout,potentialProfit:Math.round((payout-askPrice)*100)/100,quotedAt:epoch()};
+}
+export function demoSocketUrl(payload:unknown):string {
+  if(!payload||typeof payload!=='object'||!('data' in payload)||!payload.data||typeof payload.data!=='object'
+    ||!('url' in payload.data)||typeof payload.data.url!=='string'||payload.data.url.length>4096)throw Error('DERIV_OTP_INVALID_RESPONSE');
+  let url:URL;try{url=new URL(payload.data.url);}catch{throw Error('DERIV_OTP_INVALID_RESPONSE');}
+  if(url.protocol!=='wss:'||url.hostname!=='api.derivws.com'||url.port||url.username||url.password
+    ||url.pathname!=='/trading/v1/options/ws/demo'||url.searchParams.size!==1
+    ||!(url.searchParams.get('otp')||'')||url.hash)throw Error('DERIV_OTP_NOT_DEMO');
+  return url.href;
+}
+
+/** Fetch an exact demo-account quote, no buy/sell ever. */
+async function requestDemoQuote(wsUrl:string,signal:'UP'|'DOWN'='UP',stakeCents=100):Promise<ReturnType<typeof parseDemoQuote>> {
+  const response=await fetch(wsUrl.replace(/^wss:/,'https:'),{
+    headers:{Upgrade:'websocket'},redirect:'manual',signal:AbortSignal.timeout(8000)
+  });
+  const socket=response.webSocket;
+  if(response.status!==101||!socket){await response.body?.cancel();throw Error('DERIV_QUOTE_UPGRADE_FAILED');}
+  socket.accept();
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const finish=(error?:Error,value?:ReturnType<typeof parseDemoQuote>)=>{
+      if(settled)return;settled=true;clearTimeout(timeout);
+      try{socket.close(1000,'Quote complete');}catch{/* Closing an already closed socket is safe. */}
+      if(error)reject(error);else resolve(value!);
+    };
+    const timeout=setTimeout(()=>finish(Error('DERIV_QUOTE_TIMEOUT')),8000);
+    socket.addEventListener('message',event=>{
+      if(settled)return;
+      try{
+        if(typeof event.data!=='string'||event.data.length>32768)throw Error('DERIV_QUOTE_INVALID_RESPONSE');
+        const message=JSON.parse(event.data) as Record<string,unknown>;
+        if(message.req_id!==undefined&&message.req_id!==1)return;
+        if(message.msg_type==='proposal'||message.error||message.errors)finish(undefined,parseDemoQuote(message,signal,stakeCents));
+      }catch{finish(Error('DERIV_QUOTE_INVALID_RESPONSE'));}
+    });
+    socket.addEventListener('error',()=>finish(Error('DERIV_QUOTE_SOCKET_ERROR')));
+    socket.addEventListener('close',()=>finish(Error('DERIV_QUOTE_SOCKET_CLOSED')));
+    // No buy, sell, transfer, payout change or automatic stake escalation.
+    try{socket.send(JSON.stringify(demoQuoteRequest(signal,stakeCents)));}catch{finish(Error('DERIV_QUOTE_SEND_FAILED'));}
+  });
+}
+
 /** Separate coordination atom for the owner's broker-demo authorization, never PAPER accounting. */
 export class DerivDemoConnection extends DurableObject<Env> {
   constructor(ctx:DurableObjectState,env:Env){super(ctx,env);
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS demo_connection (slot TEXT PRIMARY KEY,data TEXT NOT NULL)');
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_trades (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, created_at INTEGER NOT NULL, state TEXT NOT NULL, contract_id INTEGER UNIQUE, buy_cents INTEGER, payout_cents INTEGER, pnl_cents INTEGER, code TEXT)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_day_halts (date TEXT PRIMARY KEY, reason TEXT NOT NULL, stopped_at INTEGER NOT NULL)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_quote_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, stake_cents INTEGER NOT NULL, contract_type TEXT NOT NULL, accepted INTEGER NOT NULL, code TEXT)");
+
+    const cols=new Set(ctx.storage.sql.exec<{name:string}>('PRAGMA table_info(demo_trades)').toArray().map(r=>r.name));
+    for(const [name,kind] of [['decision_json','TEXT'],['entry_spot','REAL'],['exit_spot','REAL'],['contract_type','TEXT']]){
+      if(!cols.has(name))ctx.storage.sql.exec('ALTER TABLE demo_trades ADD COLUMN '+name+' '+kind);
+    }
+
   }
   private read<T>(slot:string):T|null {
     const row=this.ctx.storage.sql.exec<{data:string}>('SELECT data FROM demo_connection WHERE slot=?',slot).toArray()[0];
@@ -114,17 +202,365 @@ export class DerivDemoConnection extends DurableObject<Env> {
     this.ctx.storage.transactionSync(()=>{this.write('credentials',credentials);this.write('snapshot',{account,checkedAt:epoch(),expiresAt});});
     return this.status();
   }
+  private getRiskSnapshot(){
+    const currentBalance=this.read<number>('demo-last-balance-cents');
+    const ledger=this.ctx.storage.sql.exec<{net:number}>(
+      "SELECT COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED'"
+    ).one().net;
+    const pending=this.ctx.storage.sql.exec<{state:string;buy_cents:number|null}>(
+      "SELECT state,buy_cents FROM demo_trades WHERE state IN ('OPEN','UNKNOWN')"
+    ).toArray();
+    // Count all broker-confirmed or unresolved purchases for the FIRST ten-trade pilot.
+    // Rejections do not consume the virtual pilot budget.
+    const pilot=this.ctx.storage.sql.exec<{trades:number;spent:number}>(
+      "SELECT COUNT(*) AS trades, COALESCE(SUM(buy_cents),0) AS spent FROM demo_trades WHERE state IN ('OPEN','UNKNOWN','SETTLED')"
+    ).one();
+    return {brokerBalanceCents:currentBalance??null,
+      baselineBalanceCents:DEMO_BASELINE_EXPECTED_CENTS,
+      halted:this.read<boolean>('demo-loss-halt')===true,
+      lifetimeNetCents:ledger,
+      openContracts:pending.filter(p=>p.state==='OPEN').length,
+      unknownCount:pending.filter(p=>p.state==='UNKNOWN').length,
+      exposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||100),0),
+      pilotPurchases:pilot.trades,pilotCommittedCents:pilot.spent};
+  }
+  private chosenMaxConcurrent(){
+    const value=this.read<number>('demo-max-concurrent')??10;
+    if(!Number.isSafeInteger(value)||value<1||value>10)throw Error('DEMO_CONCURRENCY_INVALID');
+    return value;
+  }
+  private riskFor(stakeCents:number){
+    const s=this.getRiskSnapshot();
+    if(s.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
+    return evaluateDemoRisk({...s,brokerBalanceCents:s.brokerBalanceCents,stakeCents,maxConcurrent:this.chosenMaxConcurrent()});
+  }
+
+  private reportDemo() {
+    type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;
+      buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null;
+      decision_json:string|null;entry_spot:number|null;exit_spot:number|null;contract_type:string|null};
+    const sql=this.ctx.storage.sql;
+    const stats=sql.exec<{settled:number;wins:number;losses:number;net:number}>(
+      "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents<0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED'"
+    ).one();
+    const raw=this.getRiskSnapshot();
+    const history=sql.exec<Row>(
+      'SELECT * FROM demo_trades ORDER BY id DESC LIMIT 50'
+    ).toArray();
+    const analyticRows=sql.exec<Row>(
+      "SELECT * FROM demo_trades WHERE state='SETTLED' ORDER BY created_at DESC,id DESC LIMIT 1000"
+    ).toArray().map(r=>({
+      state:r.state,contractId:r.contract_id,createdAt:r.created_at,
+      pnlCents:r.pnl_cents,entrySpot:r.entry_spot,exitSpot:r.exit_spot,
+      decision:r.decision_json?JSON.parse(r.decision_json):null
+    }));
+    const analysis=analyzeBrokerDemoHistory(analyticRows);
+    const stakes=sql.exec<{stake:number;settled:number;wins:number;net:number}>(
+      "SELECT buy_cents AS stake, COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED' GROUP BY buy_cents ORDER BY buy_cents"
+    ).toArray().map(r=>({stakeCents:r.stake,settled:r.settled,wins:r.wins,
+      netCents:r.net,winRatePct:r.settled?Math.round(r.wins/r.settled*10000)/100:null}));
+    const quoteRejections=sql.exec<{stake:number;attempts:number;rejections:number}>(
+      "SELECT stake_cents AS stake, COUNT(*) AS attempts, COALESCE(SUM(CASE WHEN accepted=0 THEN 1 ELSE 0 END),0) AS rejections FROM demo_quote_checks GROUP BY stake_cents ORDER BY stake_cents"
+    ).toArray().map(r=>({...r,stakeCents:r.stake}));
+    const open=sql.exec<Row>(
+      "SELECT * FROM demo_trades WHERE state='OPEN' ORDER BY id ASC"
+    ).toArray();
+    let risk:null|ReturnType<typeof evaluateDemoRisk>=null;
+    if(raw.brokerBalanceCents!==null)
+      risk=evaluateDemoRisk({...raw,brokerBalanceCents:raw.brokerBalanceCents,stakeCents:100,maxConcurrent:this.chosenMaxConcurrent()});
+    const lastChecked=this.read<number>('demo-last-balance-at')||null;
+    return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.net,
+      winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
+      virtualResearchAllocationCents:DEMO_PILOT_BUDGET_CENTS,
+      pilotMaxPurchases:DEMO_PILOT_MAX_PURCHASES,
+      pilotPurchases:raw.pilotPurchases,
+      pilotRemainingPurchases:Math.max(0,DEMO_PILOT_MAX_PURCHASES-raw.pilotPurchases),
+      pilotCommittedCents:raw.pilotCommittedCents,
+      pilotRemainingBudgetCents:Math.max(0,DEMO_PILOT_BUDGET_CENTS-raw.pilotCommittedCents),
+      hardAccountLossStopCents:DEMO_MAX_LOSS_CENTS,
+      virtualResearchRemainingCents:raw.brokerBalanceCents===null?null:
+        Math.max(0,raw.brokerBalanceCents-(DEMO_BASELINE_EXPECTED_CENTS-DEMO_MAX_LOSS_CENTS)-raw.exposureCents),
+      maxParallel:DEMO_MAX_OPEN,openCount:raw.openContracts,unknownCount:raw.unknownCount,
+      activeExposureCents:raw.exposureCents,brokerBalanceCents:raw.brokerBalanceCents,
+      brokerBalanceCheckedAt:lastChecked,lossHalt:raw.halted,
+      risk,dayRisk:risk,
+      analysis,analysisScope:'most_recent_1000_settled',
+      byStake:stakes,quoteAcceptance:quoteRejections,
+      openContracts:open.map(r=>({id:r.id,contractId:r.contract_id,buyCents:r.buy_cents,
+        contractType:r.contract_type==='PUT'?'PUT' as const:'CALL' as const,createdAt:r.created_at})),
+      unresolved:this.ctx.storage.sql.exec<Row>("SELECT * FROM demo_trades WHERE state='UNKNOWN' ORDER BY id ASC LIMIT 1").toArray()[0]||open[0]||null,
+      history:history.map(r=>({id:r.id,date:r.date,state:r.state,contractId:r.contract_id,
+        buyCents:r.buy_cents,payoutCents:r.payout_cents,pnlCents:r.pnl_cents,
+        code:r.code,createdAt:r.created_at,entrySpot:r.entry_spot??null,exitSpot:r.exit_spot??null,
+        contractType:r.contract_type==='PUT'?'PUT':r.contract_type==='CALL'?'CALL':null,
+        decision:r.decision_json?JSON.parse(r.decision_json):null}))
+    };
+  }
   status(){
     const saved=this.read<{account:DemoAccount;checkedAt:number;expiresAt:number}>('snapshot');
     const connected=!!saved&&saved.expiresAt>epoch()&&!!this.read('credentials');
     return {mode:'DERIV_DEMO',connected,executionEnabled:false,aiConnected:false,clientId:this.read<string>('clientId')||'',
       account:connected&&saved?{type:'demo',currency:'USD',label:'Demo · …'+saved.account.account_id.slice(-4),balance:saved.account.balance,checkedAt:saved.checkedAt}:null,
-      discovery:this.read<Discovery>('discovery'),state:connected?'DEMO_VERIFIED':saved?'AUTHORIZATION_EXPIRED':this.read('discovery')?'DEMO_ACCOUNT_NOT_VERIFIED':'NOT_CONNECTED'};
+      discovery:this.read<Discovery>('discovery'),state:connected?'DEMO_VERIFIED':saved?'AUTHORIZATION_EXPIRED':this.read('discovery')?'DEMO_ACCOUNT_NOT_VERIFIED':'NOT_CONNECTED',
+      demoTradingEnabled:String(this.env.DEMO_BUY_ENABLED)==='true',
+      demoAutomationAvailable:String(this.env.DEMO_AUTO_ENABLED)==='true',
+      demoAutomationRequested:this.read<boolean>('demo-auto')===true,
+      demoMaxConcurrent:this.chosenMaxConcurrent(),
+      demoLossAlert:this.read<boolean>('demo-loss-halt')===true,
+      tradeReport:this.reportDemo()};
   }
   async refresh(){
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');
     const credentials=await this.unseal<Credentials>(sealed);if(credentials.expiresAt<=epoch())throw Error('DERIV_AUTHORIZATION_EXPIRED');
     const account=await this.accounts(credentials.accessToken,credentials.accountId);
-    this.write('snapshot',{account,checkedAt:epoch(),expiresAt:credentials.expiresAt});return this.status();
+    if(account.account_type!=='demo'||account.currency!=='USD'||!Number.isFinite(account.balance))
+      throw Error('DEMO_ACCOUNT_UNAVAILABLE');
+    const balanceCents=Math.round(account.balance*100);
+    if(Math.abs(account.balance*100-balanceCents)>0.00001)throw Error('DEMO_BALANCE_INVALID');
+    this.write('demo-last-balance-cents',balanceCents);
+    this.write('demo-last-balance-at',epoch());
+    this.write('snapshot',{account,checkedAt:epoch(),expiresAt:credentials.expiresAt});
+    if(balanceCents<=DEMO_BASELINE_EXPECTED_CENTS-DEMO_MAX_LOSS_CENTS){
+      this.write('demo-loss-halt',true);this.write('demo-auto',false);
+    }
+    return this.status();
   }
+
+  /**
+   * Owner-only broker preflight. Confirms a live DEMO USD balance and obtains an
+   * authenticated quote; it NEVER issues buy/sell or changes execution flags.
+   */
+  async preflightDemo(signal:'UP'|'DOWN'='UP',stakeCents=100){
+    const quote=await this.quote(signal,stakeCents);
+    const risk=this.riskFor(stakeCents);
+    const status=this.status();
+    return {
+      mode:'DERIV_DEMO_PREFLIGHT',noOrders:true,accountType:'demo',
+      account:status.account,brokerBalanceCents:risk.brokerBalanceCents,
+      stakeCents,signal,quote,risk,
+      executionConfigured:status.demoTradingEnabled,
+      automationConfigured:status.demoAutomationAvailable,
+      recommendedNextStep:!quote.accepted?'DERIV_QUOTE_REJECTED'
+        :!risk.allowed?risk.reason
+        :!status.demoTradingEnabled?'ENABLE_DEMO_BUY_AFTER_REVIEW'
+        :'READY_FOR_FIRST_VIRTUAL_BUY'
+    };
+  }
+
+  async quote(signal:'UP'|'DOWN'='UP',stakeCents=100) {
+    const snapshot=this.read<{account:DemoAccount;checkedAt:number;expiresAt:number}>('snapshot');
+    if(!snapshot||snapshot.account.account_type!=='demo'||snapshot.account.currency!=='USD'||!this.status().connected)
+      throw Error('DERIV_DEMO_REQUIRED');
+    const last=this.read<number>('lastQuoteAt')||0;
+    if(epoch()-last<15)throw Error('DERIV_QUOTE_RATE_LIMIT');
+    this.write('lastQuoteAt',epoch());
+    const sealed=this.read<{iv:string;data:string}>('credentials');
+    if(!sealed)throw Error('DERIV_DEMO_REQUIRED');
+    const credentials=await this.unseal<Credentials>(sealed);
+    if(credentials.expiresAt<=epoch()||credentials.accountId!==snapshot.account.account_id)
+      throw Error('DERIV_AUTHORIZATION_EXPIRED');
+    const accountId=encodeURIComponent(credentials.accountId);
+    const otp=await boundedJson(await fetch(
+      'https://api.derivws.com/trading/v1/options/accounts/'+accountId+'/otp',
+      {method:'POST',headers:{Authorization:'Bearer '+credentials.accessToken},
+        redirect:'manual',signal:AbortSignal.timeout(8000)}),8192);
+    return requestDemoQuote(demoSocketUrl(otp),signal,stakeCents);
+  }
+
+
+  private async verifiedDemoCredentials() {
+    const saved=this.read<{account:DemoAccount;checkedAt:number;expiresAt:number}>('snapshot');
+    if(!saved||!this.status().connected||saved.account.account_type!=='demo'||saved.account.currency!=='USD')
+      throw Error('DERIV_DEMO_REQUIRED');
+    const sealed=this.read<{iv:string;data:string}>('credentials');
+    if(!sealed)throw Error('DERIV_DEMO_REQUIRED');
+    const creds=await this.unseal<Credentials>(sealed);
+    if(creds.expiresAt<=epoch()||creds.accountId!==saved.account.account_id)
+      throw Error('DERIV_AUTHORIZATION_EXPIRED');
+    const latest=await this.accounts(creds.accessToken,creds.accountId);
+    if(latest.account_type!=='demo'||latest.currency!=='USD'||!Number.isFinite(latest.balance))
+      throw Error('DEMO_ACCOUNT_UNAVAILABLE');
+    const balanceCents=Math.round(latest.balance*100);
+    if(Math.abs(latest.balance*100-balanceCents)>0.00001)
+      throw Error('DEMO_BALANCE_INVALID');
+    this.write('demo-last-balance-cents',balanceCents);
+    this.write('demo-last-balance-at',epoch());
+    // The UI must show the broker's latest verified balance rather than
+    // the original OAuth snapshot or a synthetic PAPER-equity estimate.
+    this.write('snapshot',{account:latest,checkedAt:epoch(),expiresAt:creds.expiresAt});
+    if(balanceCents<=DEMO_BASELINE_EXPECTED_CENTS-DEMO_MAX_LOSS_CENTS){
+      this.write('demo-loss-halt',true);
+      this.write('demo-auto',false);
+    }
+    return creds;
+  }
+
+  private async otpDemoUrl(creds:Credentials) {
+    const url='https://api.derivws.com/trading/v1/options/accounts/'+encodeURIComponent(creds.accountId)+'/otp';
+    const answer=await boundedJson(await fetch(url,{method:'POST',headers:{
+      Authorization:'Bearer '+creds.accessToken
+    },redirect:'manual',signal:AbortSignal.timeout(8000)}),8192);
+    return demoSocketUrl(answer);
+  }
+
+  /**
+   * Explicit manual one-contract DEMO operation. Disabled unless the
+   * Cloudflare owner changes DEMO_BUY_ENABLED from its safe 'false' default.
+   * PAPER signals must be fresh and upward; a real account never qualifies.
+   */
+  async refreshDemoRisk(){
+    if(!this.status().connected)
+      return {state:'NOT_CONNECTED',tradeReport:this.reportDemo()};
+    await this.verifiedDemoCredentials();
+    return {state:'BROKER_BALANCE_VERIFIED',tradeReport:this.reportDemo()};
+  }
+
+  async setDemoAutomation(enabled:boolean,maxConcurrent?:number) {
+    if(typeof enabled!=='boolean')throw Error('DEMO_AUTO_INVALID');
+    const chosen=maxConcurrent??this.chosenMaxConcurrent();
+    if(!Number.isSafeInteger(chosen)||chosen<1||chosen>10)throw Error('DEMO_CONCURRENCY_INVALID');
+    if(enabled){
+      if(String(this.env.DEMO_AUTO_ENABLED)!=='true'||String(this.env.DEMO_BUY_ENABLED)!=='true')
+        throw Error('DEMO_AUTO_DISABLED');
+      await this.verifiedDemoCredentials();
+      const next=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
+      const snapshot=this.getRiskSnapshot();
+      if(snapshot.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
+      const safety=evaluateDemoRisk({...snapshot,brokerBalanceCents:snapshot.brokerBalanceCents,stakeCents:next,maxConcurrent:chosen});
+      if(!safety.allowed)throw Error(safety.reason);
+    }
+    this.write('demo-max-concurrent',chosen);
+    this.write('demo-auto',enabled);
+    return {mode:'DERIV_DEMO',autoEnabled:enabled,maxConcurrent:chosen,tradeReport:this.reportDemo()};
+  }
+
+  isDemoAutoEnabled(){
+    return this.read<boolean>('demo-auto')===true
+      &&String(this.env.DEMO_AUTO_ENABLED)==='true'
+      &&String(this.env.DEMO_BUY_ENABLED)==='true'
+      &&this.read<boolean>('demo-loss-halt')!==true;
+  }
+
+  /**
+   * One broker-verifiable DEMO trade. Stake selection rotates 10/25/50/100
+   * virtual cents for scientific comparisons; never doubles after losses.
+   * Each call verifies the authenticated broker account balance via REST.
+   */
+  async buyDemoOnce(paperSignal:'UP'|'DOWN'|'HOLD',evidence?:{
+    reason?:string;fast?:number|null;slow?:number|null;rsi?:number|null;
+    volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
+  }) {
+    if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
+    if(paperSignal!=='UP'&&paperSignal!=='DOWN')throw Error('NO_APPROVED_SIGNAL');
+    const creds=await this.verifiedDemoCredentials();
+    const index=this.read<number>('demo-stake-index')||0;
+    const stakeCents=pickDemoStakeCents(index);
+    const firstRisk=this.riskFor(stakeCents);
+    if(!firstRisk.allowed)throw Error(firstRisk.reason);
+    // A rejected proposal advances the experiment instead of retrying
+    // the same unaccepted amount indefinitely.
+    this.write('demo-stake-index',index+1);
+    const url=await this.otpDemoUrl(creds);
+    const safeNumber=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?v:null;
+    const decision=JSON.stringify({
+      strategy:'sma-rsi-v1',direction:paperSignal,contractType:paperSignal==='UP'?'CALL':'PUT',
+      stakeCents,reason:evidence?.reason==='TREND_AND_MOMENTUM'?'TREND_AND_MOMENTUM':'UNVERIFIED',
+      fast:safeNumber(evidence?.fast),slow:safeNumber(evidence?.slow),
+      rsi:safeNumber(evidence?.rsi),volatility:safeNumber(evidence?.volatility),
+      entryQuote:safeNumber(evidence?.entryQuote),
+      quoteAgeSeconds:safeNumber(evidence?.quoteAgeSeconds),
+      recordedAt:epoch(),source:'Deriv public price feed'
+    });
+    const today=dayAt(epoch());
+    const reserve=async(quote:DemoQuoteForBuy):Promise<number>=>{
+      return this.ctx.storage.transactionSync(()=>{
+        const lastBalanceAt=this.read<number>('demo-last-balance-at')||0;
+        if(epoch()-lastBalanceAt>20)throw Error('DEMO_BALANCE_STALE');
+        const risk=this.getRiskSnapshot();
+        if(risk.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
+        const answer=buildDemoBuyRequest({
+          accountType:'demo',currency:'USD',socketUrl:url,userEnabledDemoExecution:true,
+          signal:paperSignal,quote,now:epoch(),openContracts:risk.openContracts,
+          unknownCount:risk.unknownCount,exposureCents:risk.exposureCents,
+          lifetimeNetCents:risk.lifetimeNetCents,brokerBalanceCents:risk.brokerBalanceCents,
+          baselineBalanceCents:risk.baselineBalanceCents,halted:risk.halted,
+          maxConcurrent:this.chosenMaxConcurrent(),
+          pilotPurchases:risk.pilotPurchases,pilotCommittedCents:risk.pilotCommittedCents
+        });
+        if(answer.price!==stakeCents/100)throw Error('DEMO_STAKE_CHANGED');
+        this.ctx.storage.sql.exec(
+          "INSERT INTO demo_trades(date,created_at,state,buy_cents,decision_json,contract_type) VALUES(?,?,'UNKNOWN',?,?,?)",
+          today,epoch(),stakeCents,decision,quote.contractType
+        );
+        return this.ctx.storage.sql.exec<{id:number}>('SELECT last_insert_rowid() AS id').one().id;
+      });
+    };
+    const acknowledge=async(id:number,ack:DemoBuyAck)=>{
+      if(!ack.accepted){
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET state='REJECTED',code=? WHERE id=? AND state='UNKNOWN'",
+          ack.code,id
+        );
+      }else{
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET state='OPEN',contract_id=?,buy_cents=? WHERE id=? AND state='UNKNOWN'",
+          ack.contractId,ack.buyCents,id
+        );
+      }
+    };
+    const current=this.getRiskSnapshot();
+    if(current.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
+    const result=await buySingleDemoContract({
+      wsUrl:url,stakeCents,gate:{
+        accountType:'demo',currency:'USD',userEnabledDemoExecution:true,
+        signal:paperSignal,openContracts:current.openContracts,unknownCount:current.unknownCount,
+        exposureCents:current.exposureCents,lifetimeNetCents:current.lifetimeNetCents,
+        brokerBalanceCents:current.brokerBalanceCents,baselineBalanceCents:current.baselineBalanceCents,
+        halted:current.halted,maxConcurrent:this.chosenMaxConcurrent(),
+        pilotPurchases:current.pilotPurchases,pilotCommittedCents:current.pilotCommittedCents
+      },reserve,acknowledge
+    });
+    this.ctx.storage.sql.exec(
+      "INSERT INTO demo_quote_checks(at,stake_cents,contract_type,accepted,code) VALUES(?,?,?,?,?)",
+      epoch(),stakeCents,paperSignal==='UP'?'CALL':'PUT',
+      result.state==='OPEN'?1:0,result.state==='REJECTED'?result.code:null
+    );
+    return {mode:'DERIV_DEMO',stakeCents,...result,tradeReport:this.reportDemo()};
+  }
+
+  /** Read-only settlement reconciler, never issues a second buy. */
+  async reconcileOpenDemoOnly(){
+    const open=this.reportDemo().openContracts;
+    const outcomes:Array<{contractId:number|null;state:string}>=[];
+    for(const entry of open){
+      if(!entry.contractId)continue;
+      try{
+        const result=await this.checkDemoSettlement(entry.contractId);
+        outcomes.push({contractId:entry.contractId,state:result.state});
+      }catch{outcomes.push({contractId:entry.contractId,state:'RETRY_LATER'});}
+    }
+    return {state:'READ_ONLY_RECONCILIATION',outcomes,tradeReport:this.reportDemo()};
+  }
+
+  async checkDemoSettlement(contractId?:number) {
+    const report=this.reportDemo();
+    const pending=contractId===undefined?report.openContracts[0]:
+      report.openContracts.find(r=>r.contractId===contractId);
+    if(!pending)return {state:report.unknownCount>0?'BUY_OUTCOME_UNKNOWN':'NO_PENDING_CONTRACT',
+      tradeReport:report};
+    if(!pending.contractId||!pending.buyCents)return {state:'BUY_OUTCOME_UNKNOWN',tradeReport:report};
+    const creds=await this.verifiedDemoCredentials();
+    const url=await this.otpDemoUrl(creds);
+    const result=await readDemoSettlement(url,pending.contractId,pending.contractType,pending.buyCents);
+    if(result){
+      this.ctx.storage.sql.exec(
+        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=? WHERE id=? AND contract_id=? AND state='OPEN'",
+        result.profitCents,result.payoutCents,result.entrySpot??null,result.exitSpot??null,
+        pending.id,pending.contractId
+      );
+      return {state:'SETTLED',settlement:result,tradeReport:this.reportDemo()};
+    }
+    return {state:'OPEN',tradeReport:this.reportDemo()};
+  }
+
 }
