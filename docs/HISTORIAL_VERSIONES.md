@@ -24,6 +24,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.4 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:39:24.984Z (UTC).
+- **Commit de origen:** `f97ebbb2c745`.
+- Agregar diagnóstico privado de contratos disponibles en Deriv sin realizar ninguna operación
+- Añadir comprobador de compatibilidad CALL/PUT para R_100 y 1HZ100V, solo lectura y sin tokens
+
 ## v3.3 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:38:49.265Z (UTC).

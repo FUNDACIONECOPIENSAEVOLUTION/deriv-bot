@@ -1,10 +1,11 @@
 {
-  "version": "3.3",
-  "updatedAt": "2026-11-07T20:38:49.265Z",
-  "summary": "Mostrar error seguro de cotización Deriv, incluido límite temporal/OTP/WebSocket, sin revelar tokens",
+  "version": "3.4",
+  "updatedAt": "2026-11-07T20:39:24.984Z",
+  "summary": "Agregar diagnóstico privado de contratos disponibles en Deriv sin realizar ninguna operación",
   "changes": [
-    "Mostrar error seguro de cotización Deriv, incluido límite temporal/OTP/WebSocket, sin revelar tokens"
+    "Agregar diagnóstico privado de contratos disponibles en Deriv sin realizar ninguna operación",
+    "Añadir comprobador de compatibilidad CALL/PUT para R_100 y 1HZ100V, solo lectura y sin tokens"
   ],
-  "sourceCommit": "d492f213c576979b7e3ba0051fdd295629603b7b",
+  "sourceCommit": "f97ebbb2c745462c5bdd2b0cc277f89a82e67602",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
