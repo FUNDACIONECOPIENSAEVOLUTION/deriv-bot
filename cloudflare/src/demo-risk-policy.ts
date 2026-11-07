@@ -33,6 +33,18 @@ export type DemoRiskInput={
  halted:boolean;
 };
 /** An automated DEMO campaign can only follow a broker-verified manual settlement. */
+export type ManualDemoApproval={
+ at:number;signal:string;stakeCents:number;accountId:string;purchases:number;
+};
+/** Verify a single owner-approved quote without exposing the broker's proposal id. */
+export function validManualDemoApproval(a:ManualDemoApproval|null, input:{
+ now:number;signal:'UP'|'DOWN';stakeCents:number;accountId:string;purchases:number;
+}):boolean{
+ return !!a&&Number.isSafeInteger(a.at)&&Number.isSafeInteger(input.now)
+   &&a.at<=input.now&&input.now-a.at<=45
+   &&a.signal===input.signal&&a.stakeCents===input.stakeCents
+   &&a.accountId===input.accountId&&a.purchases===input.purchases;
+}
 export function requireFirstDemoSettlement(settled:number){
  if(!Number.isSafeInteger(settled)||settled<1)
    throw Error('DEMO_FIRST_SETTLEMENT_REQUIRED');
