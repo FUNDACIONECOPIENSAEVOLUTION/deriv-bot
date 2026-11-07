@@ -41,10 +41,18 @@ jobs:
           npm test
           npm run build
           npx cf deploy --prebuilt --mode production --dry-run
-      - name: Confirmar que las compras DEMO automáticas siguen desactivadas
+      - name: Bloquear importes obsoletos y exigir la misma lista en HTTP y riesgo DEMO
+        run: |
+          grep -F 'DEMO_STAKES_CENTS=Object.freeze([35,50,75,100]' src/demo-risk-policy.ts
+          grep -F 'DEMO_STAKES_CENTS.some(allowed=>allowed===stakeCents)' src/index.ts
+          grep -F "for(const stakeCents of [35,50,75,100])" test/deriv-demo.test.ts
+          grep -F "for(const stakeCents of [10,25,30,200])" test/deriv-demo.test.ts
+      - name: Comprobar controles DEMO y activación automática solo tras consentimiento persistente
         run: |
           grep -F 'DEMO_BUY_ENABLED: bindings.text("true")' cloudflare.config.ts
           grep -F 'DEMO_AUTO_ENABLED: bindings.text("true")' cloudflare.config.ts
+          grep -F "if(!await demo.isDemoAutoEnabled())return;" src/index.ts
+          grep -F "/trading/v1/options/ws/demo" src/demo-trade-guards.ts
       - name: Validar acceso seguro y publicar panel sin operaciones
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
