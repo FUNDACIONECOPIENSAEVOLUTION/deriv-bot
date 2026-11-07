@@ -1,0 +1,104 @@
+name: Versionar y publicar ambas páginas del bot
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - release.json
+      - docs/HISTORIAL_VERSIONES.md
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+concurrency:
+  group: deriv-bot-versioned-publishing
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    environment: deriv-demo
+    env:
+      CF_SEND_TELEMETRY: 'false'
+    steps:
+      - name: Obtener código e historial completos
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Usar el main más reciente, no una revisión antigua
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+      - name: Verificar regla + HTML antes de publicar
+        run: |
+          node scripts/bump_release.mjs --verify
+          node tests/test_html.mjs
+      - name: Instalar dependencias Cloudflare fijadas
+        run: npm --prefix cloudflare ci --no-audit --no-fund
+      - name: Probar compuertas DEMO y compilar TypeScript
+        run: |
+          npm --prefix cloudflare run typecheck
+          npm --prefix cloudflare test
+      - name: Aumentar exactamente 0,1 y registrar mejoras desde git
+        id: bump
+        run: |
+          node scripts/bump_release.mjs
+          node scripts/bump_release.mjs --verify
+          node tests/test_html.mjs
+          git add release.json docs/HISTORIAL_VERSIONES.md package.json
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No hay cambios nuevos desde la última versión."
+          else
+            VERSION=$(node -p "require('./release.json').version")
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "[auto-version] Publicación v$VERSION (+0,1) con historial de mejoras"
+            git push origin HEAD:main
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Compilar el Worker con la versión del mismo manifiesto
+        run: |
+          npm --prefix cloudflare run build
+          cd cloudflare
+          npx cf deploy --prebuilt --mode production --dry-run
+      - name: Verificar que jamás se publiquen compras activadas por defecto
+        run: |
+          grep -F 'DEMO_BUY_ENABLED: bindings.text("false")' cloudflare/cloudflare.config.ts
+          grep -F 'DEMO_AUTO_ENABLED: bindings.text("false")' cloudflare/cloudflare.config.ts
+      - name: Solicitar nueva publicación GitHub Pages del commit versionado
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # GitHub's automatic GITHUB_TOKEN commits do not themselves trigger Pages.
+          # The official Pages build endpoint explicitly rebuilds the new commit.
+          gh api --method POST "repos/$GITHUB_REPOSITORY/pages/builds" >/dev/null
+          echo "GitHub Pages: nueva compilación solicitada para v${{ steps.bump.outputs.version }}"
+      - name: Publicar Worker privado Cloudflare con la misma versión
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Faltan los secretos de despliegue Cloudflare. No subir claves al código."
+            exit 1
+          fi
+          VERSION=$(node -p "require('./release.json').version")
+          cd cloudflare
+          npx cf deploy --prebuilt --mode production --message "Deriv IA Trader v$VERSION · DEMO bajo autorización; compras desactivadas"
+      - name: Registrar las URLs de verificación
+        run: |
+          {
+            echo "## Publicación versionada"
+            echo "- GitHub Pages: https://fundacionecopiensaevolution.github.io/deriv-bot/"
+            echo "- Cloudflare: https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/"
+            echo "- Versión del servidor: https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/api/health"
+            echo "- Historial: docs/HISTORIAL_VERSIONES.md"
+            echo "- Las compras DEMO y REAL no se activan por un despliegue."
+          } >> "$GITHUB_STEP_SUMMARY"
