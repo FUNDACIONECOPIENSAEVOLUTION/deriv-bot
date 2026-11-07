@@ -1,10 +1,10 @@
 {
-  "version": "4.3",
-  "updatedAt": "2026-11-07T22:34:47.638Z",
-  "summary": "Documentar diseño seguro de conexión MCP desde ChatGPT a Deriv DEMO",
+  "version": "4.4",
+  "updatedAt": "2026-11-07T22:35:28.284Z",
+  "summary": "Unificar importes del HTTP y motor de riesgo DEMO en una sola fuente de verdad para evitar regresiones",
   "changes": [
-    "Documentar diseño seguro de conexión MCP desde ChatGPT a Deriv DEMO"
+    "Unificar importes del HTTP y motor de riesgo DEMO en una sola fuente de verdad para evitar regresiones"
   ],
-  "sourceCommit": "153218db35570f72e3057726308d8fe1b1e5e4ca",
+  "sourceCommit": "5284fba62f704ce40eaf6a2e83bd2caa2ed2beb4",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

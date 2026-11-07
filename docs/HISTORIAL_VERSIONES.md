@@ -34,6 +34,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.4 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T22:35:28.284Z (UTC).
+- **Commit de origen:** `5284fba62f70`.
+- Unificar importes del HTTP y motor de riesgo DEMO en una sola fuente de verdad para evitar regresiones
+
 ## v4.3 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T22:34:47.638Z (UTC).
