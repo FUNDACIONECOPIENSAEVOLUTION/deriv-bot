@@ -8,8 +8,9 @@ Investigar la frecuencia de acierto y el resultado neto en operaciones CALL/PUT 
 
 ## Variables de ejecución propuestas
 
-- Cuenta demo USD con saldo inicial **verificado** por el broker. Referencia esperada **US$10.000**, piso de parada **US$9.900**.
+- Cuenta demo USD con saldo inicial **verificado** por el broker. Referencia esperada **US$10.000**, piso de parada adicional **US$9.900**. Ese límite de US$100 es distinto del tope inicial de US$10 de compras virtuales.
 - Importes por operación: **US$0,10, US$0,25, US$0,50, US$1 virtuales**. Se rotan para comparar aceptación y valor esperado; no se aumenta ninguna apuesta por una pérdida o rechazo.
+- **Primera fase obligatoria:** máximo **10 contratos comprados** y suma máxima **US$10 virtuales de importes comprometidos en esas compras**, contando contratos abiertos y liquidados. Al completarse cualquiera de los dos topes, nuevas compras se bloquean hasta revisión de los resultados; no se reinicia automáticamente tras cambiar de día. No se confunde este presupuesto de investigación con el saldo DEMO del broker.
 - Instrumento R_100, duración 20 ticks, contratos CALL si hay señal UP y PUT si DOWN.
 - **Número máximo de contratos abiertos configurable de 1 a 10** en el panel privado, con validación persistente en el Durable Object.
 - Automatización voluntaria: por defecto desactivada; evaluaciones de compra como máximo una vez por cron cada minuto. Puede haber cero compras si no hay señal válida.
