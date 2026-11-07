@@ -224,8 +224,19 @@ export default {
           }));
         }
         if(url.pathname==='/api/deriv/demo/check')return json(await demo.checkDemoSettlement());
-        if(url.pathname==='/api/deriv/demo/auto-start')
-          return json(await demo.setDemoAutomation(true));
+        if(url.pathname==='/api/deriv/demo/auto-start'){
+          const raw=await request.text();
+          if(raw.length>64)return json({error:'Configuración demasiado grande'},413);
+          let chosen:unknown;
+          try{
+            const obj=raw?JSON.parse(raw):{};
+            if(!obj||typeof obj!=='object'||Array.isArray(obj))return json({error:'Configuración inválida'},400);
+            chosen=(obj as {maxConcurrent?:unknown}).maxConcurrent??10;
+          }catch{return json({error:'Configuración inválida'},400);}
+          if(typeof chosen!=='number'||!Number.isSafeInteger(chosen)||chosen<1||chosen>10)
+            return json({error:'Máximo simultáneo fuera de rango: 1-10'},400);
+          return json(await demo.setDemoAutomation(true,chosen));
+        }
         if(url.pathname==='/api/deriv/demo/auto-stop')
           return json(await demo.setDemoAutomation(false));
         if(url.pathname==='/api/deriv/connect'){
