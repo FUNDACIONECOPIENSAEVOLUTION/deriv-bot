@@ -35,7 +35,7 @@ describe('future demo-only order gating',()=>{
     [{quote:{...gate.quote,askPrice:0.09}},'DEMO_PRICE_NOT_ALLOWED'],
     [{quote:{...gate.quote,stake:0.20}},'DEMO_CONTRACT_NOT_ALLOWED'],
     [{quote:{...gate.quote,durationTicks:40}},'DEMO_CONTRACT_NOT_ALLOWED'],
-  ] as const)('blocks unsafe input %#',([change,code])=>{
+  ] as const)('blocks unsafe input %#',(change,code)=>{
     expect(()=>buildDemoBuyRequest({...gate,...change} as DemoTradeGate)).toThrow(code);
   });
 });
