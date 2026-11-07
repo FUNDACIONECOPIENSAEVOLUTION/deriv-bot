@@ -32,6 +32,15 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.2 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T22:32:11.753Z (UTC).
+- **Commit de origen:** `9f711ecf2f8d`.
+- Hacer test de aceptación de stakes robusto al estado OAuth no determinista; seguir rechazando valores antiguos
+- Comandos DEMO por texto en panel privado con mismas confirmaciones y bloqueo de cuenta real
+- Probar importes 0.35/0.50/0.75/1 en API de cotización para no volver a bloquear el primer contrato DEMO
+
 ## v4.1 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T22:29:06.581Z (UTC).

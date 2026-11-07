@@ -1,10 +1,12 @@
 {
-  "version": "4.1",
-  "updatedAt": "2026-11-07T22:29:06.581Z",
-  "summary": "Corregir validación API cotización: aceptar 0.35/0.50/0.75/1 USD conforme a UI y Deriv DEMO",
+  "version": "4.2",
+  "updatedAt": "2026-11-07T22:32:11.753Z",
+  "summary": "Hacer test de aceptación de stakes robusto al estado OAuth no determinista; seguir rechazando valores antiguos",
   "changes": [
-    "Corregir validación API cotización: aceptar 0.35/0.50/0.75/1 USD conforme a UI y Deriv DEMO"
+    "Hacer test de aceptación de stakes robusto al estado OAuth no determinista; seguir rechazando valores antiguos",
+    "Comandos DEMO por texto en panel privado con mismas confirmaciones y bloqueo de cuenta real",
+    "Probar importes 0.35/0.50/0.75/1 en API de cotización para no volver a bloquear el primer contrato DEMO"
   ],
-  "sourceCommit": "0ba9f9e00dcf1ba98dcb451cf75327e1f66f6f48",
+  "sourceCommit": "9f711ecf2f8d9a4486c004687e5a96e5f95088be",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
