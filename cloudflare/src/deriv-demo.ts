@@ -288,7 +288,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
     ).toArray();
     let risk:null|ReturnType<typeof evaluateDemoRisk>=null;
     if(raw.brokerBalanceCents!==null)
-      risk=evaluateDemoRisk({...raw,brokerBalanceCents:raw.brokerBalanceCents,stakeCents:100,maxConcurrent:this.chosenMaxConcurrent()});
+      risk=evaluateDemoRisk({...raw,brokerBalanceCents:raw.brokerBalanceCents,
+        stakeCents:pickDemoStakeCents(this.read<number>('demo-stake-index')||0),
+        maxConcurrent:this.chosenMaxConcurrent()});
     const lastChecked=this.read<number>('demo-last-balance-at')||null;
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.net,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
