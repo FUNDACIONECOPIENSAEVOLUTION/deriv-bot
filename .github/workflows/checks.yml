@@ -25,6 +25,8 @@ jobs:
         run: python -m py_compile mcp_research.py
       - name: Comprobar servidor de analistas
         run: node --check server.mjs
+      - name: Validar regla de versión incremental y manifiesto compartido
+        run: node scripts/bump_release.mjs --verify
       - name: Validar HTML y seguridad básica
         run: node tests/test_html.mjs
       - name: Validar integridad de cotizaciones públicas con datos sintéticos de prueba
