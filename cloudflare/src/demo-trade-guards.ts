@@ -1,48 +1,17 @@
-import { assessDailyDemoRisk, DEMO_ALLOCATION_CENTS, DEMO_MAX_OPEN, DEMO_STAKE_CENTS } from './demo-risk-policy';
+import { evaluateDemoRisk, DEMO_STAKES_CENTS, DEMO_MAX_OPEN } from './demo-risk-policy';
 
-/**
- * Side-effect-free safety gate for a future broker DEMO order executor.
- *
- * This module NEVER opens a socket or sends a buy instruction. It can only
- * produce a candidate buy message after strict demo-only checks.
- * Calling it must not be interpreted as a completed or permitted purchase.
- */
+/** Strict broker DEMO-only order guards. Nothing in this file sends an order. */
 export type DemoQuoteForBuy = {
-  id:string; askPrice:number; payout:number; quotedAt:number;
-  symbol:'R_100'; contractType:'CALL'|'PUT'; durationTicks:20; stake:1;
+  id:string;askPrice:number;payout:number;quotedAt:number;
+  symbol:'R_100';contractType:'CALL'|'PUT';durationTicks:20;stakeCents:number;
 };
 export type DemoTradeGate = {
-  accountType:'demo'|'real'|'unknown';
-  currency:string;
-  socketUrl:string;
-  userEnabledDemoExecution:boolean;
-  signal:'UP'|'DOWN'|'HOLD';
-  quote:DemoQuoteForBuy;
-  now:number;
-  todayTrades:number;
-  todayLossCents:number;
-  hasOpenContract:boolean;
-  unresolvedBuy:boolean;
-  /** Confirmed DEMO contracts open at the broker, separate from unknown acknowledgements. */
-  openContracts?:number;
-  /** Reserved worst-case loss of all OPEN/UNKNOWN contracts in cents. */
-  activeExposureCents?:number;
-  /** Total realized broker-verified P&L, all days, in cents. */
-  lifetimePnlCents?:number;
-  /** Signed daily broker-verified net P&L, not cumulative loss of losing tickets. */
-  dailyNetPnlCents?:number;
-  /** Count of today's broker-confirmed settled contracts. */
-  dailySettled?:number;
-  /** Sticky day-stop stored in the database, not recalculated away when late trades settle. */
-  haltedToday?:boolean;
-  firstBatchBuys?:number;
+  accountType:'demo'|'real'|'unknown';currency:string;socketUrl:string;
+  userEnabledDemoExecution:boolean;signal:'UP'|'DOWN'|'HOLD';
+  quote:DemoQuoteForBuy;now:number;openContracts:number;unknownCount:number;
+  exposureCents:number;lifetimeNetCents:number;brokerBalanceCents:number;
+  baselineBalanceCents:number;halted:boolean;
 };
-
-const MAX_STAKE_CENTS=DEMO_STAKE_CENTS;
-export const DEMO_RESEARCH_ALLOCATION_CENTS=DEMO_ALLOCATION_CENTS;
-export const DEMO_MAX_PARALLEL_CONTRACTS=DEMO_MAX_OPEN;
-const MAX_QUOTE_AGE_SECONDS=8;
-
 const cents=(input:unknown):number|null=>{
   if(typeof input!=='number' && !(typeof input==='string' && /^-?(?:0|[1-9][0-9]*)(?:[.][0-9]{1,8})?$/.test(input)))return null;
   const value=Number(input);
@@ -50,47 +19,41 @@ const cents=(input:unknown):number|null=>{
   const rounded=Math.round(value*100);
   return Math.abs(value*100-rounded)<0.000001?rounded:null;
 };
-
-export function buildDemoBuyRequest(gate:DemoTradeGate){
+export function buildDemoBuyRequest(gate:DemoTradeGate) {
   if(gate.accountType!=='demo'||gate.currency!=='USD')throw Error('DEMO_ONLY');
   let parsed:URL;
   try{parsed=new URL(gate.socketUrl);}catch{throw Error('DEMO_SOCKET_REQUIRED');}
   if(parsed.protocol!=='wss:'||parsed.hostname!=='api.derivws.com'
-    ||parsed.pathname!=='/trading/v1/options/ws/demo'
-    ||parsed.username||parsed.password||parsed.port||parsed.hash
-    ||parsed.searchParams.size!==1||!parsed.searchParams.get('otp'))throw Error('DEMO_SOCKET_REQUIRED');
+    ||parsed.pathname!=='/trading/v1/options/ws/demo'||parsed.username||parsed.password
+    ||parsed.port||parsed.hash||parsed.searchParams.size!==1
+    ||!parsed.searchParams.get('otp'))throw Error('DEMO_SOCKET_REQUIRED');
   if(!gate.userEnabledDemoExecution)throw Error('DEMO_EXECUTION_DISABLED');
   if(gate.signal!=='UP'&&gate.signal!=='DOWN')throw Error('NO_APPROVED_SIGNAL');
-  const open=gate.openContracts===undefined?(gate.hasOpenContract?DEMO_MAX_OPEN:0):gate.openContracts;
-  const exposure=gate.activeExposureCents===undefined?open*DEMO_STAKE_CENTS:gate.activeExposureCents;
-  const lifetime=gate.lifetimePnlCents??0;
-  const dailyNet=gate.dailyNetPnlCents??-gate.todayLossCents;
-  if(!Number.isSafeInteger(gate.todayTrades)||gate.todayTrades<0)throw Error('DEMO_RISK_INVALID');
-  const risk=assessDailyDemoRisk({
-    openContracts:open,unknownCount:gate.unresolvedBuy?1:0,
-    exposureCents:exposure,lifetimeNetCents:lifetime,
-    dailyNetCents:dailyNet,dailySettled:gate.dailySettled??0,haltedToday:gate.haltedToday===true,
-    firstBatchBuys:gate.firstBatchBuys??0
+  const q=gate.quote;
+  const risk=evaluateDemoRisk({
+    openContracts:gate.openContracts,unknownCount:gate.unknownCount,
+    exposureCents:gate.exposureCents,lifetimeNetCents:gate.lifetimeNetCents,
+    brokerBalanceCents:gate.brokerBalanceCents,baselineBalanceCents:gate.baselineBalanceCents,
+    halted:gate.halted,stakeCents:q.stakeCents
   });
   if(!risk.allowed)throw Error(risk.reason);
-  const q=gate.quote;
-  const requiredType=gate.signal==='UP'?'CALL':'PUT';
-  if(q.symbol!=='R_100'||q.contractType!==requiredType||q.durationTicks!==20||q.stake!==1)
-    throw Error('DEMO_CONTRACT_NOT_ALLOWED');
+  if(q.symbol!=='R_100'||q.contractType!==(gate.signal==='UP'?'CALL':'PUT')
+    ||q.durationTicks!==20||!DEMO_STAKES_CENTS.some(v=>v===q.stakeCents))
+      throw Error('DEMO_CONTRACT_NOT_ALLOWED');
   if(!/^[A-Za-z0-9_-]{32,128}$/.test(q.id))throw Error('DEMO_PROPOSAL_ID_INVALID');
   if(!Number.isSafeInteger(gate.now)||!Number.isSafeInteger(q.quotedAt)
-    ||gate.now<q.quotedAt||gate.now-q.quotedAt>MAX_QUOTE_AGE_SECONDS)throw Error('DEMO_QUOTE_STALE');
+    ||gate.now<q.quotedAt||gate.now-q.quotedAt>8)throw Error('DEMO_QUOTE_STALE');
   const askCents=cents(q.askPrice),payoutCents=cents(q.payout);
-  if(askCents!==MAX_STAKE_CENTS||payoutCents===null||payoutCents<MAX_STAKE_CENTS)
+  if(askCents!==q.stakeCents||payoutCents===null||payoutCents<askCents)
     throw Error('DEMO_PRICE_NOT_ALLOWED');
-  return Object.freeze({buy:q.id,price:1,req_id:2} as const);
+  return Object.freeze({buy:q.id,price:q.stakeCents/100,req_id:2} as const);
 }
-
 export type DemoBuyAck =
   |{accepted:true;contractId:number;buyCents:number;purchaseTime:number}
   |{accepted:false;code:string};
 
-export function parseDemoBuyResponse(raw:unknown):DemoBuyAck {
+export function parseDemoBuyResponse(raw:unknown,expectedStakeCents:number):DemoBuyAck {
+  if(!DEMO_STAKES_CENTS.some(x=>x===expectedStakeCents))throw Error('DEMO_STAKE_INVALID');
   if(!raw||typeof raw!=='object')throw Error('DEMO_BUY_INVALID_RESPONSE');
   const x=raw as Record<string,unknown>;
   if(x.req_id!==undefined&&x.req_id!==2)throw Error('DEMO_BUY_WRONG_REQUEST');
@@ -98,7 +61,7 @@ export function parseDemoBuyResponse(raw:unknown):DemoBuyAck {
   if(error){const code=typeof error.code==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(error.code)?error.code:'REJECTED';return {accepted:false,code};}
   if(x.msg_type!=='buy'||!x.buy||typeof x.buy!=='object')throw Error('DEMO_BUY_INVALID_RESPONSE');
   const buy=x.buy as Record<string,unknown>,id=buy.contract_id,price=cents(buy.buy_price);
-  if(typeof id!=='number'||!Number.isSafeInteger(id)||id<=0||price!==MAX_STAKE_CENTS
+  if(typeof id!=='number'||!Number.isSafeInteger(id)||id<=0||price!==expectedStakeCents
     ||typeof buy.purchase_time!=='number'||!Number.isSafeInteger(buy.purchase_time)||buy.purchase_time<=0)
     throw Error('DEMO_BUY_INVALID_RESPONSE');
   return {accepted:true,contractId:id,buyCents:price,purchaseTime:buy.purchase_time};
@@ -106,7 +69,7 @@ export function parseDemoBuyResponse(raw:unknown):DemoBuyAck {
 
 export type DemoSettlement={contractId:number;sold:true;profitCents:number;buyCents:number;payoutCents:number;outcome:'WIN'|'LOSS'|'FLAT';entrySpot?:number;exitSpot?:number};
 export function parseDemoSettlement(raw:unknown,expectedContractId:number,
-  expectedType?:'CALL'|'PUT'):DemoSettlement|null {
+  expectedType?:'CALL'|'PUT',expectedStakeCents?:number):DemoSettlement|null {
   if(!Number.isSafeInteger(expectedContractId)||expectedContractId<=0)throw Error('DEMO_CONTRACT_INVALID_ID');
   if(!raw||typeof raw!=='object')throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
   const message=raw as Record<string,unknown>;
@@ -122,7 +85,7 @@ export function parseDemoSettlement(raw:unknown,expectedContractId:number,
     throw Error('DEMO_SETTLEMENT_WRONG_TYPE');
   if(data.underlying_symbol!==undefined&&data.underlying_symbol!=='R_100')throw Error('DEMO_SETTLEMENT_WRONG_SYMBOL');
   const profit=cents(data.profit),buy=cents(data.buy_price),payout=cents(data.payout);
-  if(profit===null||buy!==MAX_STAKE_CENTS||payout===null||payout<0)
+  if(profit===null||buy===null||(expectedStakeCents!==undefined&&buy!==expectedStakeCents)||payout===null||payout<0)
     throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
   const spot=(x:unknown)=>{
     if(x===null||x===undefined)return undefined;
