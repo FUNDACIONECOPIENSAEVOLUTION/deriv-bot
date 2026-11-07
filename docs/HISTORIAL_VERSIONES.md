@@ -46,6 +46,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.6 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:46:28.720Z (UTC).
+- **Commit de origen:** `6c57b2580775`.
+- Probar causalidad limitada y clasificación de pérdidas por CALL/PUT en DEMO
+- Distinguir causas de pérdidas CALL y PUT y segmentar resultados DEMO por dirección
+
 ## v5.5 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:30:50.740Z (UTC).

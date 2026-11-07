@@ -1,11 +1,11 @@
 {
-  "version": "5.5",
-  "updatedAt": "2026-11-07T23:30:50.740Z",
-  "summary": "Publicar diagnóstico de mercado en navegador y verificar que el panel sirve el código corregido",
+  "version": "5.6",
+  "updatedAt": "2026-11-07T23:46:28.720Z",
+  "summary": "Probar causalidad limitada y clasificación de pérdidas por CALL/PUT en DEMO",
   "changes": [
-    "Publicar diagnóstico de mercado en navegador y verificar que el panel sirve el código corregido",
-    "Corregir diagnóstico de contratos con consulta directa de navegador y diferenciar liquidaciones DEMO"
+    "Probar causalidad limitada y clasificación de pérdidas por CALL/PUT en DEMO",
+    "Distinguir causas de pérdidas CALL y PUT y segmentar resultados DEMO por dirección"
   ],
-  "sourceCommit": "965ae39159357e19df62bd475f04295beb65700a",
+  "sourceCommit": "6c57b258077569ab095198b2fe344f84ef9528d9",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
