@@ -1,54 +1,48 @@
-import {it,expect,describe} from 'vitest';
-import { assessDailyDemoRisk,DEMO_MAX_OPEN,DEMO_STAKE_CENTS,
- DEMO_MIN_SETTLED_FOR_REVIEW,DEMO_DAILY_LOSS_FLOOR_CENTS } from '../src/demo-risk-policy';
-
-const input={openContracts:0,unknownCount:0,exposureCents:0,
- lifetimeNetCents:0,dailyNetCents:0,dailySettled:0,haltedToday:false};
-
-describe('DERIV virtual-dollar rule, not raw win percentage',()=>{
-  it('permits ten open virtual contracts at US$1 each, US$10 total',()=>{
-    expect(DEMO_MAX_OPEN).toBe(10);expect(DEMO_STAKE_CENTS).toBe(100);
-    expect(DEMO_DAILY_LOSS_FLOOR_CENTS).toBe(-1000);
-    expect(DEMO_MIN_SETTLED_FOR_REVIEW).toBe(10);
-    const s=assessDailyDemoRisk({...input,openContracts:9,exposureCents:900});
-    expect(s.allowed).toBe(true);expect(s.worstCaseDailyNetCents).toBe(-1000);
-    expect(assessDailyDemoRisk({...input,openContracts:10,exposureCents:1000}).reason).toBe('DEMO_MAX_OPEN');
-  });
-  it('keeps trading after 6 wins and 4 losses if realized daily net is positive',()=>{
-    // Example: 6 x +8c - 4 x 10c = +8c.
-    const s=assessDailyDemoRisk({...input,lifetimeNetCents:8,dailyNetCents:8,dailySettled:10});
-    expect(s.allowed).toBe(true);expect(s.dailyNetCents).toBe(8);
-  });
-  it('stops for the Bogotá day after 5 wins/5 losses with negative net despite 50% accuracy',()=>{
-    const s=assessDailyDemoRisk({...input,lifetimeNetCents:-10,dailyNetCents:-10,dailySettled:10});
-    expect(s.allowed).toBe(false);expect(s.reason).toBe('DEMO_DAY_NOT_PROFITABLE');
-    expect(s.reviewTriggered).toBe(true);
-  });
-  it('keeps running after 20 settlements with small positive net, but stops if daily net reaches zero',()=>{
-    expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:5,lifetimeNetCents:5}).allowed).toBe(true);
-    expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:0}).reason).toBe('DEMO_DAY_NOT_PROFITABLE');
-    expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:15,haltedToday:true}).reason).toBe('DEMO_DAY_HALTED');
-  });
-  it('reserves possible worst-case losses of open contracts even during a profitable session',()=>{
-    expect(assessDailyDemoRisk({...input,dailyNetCents:-100,openContracts:9,exposureCents:900})
-      .reason).toBe('DEMO_DAILY_RISK_FLOOR');
-    expect(assessDailyDemoRisk({...input,dailySettled:20,dailyNetCents:80,
-      openContracts:9,exposureCents:900,lifetimeNetCents:8}).allowed).toBe(true);
-  });
-  it('halts on any uncertain buy and on exhausted research allocation',()=>{
-    expect(assessDailyDemoRisk({...input,unknownCount:1,exposureCents:100}).reason).toBe('DEMO_BUY_OUTCOME_UNKNOWN');
-    expect(assessDailyDemoRisk({...input,lifetimeNetCents:-995}).reason).toBe('DEMO_RESEARCH_ALLOCATION');
-  });
-  it('cannot silently exceed loss floor or use malformed accounting',()=>{
-    expect(()=>assessDailyDemoRisk({...input,openContracts:11,exposureCents:1100})).toThrow('DEMO_RISK_INVALID');
-    expect(()=>assessDailyDemoRisk({...input,openContracts:9,exposureCents:200})).toThrow('DEMO_RISK_INVALID');
-    expect(()=>assessDailyDemoRisk({...input,dailyNetCents:NaN})).toThrow('DEMO_RISK_INVALID');
-  });
-});
-
-it('limits the first experimental cohort to ten $1 virtual contracts',()=>{
-  expect(assessDailyDemoRisk({...input,firstBatchBuys:9}).allowed).toBe(true);
-  const stopped=assessDailyDemoRisk({...input,firstBatchBuys:10,dailyNetCents:900,dailySettled:10});
-  expect(stopped.allowed).toBe(false);
-  expect(stopped.reason).toBe('DEMO_FIRST_BATCH_COMPLETE');
+import {describe,it,expect} from 'vitest';
+import {DEMO_STAKES_CENTS,DEMO_MAX_OPEN,DEMO_MAX_LOSS_CENTS,
+ DEMO_BASELINE_EXPECTED_CENTS,pickDemoStakeCents,evaluateDemoRisk} from '../src/demo-risk-policy';
+const base={openContracts:0,unknownCount:0,exposureCents:0,lifetimeNetCents:0,
+  stakeCents:10,brokerBalanceCents:1_000_000,baselineBalanceCents:1_000_000,halted:false};
+describe('Deriv DEMO only: controlled variation and loss stop',()=>{
+ it('uses the four fixed experimental amounts with no doubling after a loss',()=>{
+   expect(DEMO_STAKES_CENTS).toEqual([10,25,50,100]);
+   expect([0,1,2,3,4,5].map(pickDemoStakeCents)).toEqual([10,25,50,100,10,25]);
+   expect(()=>pickDemoStakeCents(-1)).toThrow();
+ });
+ it('honors verified 10000 USD virtual baseline and 100 USD accumulated loss',()=>{
+   expect(DEMO_BASELINE_EXPECTED_CENTS).toBe(1_000_000);
+   expect(DEMO_MAX_LOSS_CENTS).toBe(10_000);
+   expect(evaluateDemoRisk(base).allowed).toBe(true);
+   expect(evaluateDemoRisk({...base,brokerBalanceCents:990_000}).reason).toBe('DEMO_LOSS_100_REACHED');
+   expect(evaluateDemoRisk({...base,brokerBalanceCents:989_999}).allowed).toBe(false);
+   expect(evaluateDemoRisk({...base,brokerBalanceCents:990_011,stakeCents:10}).allowed).toBe(true);
+ });
+ it('reserves open contract exposure and the planned stake before buying',()=>{
+   expect(evaluateDemoRisk({...base,brokerBalanceCents:990_200,openContracts:2,exposureCents:200,stakeCents:10})
+     .reason).toBe('DEMO_LOSS_RISK_LIMIT');
+   expect(evaluateDemoRisk({...base,brokerBalanceCents:991_200,openContracts:9,exposureCents:900,stakeCents:100})
+     .allowed).toBe(true);
+ });
+ it('allows at most ten concurrent contracts',()=>{
+   expect(DEMO_MAX_OPEN).toBe(10);
+   expect(evaluateDemoRisk({...base,openContracts:9,exposureCents:900,stakeCents:100}).allowed).toBe(true);
+   expect(evaluateDemoRisk({...base,openContracts:10,exposureCents:1000}).reason).toBe('DEMO_MAX_OPEN');
+ });
+ it('halts on any unknown broker acknowledgement, and sticky risk stop',()=>{
+   expect(evaluateDemoRisk({...base,unknownCount:1,exposureCents:100}).reason).toBe('DEMO_BUY_OUTCOME_UNKNOWN');
+   expect(evaluateDemoRisk({...base,halted:true}).reason).toBe('DEMO_LOSS_STOP_PERSISTED');
+ });
+ it('does not stop just because a short-term win rate or daily net is unfavorable',()=>{
+   expect(evaluateDemoRisk({...base,lifetimeNetCents:-100,brokerBalanceCents:999_900}).allowed).toBe(true);
+   expect(evaluateDemoRisk({...base,lifetimeNetCents:500,brokerBalanceCents:1_000_500}).allowed).toBe(true);
+ });
+ it('prevents a growing net loss from exceeding the 100 USD virtual budget',()=>{
+   expect(evaluateDemoRisk({...base,lifetimeNetCents:-9999,stakeCents:10}).reason)
+     .toBe('DEMO_LEDGER_RISK_LIMIT');
+ });
+ it('rejects malformed or out-of-range budgets before any trade',()=>{
+   expect(()=>evaluateDemoRisk({...base,stakeCents:500})).toThrow('DEMO_RISK_INVALID');
+   expect(()=>evaluateDemoRisk({...base,openContracts:11,exposureCents:1100})).toThrow('DEMO_RISK_INVALID');
+   expect(()=>evaluateDemoRisk({...base,brokerBalanceCents:NaN})).toThrow('DEMO_RISK_INVALID');
+ });
 });
