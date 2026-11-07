@@ -180,7 +180,7 @@ it('stops the day when ten verified DEMO settlements have nonpositive net P&L',a
         for(let i=0;i<wins+losses;i++){
           const pnl=i<wins?8:-10,contractId=i+1000;
           ctx.storage.sql.exec(
-            "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,?,'SETTLED',10,?,?,?)",
+            "INSERT INTO demo_trades(date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents) VALUES(?,?,'SETTLED',?,10,?,?)",
             date,Math.floor(Date.now()/1000)+i,contractId,pnl>0?18:0,pnl
           );
         }
