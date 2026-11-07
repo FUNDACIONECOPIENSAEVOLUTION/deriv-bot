@@ -172,6 +172,29 @@ async function directPublicQuote(direction,stakeCents){
  try{return await brokerMessage(ws,proposalRequest(direction,stakeCents));}
  finally{try{ws.close();}catch{}}
 }
+async function browserCheckDemoSettlement(msg){
+ const session=await browserPrivate('check',{});
+ if(session.mode!=='DEMO_BROWSER_SETTLEMENT'||session.accountType!=='demo'||!session.noOrders)
+  throw Error('DEMO_BROWSER_SETTLEMENT_INVALID');
+ const ws=await browserSocket(session.wsUrl,'demo');
+ try{
+  const reply=await brokerMessage(ws,{
+   proposal_open_contract:1,contract_id:session.contractId,req_id:3
+  });
+  if(reply.error||reply.errors||reply.msg_type!=='proposal_open_contract')
+   throw Error('DEMO_BROWSER_SETTLEMENT_UNAVAILABLE');
+  if([1,true].includes(reply.proposal_open_contract?.is_sold)){
+   const result=await browserPrivate('settle',{
+    nonce:session.nonce,id:session.id,response:reply
+   });
+   msg.textContent='Contrato DEMO '+session.contractId+' cerrado · '+money(result.settlement.profitCents)+
+    '. Resultado observado en navegador, no verificado independientemente por Cloudflare.';
+  }else{
+   msg.textContent='El contrato DEMO '+session.contractId+' todavía aparece abierto en Deriv.';
+  }
+ }finally{try{ws.close();}catch{}}
+}
+
 async function oneBrowserDemoBuy(approved,msg){
  const {direction,stakeCents}=approved;
  const session=await browserPrivate('begin',{signal:direction,stakeCents});
@@ -323,7 +346,7 @@ function renderDemo(data){
     $('chart-demo-balance').textContent='Saldo DEMO del broker: '+label+(fresh?'':' (desactualizado)');
     $('chart-demo-locked').textContent='Comprometido en '+(report.openCount||0)+' contratos: '
       +money(report.activeExposureCents||0)+' virtuales';
-    $('chart-demo-pnl').textContent='P&L bot DEMO verificado: '+money(report.pnlCents||0)
+    $('chart-demo-pnl').textContent='P&L DEMO registrado (incluye resultados del navegador sin verificación independiente): '+money(report.pnlCents||0)
       +' · '+(report.settled||0)+' liquidados';
     const trades=(report.history||[]).slice(0,5);
     $('chart-demo-last-trades').textContent=trades.length
@@ -364,7 +387,7 @@ function renderDemo(data){
     &&Number(report.pilotRemainingPurchases)>0&&Number(report.pilotRemainingBudgetCents)>=35;
   $('demo-buy-once').disabled=!canBuy;
   $('demo-auto-start').disabled=!(data.connected&&data.demoAutomationAvailable
-    &&data.demoTradingEnabled&&daily.allowed===true&&(report.settled||0)>=1&&
+    &&data.demoTradingEnabled&&daily.allowed===true&&(report.brokerVerifiedSettled||0)>=1&&
     !data.demoAutomationRequested);
   $('demo-auto-stop').disabled=!(data.connected&&data.demoAutomationRequested);
   $('demo-check').disabled=!(data.connected&&(report.openCount||0)>0);
@@ -653,7 +676,18 @@ $('demo-check').onclick=async()=>{
       ?'Contrato DEMO liquidado oficialmente: '+money(out.settlement.profitCents)+' netos virtuales.'
       :out.state==='OPEN'?'Contrato DEMO todavía abierto.'
       :out.state==='BUY_OUTCOME_UNKNOWN'?'Compra sin confirmación; exige conciliación manual con Deriv.':'Sin contratos DEMO pendientes.';
-  }catch{msg.textContent='Deriv no confirmó el cierre. El contrato queda pendiente; no se enviarán nuevas compras.';}
+  }catch{
+    try{
+      if(demoCurrent?.tradeReport?.unresolved?.code==='CLIENT_ACK'){
+        await browserCheckDemoSettlement(msg);
+      }else{
+        msg.textContent='El servidor no confirmó el cierre. Revisa Deriv antes de otro intento.';
+      }
+    }catch(error){
+      msg.textContent='No se pudo confirmar el cierre DEMO: '+
+        (error instanceof Error?error.message:'ERROR')+'. No repitas una compra pendiente.';
+    }
+  }
   finally{await loadDemo();}
 };
 async function loadArbitrage(){
