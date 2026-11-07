@@ -78,13 +78,13 @@ export type DemoAttemptOutcome =
  | {state:'OPEN';contractId:number;buyCents:number;purchaseTime:number};
 
 /** Must be called ONLY after explicit owner action and after verifying DEMO account. */
-export async function buySingleDemoContract(args:{
+export type DemoBuySessionArgs={
   wsUrl:string;
   gate:Omit<DemoTradeGate,'socketUrl'|'quote'|'now'>;
   reserve:(quote:DemoQuoteForBuy)=>Promise<number>;
   acknowledge:(intentId:number,ack:DemoBuyAck)=>Promise<void>;
-}):Promise<DemoAttemptOutcome> {
-  return withDemoSocket(args.wsUrl,async(socket)=>{
+};
+export async function buyDemoOverSocket(socket:WebSocket,args:DemoBuySessionArgs):Promise<DemoAttemptOutcome> {
     const proposal=await requestDemoMessage(socket,{...DEMO_QUOTE_REQUEST});
     if(proposal.error||proposal.errors||proposal.msg_type!=='proposal'){
       // A rejected amount is never increased: report the denial and stop.
@@ -105,7 +105,10 @@ export async function buySingleDemoContract(args:{
       // The broker MAY have purchased despite a lost ACK. Never retry.
       throw Error('DEMO_BUY_OUTCOME_UNKNOWN');
     }
-  });
+}
+
+export async function buySingleDemoContract(args:DemoBuySessionArgs):Promise<DemoAttemptOutcome>{
+  return withDemoSocket(args.wsUrl,socket=>buyDemoOverSocket(socket,args));
 }
 
 export async function readDemoSettlement(wsUrl:string,contractId:number):Promise<DemoSettlement|null> {
