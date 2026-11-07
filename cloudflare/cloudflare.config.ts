@@ -11,6 +11,7 @@ const paperWorker = defineWorker({
 		env: {
 			ADMIN_TOKEN: bindings.secret(),
 			PAPER_ENABLED: bindings.text("true"),
+			DEMO_BUY_ENABLED: bindings.text("false"),
 			INITIAL_USD: bindings.text("10"),
 			STAKE_USD: bindings.text("0.10"),
 			DAILY_LOSS_USD: bindings.text("0.30"),
