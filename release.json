@@ -1,10 +1,13 @@
 {
-  "version": "4.7",
-  "updatedAt": "2026-11-07T22:58:46.955Z",
-  "summary": "Desplegar reparaciones DEMO y comprobar versión pública de Cloudflare tras publicación",
+  "version": "4.8",
+  "updatedAt": "2026-11-07T23:16:42.552Z",
+  "summary": "Corregir WebSocket Deriv saliente en deriv-contracts.ts sin cambiar modo DEMO",
   "changes": [
-    "Desplegar reparaciones DEMO y comprobar versión pública de Cloudflare tras publicación"
+    "Corregir WebSocket Deriv saliente en deriv-contracts.ts sin cambiar modo DEMO",
+    "Corregir WebSocket Deriv saliente en demo-broker-session.ts sin cambiar modo DEMO",
+    "Corregir WebSocket Deriv saliente en deriv-demo.ts sin cambiar modo DEMO",
+    "Usar WebSocket nativo de Cloudflare para conectar Deriv con canales restringidos"
   ],
-  "sourceCommit": "98dab1b103e8a08f2289396493b106e97a53aebd",
+  "sourceCommit": "0219d0ce3c5a00b7c5ca359772e9628c1dc65d71",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

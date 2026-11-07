@@ -38,6 +38,16 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.8 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:16:42.552Z (UTC).
+- **Commit de origen:** `0219d0ce3c5a`.
+- Corregir WebSocket Deriv saliente en deriv-contracts.ts sin cambiar modo DEMO
+- Corregir WebSocket Deriv saliente en demo-broker-session.ts sin cambiar modo DEMO
+- Corregir WebSocket Deriv saliente en deriv-demo.ts sin cambiar modo DEMO
+- Usar WebSocket nativo de Cloudflare para conectar Deriv con canales restringidos
+
 ## v4.7 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T22:58:46.955Z (UTC).
