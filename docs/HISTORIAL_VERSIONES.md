@@ -30,6 +30,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v4.0 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T22:26:10.627Z (UTC).
+- **Commit de origen:** `2029e1461c02`.
+- Inspeccionar metadatos seguros de cotización pública para detectar incompatibilidades con la compra DEMO, sin transmitir credenciales
+
 ## v3.9 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:52:14.316Z (UTC).

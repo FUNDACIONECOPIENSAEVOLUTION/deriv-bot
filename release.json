@@ -1,11 +1,10 @@
 {
-  "version": "3.9",
-  "updatedAt": "2026-11-07T20:52:14.316Z",
-  "summary": "Corregir fixtures de pruebas de stakes 100c sin coincidencias parciales con 35c",
+  "version": "4.0",
+  "updatedAt": "2026-11-07T22:26:10.627Z",
+  "summary": "Inspeccionar metadatos seguros de cotización pública para detectar incompatibilidades con la compra DEMO, sin transmitir credenciales",
   "changes": [
-    "Corregir fixtures de pruebas de stakes 100c sin coincidencias parciales con 35c",
-    "Corregir Deriv DEMO según API real: 5 ticks y apuestas válidas 0.35/0.50/0.75/1 USD; pruebas y UI alineadas"
+    "Inspeccionar metadatos seguros de cotización pública para detectar incompatibilidades con la compra DEMO, sin transmitir credenciales"
   ],
-  "sourceCommit": "c0fb0116577982116e40e39e0cb559391ce6c055",
+  "sourceCommit": "2029e1461c02249aacdc8d916b433f7febe87358",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
