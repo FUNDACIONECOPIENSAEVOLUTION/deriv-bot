@@ -33,3 +33,11 @@ El despliegue requiere comprobar el acceso a la cuenta Cloudflare, revisar que c
 El plan Free tiene límites compartidos de solicitudes, duración y almacenamiento; al excederlos falla la operación afectada. Una conexión saliente no hiberna. Este diseño reduce escrituras y usa un solo objeto, pero no garantiza ejecución gratuita ilimitada ni mide rentabilidad.
 
 Referencias oficiales: https://developers.cloudflare.com/durable-objects/platform/pricing/ , https://developers.cloudflare.com/cf/projects/cloudflare-config/ , https://developers.cloudflare.com/workers/testing/vitest-integration/ , https://developers.deriv.com/es/docs/options/ws-public/
+
+## Cotización oficial DEMO sin compra (revisión 07/11/2026)
+
+La ruta privada `POST /api/deriv/quote` solicita una propuesta puntual usando el OAuth vigente de la **cuenta DEMO activa USD**. El servidor obtiene un OTP de Deriv, rechaza cualquier URL WebSocket que no sea exactamente el endpoint de cuenta **demo**, y envía únicamente el mensaje `proposal` con importe fijo de USD 0,10, dirección CALL, símbolo R_100 y duración de 20 ticks. No ejecuta `buy`, `sell`, transferencias ni retiros, no devuelve identificadores de propuesta y no cambia el importe si el broker rechaza la solicitud. Impone intervalo mínimo de 15 segundos entre intentos.
+
+La respuesta muestra precio del contrato, pago posible y beneficio posible **si Deriv acepta cotizar**. Si rechaza el importe o la duración, muestra el rechazo sin aumentar el monto. La página PAPER continúa independiente del saldo DEMO. Esta funcionalidad exige autenticación del propietario y una demo previamente autorizada; **la aprobación de pruebas de GitHub no confirma que la cuenta real del usuario, el OTP ni el WebSocket del Worker desplegado funcionen**. Requiere validar conectividad en Cloudflare con el consentimiento del titular antes de marcarla operativa. El servicio no permite transacciones reales.
+
+Referencia API: https://developers.deriv.com/docs/trading/proposal/ y https://developers.deriv.com/docs/options/websocket/ .
