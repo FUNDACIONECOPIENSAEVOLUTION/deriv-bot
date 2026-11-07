@@ -11,6 +11,7 @@ export const DEMO_BASELINE_EXPECTED_CENTS=1_000_000; // US$10,000; broker must c
 export const DEMO_REVIEW_INTERVAL=10;
 export type DemoRiskInput={
  openContracts:number;
+ maxConcurrent?:number;
  unknownCount:number;
  exposureCents:number;
  lifetimeNetCents:number;
@@ -25,9 +26,10 @@ export function pickDemoStakeCents(index:number){
  return DEMO_STAKES_CENTS[index%DEMO_STAKES_CENTS.length];
 }
 export function evaluateDemoRisk(s:DemoRiskInput){
- const integers=[s.openContracts,s.unknownCount,s.exposureCents,s.lifetimeNetCents,
+ const maxConcurrent=s.maxConcurrent??DEMO_MAX_OPEN;
+ const integers=[s.openContracts,maxConcurrent,s.unknownCount,s.exposureCents,s.lifetimeNetCents,
   s.stakeCents,s.brokerBalanceCents,s.baselineBalanceCents];
- if(integers.some(n=>!Number.isSafeInteger(n))||s.openContracts<0||s.openContracts>DEMO_MAX_OPEN
+ if(integers.some(n=>!Number.isSafeInteger(n))||maxConcurrent<1||maxConcurrent>DEMO_MAX_OPEN||s.openContracts<0||s.openContracts>DEMO_MAX_OPEN
   ||s.unknownCount<0||s.exposureCents<0||s.brokerBalanceCents<0
   ||s.baselineBalanceCents<=0||s.exposureCents>DEMO_MAX_OPEN*DEMO_MAX_STAKE_CENTS
   ||!DEMO_STAKES_CENTS.some(x=>x===s.stakeCents)
@@ -39,10 +41,10 @@ export function evaluateDemoRisk(s:DemoRiskInput){
  if(s.halted)reason='DEMO_LOSS_STOP_PERSISTED';
  else if(s.unknownCount>0)reason='DEMO_BUY_OUTCOME_UNKNOWN';
  else if(s.brokerBalanceCents<=floor)reason='DEMO_LOSS_100_REACHED';
- else if(s.openContracts>=DEMO_MAX_OPEN)reason='DEMO_MAX_OPEN';
+ else if(s.openContracts>=maxConcurrent)reason='DEMO_MAX_OPEN';
  else if(lowestExpectedBalance<floor)reason='DEMO_LOSS_RISK_LIMIT';
  else if(ledgerWorstCase< -DEMO_MAX_LOSS_CENTS)reason='DEMO_LEDGER_RISK_LIMIT';
- return {allowed:reason==='',reason,maximumOpen:DEMO_MAX_OPEN,
+ return {allowed:reason==='',reason,maximumOpen:maxConcurrent,
   brokerBalanceCents:s.brokerBalanceCents,baselineBalanceCents:s.baselineBalanceCents,
   lossStopBalanceCents:floor,openExposureCents:s.exposureCents,
   estimatedBalanceAfterWorstCaseCents:lowestExpectedBalance,
