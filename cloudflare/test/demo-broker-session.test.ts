@@ -41,6 +41,9 @@ it('settles only a matching contract in USD, with broker supplied gain/loss',()=
     ...raw.proposal_open_contract,currency:'EUR'}},171717)).toThrow('DEMO_SETTLEMENT_INVALID_RESPONSE');
   expect(()=>parseDemoSettlement({...raw,proposal_open_contract:{
     ...raw.proposal_open_contract,contract_id:99999}},171717)).toThrow('DEMO_CONTRACT_ID_MISMATCH');
+  expect(()=>parseDemoSettlement(raw,171717,'PUT')).toThrow('DEMO_SETTLEMENT_WRONG_TYPE');
+  expect(parseDemoSettlement({...raw,proposal_open_contract:{...raw.proposal_open_contract,contract_type:'PUT'}},
+    171717,'PUT')?.profitCents).toBe(8);
 });
 
 class SimulatedBroker extends EventTarget {
