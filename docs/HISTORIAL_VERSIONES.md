@@ -9,6 +9,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v1.9 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T19:57:11.082Z (UTC).
+- **Commit de origen:** `d9cf42ba76e2`.
+- Evitar colisiones de versiones: refrescar main y reintentar de forma segura antes de publicar
+
 ## v1.8 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T19:56:05.812Z (UTC).

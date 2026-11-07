@@ -1,12 +1,10 @@
 {
-  "version": "1.8",
-  "updatedAt": "2026-11-07T19:56:05.812Z",
-  "summary": "Documentar autorización y controles de cinco tandas de diez contratos virtuales",
+  "version": "1.9",
+  "updatedAt": "2026-11-07T19:57:11.082Z",
+  "summary": "Evitar colisiones de versiones: refrescar main y reintentar de forma segura antes de publicar",
   "changes": [
-    "Documentar autorización y controles de cinco tandas de diez contratos virtuales",
-    "Documentar autorización y controles de cinco tandas de diez contratos virtuales",
-    "Probar reportes por tanda y espera de liquidación de 10 operaciones DEMO"
+    "Evitar colisiones de versiones: refrescar main y reintentar de forma segura antes de publicar"
   ],
-  "sourceCommit": "16b99011e4abbc106f9ad4d312947de11482215d",
+  "sourceCommit": "d9cf42ba76e2c38e691031fdb3dc17e68dce37cf",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
