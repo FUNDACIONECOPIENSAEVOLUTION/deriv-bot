@@ -1,11 +1,10 @@
 {
-  "version": "3.6",
-  "updatedAt": "2026-11-07T20:44:47.568Z",
-  "summary": "Ejecutar sondeo real de la API pública Deriv para diagnosticar rechazo ContractBuyValidationError",
+  "version": "3.7",
+  "updatedAt": "2026-11-07T20:46:18.892Z",
+  "summary": "Distinguir restricciones del contrato con matriz pública sin órdenes: stake, CALL/PUT y duración en R_100 y 1HZ100V",
   "changes": [
-    "Ejecutar sondeo real de la API pública Deriv para diagnosticar rechazo ContractBuyValidationError",
-    "Agregar sondeo público sin compras para validar R_100, 1HZ100V y propuestas DEMO sin credenciales"
+    "Distinguir restricciones del contrato con matriz pública sin órdenes: stake, CALL/PUT y duración en R_100 y 1HZ100V"
   ],
-  "sourceCommit": "f145f0ab7d096da87563cbca3f1f8b43be03ea41",
+  "sourceCommit": "6524747d57334a95c5c5dc02e57944e9e7307c07",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

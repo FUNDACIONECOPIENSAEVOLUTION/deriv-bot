@@ -27,6 +27,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v3.7 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T20:46:18.892Z (UTC).
+- **Commit de origen:** `6524747d5733`.
+- Distinguir restricciones del contrato con matriz pública sin órdenes: stake, CALL/PUT y duración en R_100 y 1HZ100V
+
 ## v3.6 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T20:44:47.568Z (UTC).
