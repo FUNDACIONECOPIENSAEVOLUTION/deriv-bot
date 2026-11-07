@@ -220,13 +220,13 @@ export class DerivDemoConnection extends DurableObject<Env> {
   }
 
   private reportDemo() {
-    type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null;decision_json?:string|null;entry_spot?:number|null;exit_spot?:number|null};
+    type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null;decision_json?:string|null;entry_spot?:number|null;exit_spot?:number|null;contract_type?:string|null};
     const sql=this.ctx.storage.sql;
     const stats=sql.exec<{settled:number;wins:number;losses:number;pnlCents:number}>(
       "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS pnlCents FROM demo_trades WHERE state='SETTLED'"
     ).one();
     const pending=sql.exec<Row>(
-      "SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code FROM demo_trades WHERE state IN ('UNKNOWN','OPEN') ORDER BY id ASC"
+      "SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code,contract_type FROM demo_trades WHERE state IN ('UNKNOWN','OPEN') ORDER BY id ASC"
     ).toArray();
     const unknownCount=pending.filter(r=>r.state==='UNKNOWN').length,
       openCount=pending.filter(r=>r.state==='OPEN').length,
@@ -256,7 +256,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
         })
       },
       analysis,analysisScope:'most_recent_1000_settled',
-      openContracts:pending.filter(r=>r.state==='OPEN').map(r=>({id:r.id,contractId:r.contract_id,createdAt:r.created_at})),
+      openContracts:pending.filter(r=>r.state==='OPEN').map(r=>({id:r.id,contractId:r.contract_id,
+        contractType:r.contract_type==='PUT'?'PUT' as const:'CALL' as const,
+        createdAt:r.created_at})),
       unresolved:pending.find(r=>r.state==='UNKNOWN')||pending[0]||null,
       history:history.map(r=>({id:r.id,date:r.date,state:r.state,contractId:r.contract_id,
         buyCents:r.buy_cents,payoutCents:r.payout_cents,pnlCents:r.pnl_cents,
@@ -455,7 +457,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(!pending.contractId)return {state:'BUY_OUTCOME_UNKNOWN',tradeReport:report};
     const creds=await this.verifiedDemoCredentials();
     const url=await this.otpDemoUrl(creds);
-    const result=await readDemoSettlement(url,pending.contractId);
+    const result=await readDemoSettlement(url,pending.contractId,pending.contractType);
     if(result) {
       this.ctx.storage.transactionSync(()=>{
         this.ctx.storage.sql.exec(
