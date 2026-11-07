@@ -125,6 +125,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
     ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS demo_connection (slot TEXT PRIMARY KEY,data TEXT NOT NULL)');
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_trades (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT NOT NULL, created_at INTEGER NOT NULL, state TEXT NOT NULL, contract_id INTEGER UNIQUE, buy_cents INTEGER, payout_cents INTEGER, pnl_cents INTEGER, code TEXT)");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_day_halts (date TEXT PRIMARY KEY, reason TEXT NOT NULL, stopped_at INTEGER NOT NULL)");
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_quote_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, stake_cents INTEGER NOT NULL, contract_type TEXT NOT NULL, accepted INTEGER NOT NULL, code TEXT)");
+
     const cols=new Set(ctx.storage.sql.exec<{name:string}>('PRAGMA table_info(demo_trades)').toArray().map(r=>r.name));
     for(const [name,kind] of [['decision_json','TEXT'],['entry_spot','REAL'],['exit_spot','REAL'],['contract_type','TEXT']]){
       if(!cols.has(name))ctx.storage.sql.exec('ALTER TABLE demo_trades ADD COLUMN '+name+' '+kind);
@@ -200,24 +202,26 @@ export class DerivDemoConnection extends DurableObject<Env> {
     this.ctx.storage.transactionSync(()=>{this.write('credentials',credentials);this.write('snapshot',{account,checkedAt:epoch(),expiresAt});});
     return this.status();
   }
-  private dayRisk(date=dayAt(epoch())){
-    const d=this.ctx.storage.sql.exec<{settled:number;net:number}>(
-      "SELECT COUNT(*) AS settled, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE date=? AND state='SETTLED'",date
-    ).one();
-    const stop=this.ctx.storage.sql.exec<{reason:string}>(
-      'SELECT reason FROM demo_day_halts WHERE date=?',date
-    ).toArray()[0]||null;
-    return {date,settled:d.settled,netCents:d.net,halted:!!stop,haltReason:stop?.reason??null};
+  private getRiskSnapshot(){
+    const currentBalance=this.read<number>('demo-last-balance-cents');
+    const ledger=this.ctx.storage.sql.exec<{net:number}>(
+      "SELECT COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED'"
+    ).one().net;
+    const pending=this.ctx.storage.sql.exec<{state:string;buy_cents:number|null}>(
+      "SELECT state,buy_cents FROM demo_trades WHERE state IN ('OPEN','UNKNOWN')"
+    ).toArray();
+    return {brokerBalanceCents:currentBalance??null,
+      baselineBalanceCents:DEMO_BASELINE_EXPECTED_CENTS,
+      halted:this.read<boolean>('demo-loss-halt')===true,
+      lifetimeNetCents:ledger,
+      openContracts:pending.filter(p=>p.state==='OPEN').length,
+      unknownCount:pending.filter(p=>p.state==='UNKNOWN').length,
+      exposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||100),0)};
   }
-  private freezeLosingDay(date:string){
-    const d=this.dayRisk(date);
-    // Risk halt is sticky: a late settlement cannot reopen trading the same day.
-    if(d.settled>=DEMO_MIN_SETTLED_FOR_REVIEW&&d.netCents<=0){
-      this.ctx.storage.sql.exec(
-        'INSERT OR IGNORE INTO demo_day_halts(date,reason,stopped_at) VALUES(?,?,?)',
-        date,'DAY_NET_NONPOSITIVE_AFTER_TEN',epoch()
-      );
-    }
+  private riskFor(stakeCents:number){
+    const s=this.getRiskSnapshot();
+    if(s.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
+    return evaluateDemoRisk({...s,brokerBalanceCents:s.brokerBalanceCents,stakeCents});
   }
 
   private reportDemo() {
