@@ -42,12 +42,12 @@ export function selectDemo(payload:unknown,accountId?:string):DemoAccount {
 
 
 /** A quote is never an order. Deliberately discard the proposal id. */
-const DEMO_QUOTE_REQUEST = Object.freeze({
+export const DEMO_QUOTE_REQUEST = Object.freeze({
   proposal:1,amount:0.10,basis:'stake',contract_type:'CALL',currency:'USD',
   duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1
 });
 const quoteMoney=(value:unknown):number|null=>{
-  if(typeof value!=='number' && !(typeof value==='string' && /^(?:0|[1-9][0-9]{0,9})(?:\\.[0-9]{1,8})?$/.test(value)))return null;
+  if(typeof value!=='number' && !(typeof value==='string' && /^(?:0|[1-9][0-9]{0,9})(?:[.][0-9]{1,8})?$/.test(value)))return null;
   const number=Number(value);
   return Number.isFinite(number)&&number>=0&&number<=1_000_000?number:null;
 };
