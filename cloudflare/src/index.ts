@@ -347,7 +347,7 @@ export default {
           slow:snapshot.decision.slow,rsi:snapshot.decision.rsi,
           volatility:snapshot.decision.volatility,entryQuote:snapshot.lastQuote,
           quoteAgeSeconds:snapshot.quoteAgeSeconds
-        });
+        },'auto');
       }catch(error){
         // Logs only trusted bounded domain codes, never broker tokens or OTP URLs.
         const code=error instanceof Error&&/^(?:DEMO|DERIV)_[A-Z0-9_]+$/.test(error.message)?
