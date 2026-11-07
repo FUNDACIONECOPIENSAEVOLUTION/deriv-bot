@@ -1,5 +1,5 @@
 import { dayAt } from '../../runtime/core.mjs';
-import { assessDailyDemoRisk, DEMO_MAX_OPEN, DEMO_ALLOCATION_CENTS, DEMO_MIN_SETTLED_FOR_REVIEW } from './demo-risk-policy';
+import { assessDailyDemoRisk, DEMO_MAX_OPEN, DEMO_ALLOCATION_CENTS, DEMO_MIN_SETTLED_FOR_REVIEW, DEMO_STAKE_CENTS } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
@@ -48,7 +48,7 @@ export function selectDemo(payload:unknown,accountId?:string):DemoAccount {
 
 /** A quote is never an order. Deliberately discard the proposal id. */
 export const DEMO_QUOTE_REQUEST = Object.freeze({
-  proposal:1,amount:0.10,basis:'stake',contract_type:'CALL',currency:'USD',
+  proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',
   duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1
 });
 export function demoQuoteRequest(signal:'UP'|'DOWN'='UP'){
@@ -68,12 +68,12 @@ export function parseDemoQuote(payload:unknown,signal:'UP'|'DOWN'='UP') {
   if(rejected){
     const raw=rejected.code;
     const code=typeof raw==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(raw)?raw:'REJECTED';
-    return {accepted:false,code,stake:0.10,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT'};
+    return {accepted:false,code,stake:1,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT'};
   }
   if(p.msg_type!=='proposal'||!p.proposal||typeof p.proposal!=='object')throw Error('DERIV_QUOTE_INVALID_RESPONSE');
   const proposal=p.proposal as Record<string,unknown>,askPrice=quoteMoney(proposal.ask_price),payout=quoteMoney(proposal.payout);
   if(askPrice===null||payout===null)throw Error('DERIV_QUOTE_INVALID_RESPONSE');
-  return {accepted:true,stake:0.10,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT',
+  return {accepted:true,stake:1,durationTicks:20,symbol:'R_100',contractType:signal==='UP'?'CALL':'PUT',
     askPrice,payout,potentialProfit:Math.round((payout-askPrice)*100)/100,quotedAt:epoch()};
 }
 export function demoSocketUrl(payload:unknown):string {
@@ -230,7 +230,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     ).toArray();
     const unknownCount=pending.filter(r=>r.state==='UNKNOWN').length,
       openCount=pending.filter(r=>r.state==='OPEN').length,
-      activeExposureCents=pending.reduce((sum,r)=>sum+(r.buy_cents||10),0);
+      activeExposureCents=pending.reduce((sum,r)=>sum+(r.buy_cents||DEMO_STAKE_CENTS),0);
     const history=sql.exec<Row>(
       'SELECT id,date,created_at,state,contract_id,buy_cents,payout_cents,pnl_cents,code,decision_json,entry_spot,exit_spot FROM demo_trades ORDER BY id DESC LIMIT 50'
     ).toArray();
@@ -242,17 +242,21 @@ export class DerivDemoConnection extends DurableObject<Env> {
       decision:r.decision_json?JSON.parse(r.decision_json):null
     }));
     const analysis=analyzeBrokerDemoHistory(analyticRows);
+    const firstBatchBuys=sql.exec<{total:number}>(
+      "SELECT COUNT(*) AS total FROM demo_trades WHERE state IN ('UNKNOWN','OPEN','SETTLED')"
+    ).one().total;
     const day=this.dayRisk();
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.pnlCents,
       winRatePct:stats.settled?Math.round(stats.wins/stats.settled*10000)/100:null,
       virtualResearchAllocationCents:DEMO_ALLOCATION_CENTS,
+      firstBatchBuys,firstBatchRemaining:Math.max(0,10-firstBatchBuys),
       virtualResearchRemainingCents:DEMO_ALLOCATION_CENTS+stats.pnlCents-activeExposureCents,
       maxParallel:DEMO_MAX_OPEN,openCount,unknownCount,activeExposureCents,
       dayRisk:{...day,
         ...assessDailyDemoRisk({
           openContracts:openCount,unknownCount,exposureCents:activeExposureCents,
           lifetimeNetCents:stats.pnlCents,dailyNetCents:day.netCents,
-          dailySettled:day.settled,haltedToday:day.halted
+          dailySettled:day.settled,haltedToday:day.halted,firstBatchBuys
         })
       },
       analysis,analysisScope:'most_recent_1000_settled',
@@ -315,7 +319,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(creds.expiresAt<=epoch()||creds.accountId!==saved.account.account_id)
       throw Error('DERIV_AUTHORIZATION_EXPIRED');
     const latest=await this.accounts(creds.accessToken,creds.accountId);
-    if(latest.account_type!=='demo'||latest.currency!=='USD'||latest.balance<0.10)
+    if(latest.account_type!=='demo'||latest.currency!=='USD'||latest.balance<1)
       throw Error('DEMO_ACCOUNT_UNAVAILABLE');
     return creds;
   }
@@ -389,17 +393,20 @@ export class DerivDemoConnection extends DurableObject<Env> {
           "SELECT COALESCE(SUM(pnl_cents),0) AS pnl FROM demo_trades WHERE state='SETTLED'"
         ).one().pnl;
         const todayRisk=this.dayRisk(today);
+        const firstBatchBuys=this.ctx.storage.sql.exec<{total:number}>(
+          "SELECT COUNT(*) AS total FROM demo_trades WHERE state IN ('UNKNOWN','OPEN','SETTLED')"
+        ).one().total;
         buildDemoBuyRequest({
           accountType:'demo',currency:'USD',socketUrl:url,userEnabledDemoExecution:true,
           signal:paperSignal,quote,now:epoch(),todayTrades:current.total,todayLossCents:0,
           hasOpenContract:pending.length>0,unresolvedBuy:pending.some(p=>p.state==='UNKNOWN'),
           openContracts:pending.filter(p=>p.state==='OPEN').length,
-          activeExposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||10),0),
+          activeExposureCents:pending.reduce((sum,p)=>sum+(p.buy_cents||DEMO_STAKE_CENTS),0),
           lifetimePnlCents:lifetime,dailyNetPnlCents:todayRisk.netCents,
-          dailySettled:todayRisk.settled,haltedToday:todayRisk.halted
+          dailySettled:todayRisk.settled,haltedToday:todayRisk.halted,firstBatchBuys
         });
         this.ctx.storage.sql.exec(
-          "INSERT INTO demo_trades(date,created_at,state,buy_cents,decision_json,contract_type) VALUES(?,?,'UNKNOWN',10,?,?)",
+          "INSERT INTO demo_trades(date,created_at,state,buy_cents,decision_json,contract_type) VALUES(?,?,'UNKNOWN',100,?,?)",
           today,epoch(),decision,quote.contractType
         );
         return this.ctx.storage.sql.exec<{id:number}>('SELECT last_insert_rowid() AS id').one().id;
@@ -425,7 +432,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
         hasOpenContract:report.openCount>0,unresolvedBuy:report.unknownCount>0,
         openContracts:report.openCount,activeExposureCents:report.activeExposureCents,
         lifetimePnlCents:report.pnlCents,dailyNetPnlCents:currentDay.netCents,
-        dailySettled:currentDay.settled,haltedToday:currentDay.halted
+        dailySettled:currentDay.settled,haltedToday:currentDay.halted,firstBatchBuys:report.firstBatchBuys
       },reserve,acknowledge
     });
     return {mode:'DERIV_DEMO',...result,tradeReport:this.reportDemo()};
