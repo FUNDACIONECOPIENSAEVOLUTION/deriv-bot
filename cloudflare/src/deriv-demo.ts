@@ -40,6 +40,75 @@ export function selectDemo(payload:unknown,accountId?:string):DemoAccount {
   return {account_id:match.account_id,account_type:'demo',currency:'USD',balance:accountBalance(match.balance)!};
 }
 
+
+/** A quote is never an order. Deliberately discard the proposal id. */
+const DEMO_QUOTE_REQUEST = Object.freeze({
+  proposal:1,amount:0.10,basis:'stake',contract_type:'CALL',currency:'USD',
+  duration:20,duration_unit:'t',underlying_symbol:'R_100',req_id:1
+});
+const quoteMoney=(value:unknown):number|null=>{
+  if(typeof value!=='number' && !(typeof value==='string' && /^(?:0|[1-9][0-9]{0,9})(?:\\.[0-9]{1,8})?$/.test(value)))return null;
+  const number=Number(value);
+  return Number.isFinite(number)&&number>=0&&number<=1_000_000?number:null;
+};
+export function parseDemoQuote(payload:unknown) {
+  if(!payload||typeof payload!=='object')throw Error('DERIV_QUOTE_INVALID_RESPONSE');
+  const p=payload as Record<string,unknown>;
+  if(p.req_id!==undefined&&p.req_id!==1)throw Error('DERIV_QUOTE_WRONG_REQUEST');
+  const rejected=(p.error&&typeof p.error==='object'?p.error:Array.isArray(p.errors)?p.errors[0]:null) as Record<string,unknown>|null;
+  if(rejected){
+    const raw=rejected.code;
+    const code=typeof raw==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(raw)?raw:'REJECTED';
+    return {accepted:false,code,stake:0.10,durationTicks:20,symbol:'R_100',contractType:'CALL'};
+  }
+  if(p.msg_type!=='proposal'||!p.proposal||typeof p.proposal!=='object')throw Error('DERIV_QUOTE_INVALID_RESPONSE');
+  const proposal=p.proposal as Record<string,unknown>,askPrice=quoteMoney(proposal.ask_price),payout=quoteMoney(proposal.payout);
+  if(askPrice===null||payout===null)throw Error('DERIV_QUOTE_INVALID_RESPONSE');
+  return {accepted:true,stake:0.10,durationTicks:20,symbol:'R_100',contractType:'CALL',
+    askPrice,payout,potentialProfit:Math.round((payout-askPrice)*100)/100,quotedAt:epoch()};
+}
+export function demoSocketUrl(payload:unknown):string {
+  if(!payload||typeof payload!=='object'||!('data' in payload)||!payload.data||typeof payload.data!=='object'
+    ||!('url' in payload.data)||typeof payload.data.url!=='string'||payload.data.url.length>4096)throw Error('DERIV_OTP_INVALID_RESPONSE');
+  let url:URL;try{url=new URL(payload.data.url);}catch{throw Error('DERIV_OTP_INVALID_RESPONSE');}
+  if(url.protocol!=='wss:'||url.hostname!=='api.derivws.com'||url.port||url.username||url.password
+    ||url.pathname!=='/trading/v1/options/ws/demo'||url.searchParams.size!==1
+    ||!(url.searchParams.get('otp')||'')||url.hash)throw Error('DERIV_OTP_NOT_DEMO');
+  return url.href;
+}
+
+/** Fetch an exact demo-account quote, no buy/sell ever. */
+async function requestDemoQuote(wsUrl:string):Promise<ReturnType<typeof parseDemoQuote>> {
+  const response=await fetch(wsUrl.replace(/^wss:/,'https:'),{
+    headers:{Upgrade:'websocket'},redirect:'manual',signal:AbortSignal.timeout(8000)
+  });
+  const socket=response.webSocket;
+  if(response.status!==101||!socket){await response.body?.cancel();throw Error('DERIV_QUOTE_UPGRADE_FAILED');}
+  socket.accept();
+  return new Promise((resolve,reject)=>{
+    let settled=false;
+    const finish=(error?:Error,value?:ReturnType<typeof parseDemoQuote>)=>{
+      if(settled)return;settled=true;clearTimeout(timeout);
+      try{socket.close(1000,'Quote complete');}catch{/* Closing an already closed socket is safe. */}
+      if(error)reject(error);else resolve(value!);
+    };
+    const timeout=setTimeout(()=>finish(Error('DERIV_QUOTE_TIMEOUT')),8000);
+    socket.addEventListener('message',event=>{
+      if(settled)return;
+      try{
+        if(typeof event.data!=='string'||event.data.length>32768)throw Error('DERIV_QUOTE_INVALID_RESPONSE');
+        const message=JSON.parse(event.data) as Record<string,unknown>;
+        if(message.req_id!==undefined&&message.req_id!==1)return;
+        if(message.msg_type==='proposal'||message.error||message.errors)finish(undefined,parseDemoQuote(message));
+      }catch{finish(Error('DERIV_QUOTE_INVALID_RESPONSE'));}
+    });
+    socket.addEventListener('error',()=>finish(Error('DERIV_QUOTE_SOCKET_ERROR')));
+    socket.addEventListener('close',()=>finish(Error('DERIV_QUOTE_SOCKET_CLOSED')));
+    // No buy, sell, transfer, payout change or automatic stake escalation.
+    try{socket.send(JSON.stringify(DEMO_QUOTE_REQUEST));}catch{finish(Error('DERIV_QUOTE_SEND_FAILED'));}
+  });
+}
+
 /** Separate coordination atom for the owner's broker-demo authorization, never PAPER accounting. */
 export class DerivDemoConnection extends DurableObject<Env> {
   constructor(ctx:DurableObjectState,env:Env){super(ctx,env);
@@ -127,4 +196,25 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const account=await this.accounts(credentials.accessToken,credentials.accountId);
     this.write('snapshot',{account,checkedAt:epoch(),expiresAt:credentials.expiresAt});return this.status();
   }
+
+  async quote() {
+    const snapshot=this.read<{account:DemoAccount;checkedAt:number;expiresAt:number}>('snapshot');
+    if(!snapshot||snapshot.account.account_type!=='demo'||snapshot.account.currency!=='USD'||!this.status().connected)
+      throw Error('DERIV_DEMO_REQUIRED');
+    const last=this.read<number>('lastQuoteAt')||0;
+    if(epoch()-last<15)throw Error('DERIV_QUOTE_RATE_LIMIT');
+    this.write('lastQuoteAt',epoch());
+    const sealed=this.read<{iv:string;data:string}>('credentials');
+    if(!sealed)throw Error('DERIV_DEMO_REQUIRED');
+    const credentials=await this.unseal<Credentials>(sealed);
+    if(credentials.expiresAt<=epoch()||credentials.accountId!==snapshot.account.account_id)
+      throw Error('DERIV_AUTHORIZATION_EXPIRED');
+    const accountId=encodeURIComponent(credentials.accountId);
+    const otp=await boundedJson(await fetch(
+      'https://api.derivws.com/trading/v1/options/accounts/'+accountId+'/otp',
+      {method:'POST',headers:{Authorization:'Bearer '+credentials.accessToken},
+        redirect:'manual',signal:AbortSignal.timeout(8000)}),8192);
+    return requestDemoQuote(demoSocketUrl(otp));
+  }
+
 }
