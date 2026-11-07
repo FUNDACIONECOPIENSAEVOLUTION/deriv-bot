@@ -103,7 +103,8 @@ export function parseDemoBuyResponse(raw:unknown):DemoBuyAck {
 }
 
 export type DemoSettlement={contractId:number;sold:true;profitCents:number;buyCents:number;payoutCents:number;outcome:'WIN'|'LOSS'|'FLAT';entrySpot?:number;exitSpot?:number};
-export function parseDemoSettlement(raw:unknown,expectedContractId:number):DemoSettlement|null {
+export function parseDemoSettlement(raw:unknown,expectedContractId:number,
+  expectedType?:'CALL'|'PUT'):DemoSettlement|null {
   if(!Number.isSafeInteger(expectedContractId)||expectedContractId<=0)throw Error('DEMO_CONTRACT_INVALID_ID');
   if(!raw||typeof raw!=='object')throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
   const message=raw as Record<string,unknown>;
@@ -115,6 +116,8 @@ export function parseDemoSettlement(raw:unknown,expectedContractId:number):DemoS
   if(data.is_sold!==true&&data.is_sold!==1)throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
   if(data.currency!==undefined&&data.currency!=='USD')throw Error('DEMO_SETTLEMENT_INVALID_RESPONSE');
   if(data.contract_type!==undefined&&data.contract_type!=='CALL'&&data.contract_type!=='PUT')throw Error('DEMO_SETTLEMENT_WRONG_TYPE');
+  if(expectedType&&data.contract_type!==undefined&&data.contract_type!==expectedType)
+    throw Error('DEMO_SETTLEMENT_WRONG_TYPE');
   if(data.underlying_symbol!==undefined&&data.underlying_symbol!=='R_100')throw Error('DEMO_SETTLEMENT_WRONG_SYMBOL');
   const profit=cents(data.profit),buy=cents(data.buy_price),payout=cents(data.payout);
   if(profit===null||buy!==MAX_STAKE_CENTS||payout===null||payout<0)
