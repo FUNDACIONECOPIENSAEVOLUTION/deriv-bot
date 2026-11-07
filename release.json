@@ -1,11 +1,11 @@
 {
-  "version": "5.1",
-  "updatedAt": "2026-11-07T23:18:25.146Z",
-  "summary": "Desplegar WebSocket nativo Deriv y exigir prueba real pública Cloudflare sin compras",
+  "version": "5.2",
+  "updatedAt": "2026-11-07T23:22:56.186Z",
+  "summary": "Usar snapshot de riesgo persistente en reserva DEMO y bloquear sesiones pendientes",
   "changes": [
-    "Desplegar WebSocket nativo Deriv y exigir prueba real pública Cloudflare sin compras",
-    "Probar canal WebSocket saliente demo y bloqueo estricto de cuenta real"
+    "Usar snapshot de riesgo persistente en reserva DEMO y bloquear sesiones pendientes",
+    "Crear puente DEMO manual con OTP temporal, reserva durable y liquidación marcada como observada por navegador"
   ],
-  "sourceCommit": "4558d08091ad93984f70f4836dfff4cdd0eb8956",
+  "sourceCommit": "88d8949c44dfd27dc1f21d27094a8ba2fdf6bf5f",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

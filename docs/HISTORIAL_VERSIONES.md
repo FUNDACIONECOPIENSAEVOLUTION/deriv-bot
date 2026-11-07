@@ -42,6 +42,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v5.2 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:22:56.186Z (UTC).
+- **Commit de origen:** `88d8949c44df`.
+- Usar snapshot de riesgo persistente en reserva DEMO y bloquear sesiones pendientes
+- Crear puente DEMO manual con OTP temporal, reserva durable y liquidación marcada como observada por navegador
+
 ## v5.1 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:18:25.146Z (UTC).
