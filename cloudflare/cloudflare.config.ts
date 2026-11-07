@@ -7,7 +7,7 @@ const paperWorker = defineWorker({
 		entrypoint,
 		workersDev: true,
 		previewUrls: false,
-		exports: { PaperExperiment: exports.durableObject({ storage: "sqlite" }) },
+		exports: { PaperExperiment: exports.durableObject({ storage: "sqlite" }), DerivDemoConnection: exports.durableObject({ storage: "sqlite" }) },
 		env: {
 			ADMIN_TOKEN: bindings.secret(),
 			PAPER_ENABLED: bindings.text("true"),
@@ -29,7 +29,8 @@ export default defineConfig({
 		...paperWorker,
 		env: {
 			...paperWorker.env,
-			PAPER: bindings.durableObject({ worker: paperWorker, exportName: "PaperExperiment" }),
+			PAPER: bindings.durableObject<typeof paperWorker, "PaperExperiment">({ worker: paperWorker, exportName: "PaperExperiment" }),
+			DERIV_DEMO: bindings.durableObject<typeof paperWorker, "DerivDemoConnection">({ worker: paperWorker, exportName: "DerivDemoConnection" }),
 		},
 	},
 });

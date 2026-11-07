@@ -4,6 +4,7 @@ import { addCandleTick, mergeCandleHistory, validateCandles, publicMarketSnapsho
 import { PublicFeed, type MarketStatus } from '../../runtime/feed.mjs';
 import dashboard from '../../runtime/dashboard.html?raw';
 import { PublicSocket } from './public-socket';
+export { DerivDemoConnection } from './deriv-demo';
 
 type EngineState = ReturnType<typeof initialState>;
 type PaperEvent = {type:string;epoch:number;trade?:{id:string;status:string;entryEpoch:number}};
@@ -151,13 +152,34 @@ export default {
     if(url.pathname==='/api/health'&&request.method==='GET')return json({status:'ok',mode:'PAPER'});
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
-    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop'].includes(url.pathname);
+    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/deriv/connect','/api/deriv/refresh'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
     try {
       if(url.pathname==='/')return privateDashboard();
+      if(url.pathname.startsWith('/api/deriv/')){
+        const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
+        if(url.pathname==='/api/deriv/status')return json(await demo.status());
+        if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
+        if(url.pathname==='/api/deriv/connect'){
+          // Read at most 1 KiB; this route accepts only a public application id.
+          const reader=request.body?.getReader();if(!reader)return json({error:'Falta el identificador de aplicación'},400);
+          let body='',size=0;const decoder=new TextDecoder();
+          try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1024)return json({error:'Solicitud demasiado grande'},413);body+=decoder.decode(value,{stream:true});}body+=decoder.decode();}finally{await reader.cancel();}
+          let input:unknown;try{input=JSON.parse(body);}catch{return json({error:'Solicitud inválida'},400);}
+          if(!input||typeof input!=='object'||!('clientId' in input)||typeof input.clientId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(input.clientId))return json({error:'Escribe el identificador público de la aplicación'},400);
+          const connection=await demo.begin(input.clientId,url.origin);
+          return json({url:connection.url},200,{'Set-Cookie':'ecopiensa_deriv_state='+connection.state+'; Path=/api/deriv; Secure; HttpOnly; SameSite=Lax; Max-Age=600'});
+        }
+        const state=url.searchParams.get('state')||'',code=url.searchParams.get('code')||'';
+        const cookie=(request.headers.get('Cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('ecopiensa_deriv_state='))?.slice('ecopiensa_deriv_state='.length);
+        if(!/^[A-Za-z0-9_-]{43}$/.test(state)||cookie!==state||!code||url.searchParams.has('error'))return json({error:'No se confirmó la autorización de Deriv; inicia una nueva conexión'},400);
+        await demo.complete(state,code);
+        return new Response(null,{status:303,headers:{...security,Location:url.origin+'/',
+          'Set-Cookie':'ecopiensa_deriv_state=; Path=/api/deriv; Secure; HttpOnly; SameSite=Lax; Max-Age=0'}});
+      }
       if(url.pathname==='/api/market'){
         const provider=url.searchParams.get('provider');
         if(provider!=='binance'&&provider!=='coinbase')return json({error:'Proveedor público no permitido'},400);
@@ -183,6 +205,11 @@ export default {
       })());
       return new Response(stream.readable,{headers:{...security,'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="paper-trades.csv"'}});
     }catch(error){
+      if(url.pathname.startsWith('/api/deriv/')){
+        const code=error instanceof Error&&/^(DERIV_[A-Z0-9_]+)$/.test(error.message)?error.message:'DERIV_CONNECTION_FAILED';
+        console.error(JSON.stringify({type:'deriv_demo_connection_failed',path:url.pathname,code}));
+        return json({error:'No se pudo verificar la cuenta demo de Deriv',code},503);
+      }
       const code=url.pathname==='/api/market'
         ? error instanceof Error&&/^(PUBLIC_MARKET_HTTP_[1-5][0-9]{2}|EMPTY_MARKET_RESPONSE|MARKET_RESPONSE_TOO_LARGE|INVALID_MARKET_RESPONSE|INVALID_CANDLES)$/.test(error.message)
           ?error.message:error instanceof Error&&['TimeoutError','AbortError'].includes(error.name)?'PUBLIC_MARKET_TIMEOUT':'PUBLIC_MARKET_NETWORK_ERROR'
