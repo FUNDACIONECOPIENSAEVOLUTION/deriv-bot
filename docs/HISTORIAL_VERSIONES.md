@@ -51,6 +51,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.1 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:49:56.424Z (UTC).
+- **Commit de origen:** `19e44290ad75`.
+- Validar flujo de 10 trades DEMO, confirmación, límites, pausas y trazabilidad CSV
+
 ## v6.0 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:49:20.624Z (UTC).

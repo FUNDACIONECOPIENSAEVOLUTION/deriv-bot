@@ -1,10 +1,10 @@
 {
-  "version": "6.0",
-  "updatedAt": "2026-11-07T23:49:20.624Z",
-  "summary": "Activar ensayo DEMO autorizado de 10 compras, parada segura y exportación CSV",
+  "version": "6.1",
+  "updatedAt": "2026-11-07T23:49:56.424Z",
+  "summary": "Validar flujo de 10 trades DEMO, confirmación, límites, pausas y trazabilidad CSV",
   "changes": [
-    "Activar ensayo DEMO autorizado de 10 compras, parada segura y exportación CSV"
+    "Validar flujo de 10 trades DEMO, confirmación, límites, pausas y trazabilidad CSV"
   ],
-  "sourceCommit": "530ba88ab39891fedc29926bbea9bdd248f63453",
+  "sourceCommit": "19e44290ad7546d586e9a2c50a4a1741a6add7be",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
