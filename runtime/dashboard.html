@@ -53,6 +53,15 @@
   <button id="demo-auto-start" disabled>Activar evaluación automática DEMO</button>
   <button id="demo-auto-stop" disabled>Pausar evaluación automática</button>
 </div>
+<div class="divider"></div>
+<h3>Ensayo controlado · 10 contratos DEMO balanceados</h3>
+<p class="note">Cinco CALL y cinco PUT, alternados, de 5 ticks, uno tras otro. Máximo US$10 de apuestas virtuales en esta prueba. Detener ante 3 pérdidas consecutivas, resultado acumulado de -US$3, un contrato sin confirmar, falta de saldo verificado o si se oculta la pestaña. Requiere confirmación expresa y mantener abierto este navegador. No demuestra ventaja predictiva ni activa operaciones reales.</p>
+<div class="tools">
+  <button id="demo-balanced-start" disabled>Iniciar prueba 10 DEMO · 5 CALL / 5 PUT</button>
+  <button id="demo-balanced-stop" disabled>Detener al cerrar contrato actual</button>
+  <button id="demo-export-csv" disabled>Exportar auditoría DEMO CSV</button>
+</div>
+<p id="demo-balanced-status" class="note" role="status">Prueba balanceada no iniciada. Los contratos de la cuenta DEMO solo se compran tras tu autorización en este panel.</p>
 <div class="tools" aria-label="Comandos seguros para la cuenta demo"><label for="demo-command">Comando de entrenamiento (solo DEMO)</label>
 <input id="demo-command" type="text" maxlength="80" autocomplete="off" placeholder="estado, cotizar, comprar demo, verificar, iniciar demo 3, pausar demo"/>
 <button type="button" id="demo-command-submit">Ejecutar comando seguro</button></div>
@@ -64,6 +73,7 @@
 <h2>Diagnóstico del rendimiento · DEMO</h2>
 <p id="demo-diagnostics" class="note">El informe de entrenamiento aparecerá después de registrar contratos realmente liquidados por Deriv.</p>
 <p id="demo-holdout" class="note">Se distinguirán el primer 70 % de las operaciones y el 30 % final en orden cronológico para evaluar fuera de muestra. Esto no activa dinero real.</p>
+<p id="demo-direction-stats" class="note">Comparación CALL/PUT: todavía no hay resultados suficientes.</p>
 <p id="demo-loss-cases" class="note">El bot comprobará pérdidas, tendencia y volatilidad al momento de decidir. La asociación no demuestra por sí sola la causa.</p>
 <div class="table-scroll"><table aria-label="Operaciones DEMO verificadas"><thead><tr><th>Fecha</th><th>Estado</th><th>Contrato</th><th>Precio virtual</th><th>Resultado virtual</th></tr></thead><tbody id="demo-trade-history"></tbody></table></div>
 <p id="demo-feedback" role="status"></p><p class="note">Registra una aplicación web con permiso Trade y recargo de 0 %. Dirección de retorno: <code id="deriv-callback"></code>. No escribas contraseñas ni tokens en este campo.</p>
