@@ -7,8 +7,8 @@ assert.ok(Array.isArray(release.changes)&&release.changes.length>0,'Historial de
 const panel=readFileSync('runtime/dashboard.html','utf8');
 assert.ok(panel.includes('__RELEASE_VERSION__'),'El servidor debe insertar la versión del manifiesto');
 assert.ok(panel.trimEnd().endsWith('</html>'),'El panel DEMO no debe contener JavaScript duplicado fuera del HTML');
-assert.equal((panel.match(/<\\/html>/g)||[]).length,1,'El panel DEMO debe cerrar una sola vez');
-assert.equal([...panel.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)].length,1,'El panel debe contener un único script operativo');
+assert.equal(panel.split('</html>').length,2,'El panel DEMO debe cerrar una sola vez');
+assert.equal(panel.split('<script').length,2,'El panel debe contener un único script operativo');
 assert.ok(panel.includes("stakeSelect.value=String(data.nextManualStakeCents)"),'El próximo importe DEMO debe actualizarse en el selector');
 
 for(const script of panel.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(script[1]);
