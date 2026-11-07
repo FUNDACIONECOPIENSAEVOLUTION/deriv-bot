@@ -150,7 +150,7 @@ async function showPublishedRelease(){
   const response=await fetch('./release.json?t='+Date.now(),{cache:'no-store'});
   if(!response.ok)throw Error('RELEASE_UNAVAILABLE');
   const release=await response.json();
-  if(!/^\\d+\\.[0-9]$/.test(release.version)||!Array.isArray(release.changes))return;
+  if(!/^\d+\.[0-9]$/.test(release.version)||!Array.isArray(release.changes))return;
   const stamp=new Date(release.updatedAt);
   if(!Number.isFinite(stamp.getTime()))return;
   $('release-nav-version').textContent='V'+release.version;
