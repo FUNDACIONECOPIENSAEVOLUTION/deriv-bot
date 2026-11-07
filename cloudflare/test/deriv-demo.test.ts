@@ -263,3 +263,20 @@ it('supports all experimental quote values without purchasing',()=>{
  }
  expect(()=>demoQuoteRequest('UP',200)).toThrow('DEMO_STAKE_INVALID');
 });
+
+it('blocks unauthenticated browser DEMO session endpoints and invalid stakes before any OTP',async()=>{
+  const anon=await request('/api/deriv/demo/browser/begin',{
+    method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}'});
+  expect(anon.r.status).toBe(401);
+  const obsolete=await request('/api/deriv/demo/browser/begin',{
+    method:'POST',headers,body:JSON.stringify({signal:'UP',stakeCents:10})});
+  expect(obsolete.r.status).toBe(400);
+  const malformed=await request('/api/deriv/demo/browser/reserve',{
+    method:'POST',headers,body:JSON.stringify({nonce:'invalid',signal:'UP',stakeCents:35})});
+  expect(malformed.r.status).toBe(400);
+  const executionOff=await request('/api/deriv/demo/browser/begin',{
+    method:'POST',headers,body:JSON.stringify({signal:'UP',stakeCents:35})});
+  expect(executionOff.r.status).toBe(503);
+  expect(JSON.parse(executionOff.body).code).toBe('DEMO_EXECUTION_DISABLED');
+  expect(calls).not.toContain('buy');
+});
