@@ -234,5 +234,11 @@ export default {
       return json({error:'Servicio no disponible; revisa el estado y la cuota',...(code?{code}:{})},503);
     }
   },
-  async scheduled(_event:ScheduledController,env:Env){await env.PAPER.getByName(EXPERIMENT).watchdog();},
+  async scheduled(_event:ScheduledController,env:Env){
+    await env.PAPER.getByName(EXPERIMENT).watchdog();
+    // Read-only status checks allow broker DEMO results to be recorded even
+    // when the browser is closed. There is NEVER a scheduled buy.
+    try{await env.DERIV_DEMO.getByName('owner-deriv-demo-v1').reconcileOpenDemoOnly();}
+    catch{console.log(JSON.stringify({type:'demo_settlement_check_pending'}));}
+  },
 } satisfies ExportedHandler<Env>;
