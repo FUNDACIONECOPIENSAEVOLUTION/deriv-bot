@@ -29,6 +29,16 @@
 <p id="demo-balance">Saldo demo oficial: pendiente de conexión.</p>
 <div class="tools"><button id="deriv-quote" disabled>Consultar precio DEMO: USD 0,10 · CALL · 20 ticks</button></div>
 <p id="demo-quote" class="note" role="status">Solo se consultará un precio al broker. No se comprará ningún contrato y no se incrementará el importe si Deriv lo rechaza.</p>
+<div class="divider"></div>
+<h2>Prueba con operaciones reales en la cuenta DEMO (saldo virtual)</h2>
+<p class="note">La ejecución está desactivada hasta aprobar la configuración del servidor. Solo admite una compra DEMO CALL/R_100 de USD 0,10, 20 ticks, con señal alcista reciente. Nunca utiliza saldo real.</p>
+<div class="tools">
+  <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
+  <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
+</div>
+<p id="demo-trade-status" class="note" role="status">Sin operaciones DEMO verificadas.</p>
+<p id="demo-trade-summary" class="note">El historial PAPER superior no equivale a resultados de contratos del broker.</p>
+<div class="table-scroll"><table aria-label="Operaciones DEMO verificadas"><thead><tr><th>Fecha</th><th>Estado</th><th>Contrato</th><th>Precio virtual</th><th>Resultado virtual</th></tr></thead><tbody id="demo-trade-history"></tbody></table></div>
 <p id="demo-feedback" role="status"></p><p class="note">Registra una aplicación web con permiso Trade y recargo de 0 %. Dirección de retorno: <code id="deriv-callback"></code>. No escribas contraseñas ni tokens en este campo.</p>
 <p class="note">OpenAI: sin conexión activa. Las decisiones actuales siguen siendo reglas SMA/RSI. Practicar y revisar resultados no reentrena automáticamente a ChatGPT.</p></section>
 <footer>Deriv: actualización del panel cada 5 segundos mientras está visible. Binance y Coinbase: consulta pública de velas cada 30 segundos, sin motor de operaciones. El rendimiento hipotético no representa contratos Deriv ni operaciones spot de criptomonedas. No se acredita disponibilidad continua hasta completar su medición.</footer>
@@ -130,6 +140,29 @@ function renderDemo(data){
   chip('demo-state',data.connected?'Demo verificada':'Sin conexión demo',data.connected?'live':'warn');
   $('deriv-refresh').disabled=!data.connected;
   $('deriv-quote').disabled=!data.connected;
+  const report=data.tradeReport||{},pending=report.unresolved;
+  const eligible=state?.running===true&&state?.market?.state==='live'
+    &&state?.config?.symbol==='R_100'&&state?.decision?.direction===1
+    &&Number.isFinite(state?.quoteAgeSeconds)&&state.quoteAgeSeconds>=0&&state.quoteAgeSeconds<=10;
+  $('demo-buy-once').disabled=!(data.connected&&data.demoTradingEnabled&&eligible&&!pending);
+  $('demo-check').disabled=!(data.connected&&pending&&pending.state==='OPEN');
+  $('demo-trade-summary').textContent='Operaciones DEMO liquidadas: '+(report.settled||0)
+    +' · Aciertos: '+(report.wins||0)+' · Fallos: '+(report.losses||0)
+    +' · Porcentaje de acierto: '+(report.winRatePct===null?'sin datos':String(report.winRatePct)+' %')
+    +' · Resultado NETO virtual verificado: '+money(report.pnlCents||0)+'.';
+  $('demo-trade-status').textContent=!data.demoTradingEnabled
+    ?'La compra DEMO está deshabilitada en el servidor hasta completar su validación.'
+    :pending?(pending.state==='UNKNOWN'?'Resultado de compra sin confirmar: no volver a comprar hasta conciliar con Deriv.':'Hay un contrato DEMO abierto; verifica su liquidación.')
+    :eligible?'Señal alcista reciente; puedes decidir si haces UNA operación virtual.':'Esperando señal alcista verificable del motor PAPER.';
+  const history=$('demo-trade-history');history.replaceChildren();
+  for(const item of report.history||[]){
+    const tr=document.createElement('tr');
+    const values=[item.date||'—',item.state||'—',item.contractId||'—',
+      Number.isInteger(item.buyCents)?money(item.buyCents):'—',
+      Number.isInteger(item.pnlCents)?money(item.pnlCents):'—'];
+    for(const value of values){const td=document.createElement('td');td.textContent=String(value);tr.appendChild(td);}
+    history.appendChild(tr);
+  }
   if(document.activeElement!==$('deriv-client')&&data.clientId)$('deriv-client').value=data.clientId;
   $('demo-balance').textContent=data.account?'Saldo demo oficial: '+money(Math.round(data.account.balance*100))+' · '+data.account.label+' · Consultado '+date(data.account.checkedAt):'Saldo demo oficial: pendiente de conexión. Los USD 10 de arriba pertenecen a otra simulación.';
   if(!data.connected&&data.discovery){const d=data.discovery,migration={pending:'en curso',complete:'completa',failed:'fallida',not_applicable:'no aplica',unavailable:'no disponible',unknown:'sin confirmar',not_checked:'sin consultar'}[d.migration]||'sin confirmar';$('demo-feedback').textContent='La aplicación fue autorizada, pero la API no permitió verificar una cuenta demo activa en USD. Demo/USD activas informadas: '+d.activeDemoUsd+'. Migración de plataforma: '+migration+'.';}
@@ -159,6 +192,41 @@ $('deriv-quote').onclick=async()=>{
     }else throw Error('QUOTE_INVALID');
   }catch{out.textContent='No se pudo obtener una cotización DEMO verificable. El importe sigue en USD 0,10 y no se realizó ninguna compra.';}
   finally{btn.disabled=false;}
+};
+$('demo-buy-once').onclick=async()=>{
+  if(!window.confirm('Confirmar una ÚNICA compra con dinero virtual en la cuenta DEMO de Deriv, máximo USD 0,10, 20 ticks. No se usa dinero real. ¿Continuar?'))return;
+  const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
+  msg.textContent='Solicitando una sola operación en DEMO. Si se pierde la confirmación, el bot bloqueará nuevas compras.';
+  try{
+    const r=await fetch('/api/deriv/demo/buy-once',{
+      method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+      body:'{}',signal:AbortSignal.timeout(30000)
+    });
+    if(!r.ok)throw Error('No autorizado o sin cotización válida');
+    const result=await r.json();
+    msg.textContent=result.state==='OPEN'
+      ?'Contrato DEMO confirmado: '+result.contractId+'. Aún falta su liquidación; no se realizará otra compra mientras siga abierto.'
+      :'Deriv rechazó la propuesta o compra DEMO. No se incrementó el importe.';
+  }catch{
+    msg.textContent='No se pudo confirmar la operación DEMO. Revisa el historial y el estado del broker antes de otro intento.';
+  }finally{await loadDemo();}
+};
+$('demo-check').onclick=async()=>{
+  const btn=$('demo-check'),msg=$('demo-trade-status');btn.disabled=true;
+  msg.textContent='Comprobando el resultado del contrato directamente con Deriv...';
+  try{
+    const r=await fetch('/api/deriv/demo/check',{
+      method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+      body:'{}',signal:AbortSignal.timeout(25000)
+    });
+    if(!r.ok)throw Error('Sin verificación');
+    const out=await r.json();
+    msg.textContent=out.state==='SETTLED'
+      ?'Contrato DEMO liquidado oficialmente: '+money(out.settlement.profitCents)+' netos virtuales.'
+      :out.state==='OPEN'?'Contrato DEMO todavía abierto.'
+      :out.state==='BUY_OUTCOME_UNKNOWN'?'Compra sin confirmación; exige conciliación manual con Deriv.':'Sin contratos DEMO pendientes.';
+  }catch{msg.textContent='Deriv no confirmó el cierre. El contrato queda pendiente; no se enviarán nuevas compras.';}
+  finally{await loadDemo();}
 };
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});refresh();
 $('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
