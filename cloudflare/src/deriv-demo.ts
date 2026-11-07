@@ -12,6 +12,7 @@ const encode=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replaceAll(
 const decode=(value:string)=>Uint8Array.from(atob(value.replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0));
 const random=()=>encode(crypto.getRandomValues(new Uint8Array(32)));
 const epoch=()=>Math.floor(Date.now()/1000);
+const researchNumber=(v:unknown,min:number,max:number):number|null=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max?v:null;
 type DemoAccount={account_id:string;account_type:'demo';currency:'USD';balance:number};
 type Credentials={accessToken:string;expiresAt:number;accountId:string};
 type Discovery={at:number;total:number;demo:number;demoUsd:number;activeDemoUsd:number;missingType:number;missingStatus:number;stringBalances:number;migration:string};
@@ -528,6 +529,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
   async reserveBrowserPilot(input:{
     nonce:string;signal:'UP'|'DOWN';stakeCents:number;
     proposalId:string;askPrice:number;payout:number;
+    evidence?:{pilot?:'balanced-ten'|'manual';fast?:number|null;slow?:number|null;
+      rsi?:number|null;volatility?:number|null;entryQuote?:number|null;
+      quoteAgeSeconds?:number|null;reason?:string};
   }) {
     const sealed=this.read<{iv:string;data:string}>('demo-browser-session');
     if(!sealed)throw Error('DEMO_BROWSER_SESSION_REQUIRED');
@@ -564,8 +568,20 @@ export class DerivDemoConnection extends DurableObject<Env> {
       this.ctx.storage.sql.exec(
         "INSERT INTO demo_trades(date,created_at,state,buy_cents,contract_type,decision_json,code) VALUES(?,?,'UNKNOWN',?,?,?,'CLIENT_PENDING')",
         today,epoch(),input.stakeCents,quote.contractType,
-        JSON.stringify({strategy:'manual-browser-pilot-v1',source:'owner-browser',
-          direction:session.signal,stakeCents:input.stakeCents,recordedAt:epoch()})
+        JSON.stringify({
+          strategy:input.evidence?.pilot==='balanced-ten'?'balanced-ten-v1':'manual-browser-pilot-v1',
+          source:'owner-browser-unverified',direction:session.signal,
+          contractType:session.signal==='UP'?'CALL':'PUT',stakeCents:input.stakeCents,
+          fast:researchNumber(input.evidence?.fast,0,1000000),
+          slow:researchNumber(input.evidence?.slow,0,1000000),
+          rsi:researchNumber(input.evidence?.rsi,0,100),
+          volatility:researchNumber(input.evidence?.volatility,0,100),
+          entryQuote:researchNumber(input.evidence?.entryQuote,0,1000000),
+          quoteAgeSeconds:researchNumber(input.evidence?.quoteAgeSeconds,0,3600),
+          reason:typeof input.evidence?.reason==='string'&&/^[A-Z_]{1,45}$/.test(input.evidence.reason)
+            ?input.evidence.reason:'UNVERIFIED',
+          recordedAt:epoch()
+        })
       );
       const inserted=this.ctx.storage.sql.exec<{id:number}>('SELECT last_insert_rowid() AS id').one().id;
       this.write('demo-browser-reservation',{id:inserted,nonce:session.nonce,at:epoch(),state:'UNKNOWN'});
