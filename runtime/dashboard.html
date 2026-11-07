@@ -128,6 +128,7 @@ function renderDemo(data){
   $('deriv-refresh').disabled=!data.connected;
   if(document.activeElement!==$('deriv-client')&&data.clientId)$('deriv-client').value=data.clientId;
   $('demo-balance').textContent=data.account?'Saldo demo oficial: '+money(Math.round(data.account.balance*100))+' · '+data.account.label+' · Consultado '+date(data.account.checkedAt):'Saldo demo oficial: pendiente de conexión. Los USD 10 de arriba pertenecen a otra simulación.';
+  if(!data.connected&&data.discovery){const d=data.discovery,migration={pending:'en curso',complete:'completa',failed:'fallida',not_applicable:'no aplica',unavailable:'no disponible',unknown:'sin confirmar',not_checked:'sin consultar'}[d.migration]||'sin confirmar';$('demo-feedback').textContent='La aplicación fue autorizada, pero la API no permitió verificar una cuenta demo activa en USD. Demo/USD activas informadas: '+d.activeDemoUsd+'. Migración de plataforma: '+migration+'.';}
 }
 async function loadDemo(){demoFetched=Date.now();try{const r=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(4500)});if(!r.ok)throw Error();renderDemo(await r.json());}catch{chip('demo-state','Estado demo sin confirmar','offline');$('deriv-refresh').disabled=true;}}
 $('deriv-callback').textContent=location.origin+'/api/deriv/callback';

@@ -9,7 +9,7 @@ import { selectDemo, DerivDemoConnection } from '../src/deriv-demo';
 const token='test-only-token-with-at-least-32-characters';
 const headers={Authorization:'Bearer '+token,'Content-Type':'application/json','X-Paper-Control':'1'};
 const demo={account_id:'DOT12345',account_type:'demo',currency:'USD',status:'active',balance:10000};
-const real={account_id:'REAL12345',account_type:'real',currency:'USD',status:'active',balance:77.92};
+const real={account_id:'REAL12345',account_type:'real',currency:'USD',status:'active',balance:4321.99};
 const network=setupNetwork();let onlyReal=false,calls:string[]=[];
 beforeAll(()=>{network.enable();network.use(
   http.post('https://auth.deriv.com/oauth2/token',async({request})=>{
@@ -21,6 +21,7 @@ beforeAll(()=>{network.enable();network.use(
     calls.push('accounts');expect(request.headers.get('Authorization')).toBe('Bearer fixture-demo-access');
     return HttpResponse.json({data:onlyReal?[real]:[real,demo]});
   }),
+  http.get('https://api.derivws.com/trading/v1/options/legacy/migration-status',()=>HttpResponse.json({data:{status:'pending'}})),
   http.all('*',()=>{throw Error('UNEXPECTED_DEMO_NETWORK_REQUEST');})
 );});
 afterAll(()=>network.disable());
@@ -57,6 +58,9 @@ it('rejects a real-only authorization without storing a connected balance',async
   onlyReal=true;const stub=env.DERIV_DEMO.getByName('demo-real');const start=await stub.begin('app-123','https://paper.example');
   expect(await errorFrom(stub,instance=>instance.complete(start.state,'fixture-code'))).toBe('DERIV_DEMO_USD_REQUIRED');
   expect((await stub.status()).connected).toBe(false);expect((await stub.status()).account).toBeNull();
+  expect((await stub.status()).discovery?.migration).toBe('pending');
+  expect((await stub.status()).discovery?.activeDemoUsd).toBe(0);
+  expect(JSON.stringify(await stub.status())).not.toContain('4321.99');
 });
 it('guards the demo routes with owner auth, same-origin controls and a browser-bound OAuth state cookie',async()=>{
   for(const path of ['/api/deriv/status','/api/deriv/callback','/api/deriv/connect','/api/deriv/refresh'])expect((await request(path)).r.status).toBe(401);
