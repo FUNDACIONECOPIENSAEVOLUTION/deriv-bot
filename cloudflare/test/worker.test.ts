@@ -4,6 +4,7 @@ import { setupNetwork } from '@msw/cloudflare';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, afterAll, expect, it } from 'vitest';
 import worker from '../src/index';
+import release from '../../release.json';
 import { PublicSocket } from '../src/public-socket';
 import { PUBLIC_ENDPOINT } from '../../runtime/feed.mjs';
 import { publicMarketSnapshot } from '../../runtime/market-data.mjs';
@@ -55,11 +56,19 @@ it('constructs crypto requests using a redirect mode supported by the real Worke
 it('health is public but the dashboard, status, CSV and controls require credentials',async()=>{
   const health=await request('/api/health');
   expect(health.response.status).toBe(200);
-  expect(JSON.parse(health.body)).toMatchObject({status:'ok',mode:'PAPER',version:'1.5.0',release:'cloudflare-deriv-demo-panel-v1.5',demoBuyingEnabled:false,demoAutomationEnabled:false});
+  expect(JSON.parse(health.body)).toMatchObject({status:'ok',mode:'PAPER',version:release.version+'.0',release:'cloudflare-deriv-demo-panel-v'+release.version,lastUpdated:release.updatedAt,demoBuyingEnabled:false,demoAutomationEnabled:false});
   for(const path of ['/','/api/status','/api/trades.csv','/api/market?provider=binance','/api/start','/api/stop']) {
     const {response}=await request(path,{method:path==='/api/start'||path==='/api/stop'?'POST':'GET'});
     expect(response.status).toBe(401);expect(response.headers.get('WWW-Authenticate')).toContain('Basic');
   }
+});
+it('private dashboard embeds this exact release and escapes changelog placeholders',async()=>{
+  const {response,body}=await request('/',{headers});
+  expect(response.status).toBe(200);
+  expect(body).toContain('CLOUDFLARE DEMO v'+release.version);
+  expect(body).toContain(release.updatedAt);
+  expect(body).not.toContain('__RELEASE_VERSION__');
+  expect(body).not.toContain('__RELEASE_CHANGES__');
 });
 it('fails closed when the owner secret is missing or too short',async()=>{
   expect((await request('/api/status',{headers},{...env,ADMIN_TOKEN:''})).response.status).toBe(503);
