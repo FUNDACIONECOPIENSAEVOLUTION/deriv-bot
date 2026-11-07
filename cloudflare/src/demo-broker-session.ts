@@ -113,11 +113,11 @@ export async function buySingleDemoContract(args:DemoBuySessionArgs):Promise<Dem
   return withDemoSocket(args.wsUrl,socket=>buyDemoOverSocket(socket,args));
 }
 
-export async function readDemoSettlement(wsUrl:string,contractId:number):Promise<DemoSettlement|null> {
+export async function readDemoSettlement(wsUrl:string,contractId:number,expectedType?:'CALL'|'PUT'):Promise<DemoSettlement|null> {
   if(!Number.isSafeInteger(contractId)||contractId<=0)throw Error('DEMO_CONTRACT_INVALID_ID');
   return withDemoSocket(wsUrl,async(socket)=>{
     const raw=await requestDemoMessage(socket,{proposal_open_contract:1,contract_id:contractId,req_id:3});
     if(raw.error||raw.errors)throw Error('DEMO_CONTRACT_STATUS_REJECTED');
-    return parseDemoSettlement(raw,contractId);
+    return parseDemoSettlement(raw,contractId,expectedType);
   });
 }
