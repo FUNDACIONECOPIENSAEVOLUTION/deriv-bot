@@ -1,4 +1,4 @@
-import { DEMO_QUOTE_REQUEST, demoSocketUrl, parseDemoQuote } from './deriv-demo';
+import { demoQuoteRequest, demoSocketUrl, parseDemoQuote } from './deriv-demo';
 import { buildDemoBuyRequest, parseDemoBuyResponse, parseDemoSettlement,
   type DemoBuyAck, type DemoQuoteForBuy, type DemoSettlement, type DemoTradeGate } from './demo-trade-guards';
 
@@ -62,15 +62,16 @@ export function requestDemoMessage(socket:WebSocket,message:Record<string,unknow
   });
 }
 
-export function parseDemoProposalForBuy(raw:Record<string,unknown>,quotedAt:number):DemoQuoteForBuy {
-  const priced=parseDemoQuote(raw);
+export function parseDemoProposalForBuy(raw:Record<string,unknown>,quotedAt:number,
+  direction:'UP'|'DOWN'='UP'):DemoQuoteForBuy {
+  const priced=parseDemoQuote(raw,direction);
   if(!priced.accepted)throw Error('DEMO_PROPOSAL_REJECTED');
   if(typeof priced.askPrice!=='number'||typeof priced.payout!=='number')throw Error('DEMO_PROPOSAL_INVALID_PRICE');
   const proposal=raw.proposal as Record<string,unknown>;
   if(typeof proposal.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(proposal.id))
     throw Error('DEMO_PROPOSAL_ID_INVALID');
   return {id:proposal.id,askPrice:priced.askPrice,payout:priced.payout,
-    quotedAt,symbol:'R_100',contractType:'CALL',durationTicks:20,stake:0.10};
+    quotedAt,symbol:'R_100',contractType:direction==='UP'?'CALL':'PUT',durationTicks:20,stake:0.10};
 }
 
 export type DemoAttemptOutcome =
@@ -85,12 +86,13 @@ export type DemoBuySessionArgs={
   acknowledge:(intentId:number,ack:DemoBuyAck)=>Promise<void>;
 };
 export async function buyDemoOverSocket(socket:WebSocket,args:DemoBuySessionArgs):Promise<DemoAttemptOutcome> {
-    const proposal=await requestDemoMessage(socket,{...DEMO_QUOTE_REQUEST});
+    if(args.gate.signal!=='UP'&&args.gate.signal!=='DOWN')throw Error('NO_APPROVED_SIGNAL');
+    const proposal=await requestDemoMessage(socket,{...demoQuoteRequest(args.gate.signal)});
     if(proposal.error||proposal.errors||proposal.msg_type!=='proposal'){
       // A rejected amount is never increased: report the denial and stop.
       return {state:'REJECTED',code:safeCode(proposal.error||(proposal.errors as unknown[])?.[0])};
     }
-    const quote=parseDemoProposalForBuy(proposal,Math.floor(Date.now()/1000));
+    const quote=parseDemoProposalForBuy(proposal,Math.floor(Date.now()/1000),args.gate.signal);
     const buy=buildDemoBuyRequest({...args.gate,quote,socketUrl:args.wsUrl,now:Math.floor(Date.now()/1000)});
     // reserve() creates a durable BUY_UNKNOWN intent and enforces daily quotas
     // synchronously. If it throws, no buy message is ever sent.
