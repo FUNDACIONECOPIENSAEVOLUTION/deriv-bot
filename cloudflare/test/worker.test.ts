@@ -56,7 +56,7 @@ it('constructs crypto requests using a redirect mode supported by the real Worke
 it('health is public but the dashboard, status, CSV and controls require credentials',async()=>{
   const health=await request('/api/health');
   expect(health.response.status).toBe(200);
-  expect(JSON.parse(health.body)).toMatchObject({status:'ok',mode:'PAPER',version:release.version+'.0',release:'cloudflare-deriv-demo-panel-v'+release.version,lastUpdated:release.updatedAt,demoBuyingEnabled:true,demoAutomationEnabled:false});
+  expect(JSON.parse(health.body)).toMatchObject({status:'ok',mode:'PAPER',version:release.version+'.0',release:'cloudflare-deriv-demo-panel-v'+release.version,lastUpdated:release.updatedAt,demoBuyingEnabled:false,demoAutomationEnabled:false});
   for(const path of ['/','/api/status','/api/trades.csv','/api/market?provider=binance','/api/start','/api/stop']) {
     const {response}=await request(path,{method:path==='/api/start'||path==='/api/stop'?'POST':'GET'});
     expect(response.status).toBe(401);expect(response.headers.get('WWW-Authenticate')).toContain('Basic');
