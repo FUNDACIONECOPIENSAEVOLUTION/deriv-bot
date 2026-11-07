@@ -1,0 +1,23 @@
+name: Diagnosticar contratos públicos Deriv sin compras
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/probe_deriv_options_contracts.mjs
+      - .github/workflows/check-deriv-options-public.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-contract-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.0'
+      - name: Consultar contratos y propuestas del mercado público de Deriv
+        run: node scripts/probe_deriv_options_contracts.mjs
+      - name: Recordar que la consulta no compra ni autoriza operaciones
+        run: echo "Prueba exclusivamente pública y sin credenciales. No se envía BUY ni se inicia DEMO."
