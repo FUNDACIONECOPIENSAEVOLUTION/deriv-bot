@@ -55,6 +55,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.5 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:57:55.438Z (UTC).
+- **Commit de origen:** `70baabd6bfb2`.
+- Validar herramienta MCP de diez PAPER contra el motor original sin operaciones al broker
+- Agregar herramienta MCP para ejecutar diez simulaciones PAPER del bot con históricos públicos sin órdenes Deriv
+
 ## v6.4 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:56:29.285Z (UTC).

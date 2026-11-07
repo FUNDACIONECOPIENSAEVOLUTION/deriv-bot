@@ -1,10 +1,11 @@
 {
-  "version": "6.4",
-  "updatedAt": "2026-11-07T23:56:29.285Z",
-  "summary": "Ejecutar diez operaciones PAPER del bot sobre historial público y guardar auditoría GitHub Actions",
+  "version": "6.5",
+  "updatedAt": "2026-11-07T23:57:55.438Z",
+  "summary": "Validar herramienta MCP de diez PAPER contra el motor original sin operaciones al broker",
   "changes": [
-    "Ejecutar diez operaciones PAPER del bot sobre historial público y guardar auditoría GitHub Actions"
+    "Validar herramienta MCP de diez PAPER contra el motor original sin operaciones al broker",
+    "Agregar herramienta MCP para ejecutar diez simulaciones PAPER del bot con históricos públicos sin órdenes Deriv"
   ],
-  "sourceCommit": "a10d3ef168c9b702084e69a7244527806b948ef7",
+  "sourceCommit": "70baabd6bfb2de17ce5d7cc5ce373c9471258edf",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
