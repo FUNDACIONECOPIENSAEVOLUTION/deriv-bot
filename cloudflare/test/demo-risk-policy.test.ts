@@ -1,9 +1,20 @@
 import {describe,it,expect} from 'vitest';
 import {DEMO_STAKES_CENTS,DEMO_MAX_OPEN,DEMO_MAX_LOSS_CENTS,
- DEMO_BASELINE_EXPECTED_CENTS,pickDemoStakeCents,evaluateDemoRisk,requireFirstDemoSettlement} from '../src/demo-risk-policy';
+ DEMO_BASELINE_EXPECTED_CENTS,pickDemoStakeCents,evaluateDemoRisk,requireFirstDemoSettlement,validManualDemoApproval} from '../src/demo-risk-policy';
 const base={openContracts:0,unknownCount:0,exposureCents:0,lifetimeNetCents:0,
   stakeCents:10,brokerBalanceCents:1_000_000,baselineBalanceCents:1_000_000,halted:false};
 describe('Deriv DEMO only: controlled variation and loss stop',()=>{
+ it('requires a matching approved quote no older than 45 seconds before manual DEMO purchase',()=>{
+   const approval={at:1000,signal:'UP',stakeCents:10,accountId:'DEMO1',purchases:0};
+   const valid={now:1045,signal:'UP' as const,stakeCents:10,accountId:'DEMO1',purchases:0};
+   expect(validManualDemoApproval(approval,valid)).toBe(true);
+   expect(validManualDemoApproval(approval,{...valid,now:1046})).toBe(false);
+   expect(validManualDemoApproval(approval,{...valid,signal:'DOWN'})).toBe(false);
+   expect(validManualDemoApproval(approval,{...valid,stakeCents:100})).toBe(false);
+   expect(validManualDemoApproval(approval,{...valid,accountId:'REAL1'})).toBe(false);
+   expect(validManualDemoApproval(approval,{...valid,purchases:1})).toBe(false);
+   expect(validManualDemoApproval(null,valid)).toBe(false);
+ });
  it('requires a verified manual DEMO settlement before authorizing automation',()=>{
    expect(()=>requireFirstDemoSettlement(0)).toThrow('DEMO_FIRST_SETTLEMENT_REQUIRED');
    expect(()=>requireFirstDemoSettlement(-1)).toThrow('DEMO_FIRST_SETTLEMENT_REQUIRED');
