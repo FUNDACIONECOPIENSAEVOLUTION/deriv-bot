@@ -18,6 +18,27 @@ const now=()=>Math.floor(Date.now()/1000);
 const security={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
 const json=(value:unknown,status=200,headers={})=>Response.json(value,{status,headers:{...security,...headers}});
 
+/** A bounded, public, read-only transport check; cached within each Worker isolate.
+ * No account/OTP is ever accessed here and no proposal/buy is sent.
+ */
+let derivSocketProbeCache:{at:number;promise:Promise<{status:string;mode:string;code?:string;markets?:unknown}>}|null=null;
+async function readDerivSocketTransport() {
+  const tick=Date.now();
+  if(derivSocketProbeCache&&tick-derivSocketProbeCache.at<120_000)return derivSocketProbeCache.promise;
+  const promise=(async()=>{
+    try{
+      const result=await checkPublicContractCompatibility();
+      return {status:'CONNECTED',mode:'PUBLIC_READ_ONLY',markets:result.results};
+    }catch(error){
+      const raw=error instanceof Error?error.message:'DERIV_SOCKET_UNKNOWN';
+      const code=/^(DERIV|DEMO)_[A-Z0-9_]+$/.test(raw)?raw:'DERIV_SOCKET_FAILED';
+      return {status:'UNAVAILABLE',mode:'PUBLIC_READ_ONLY',code};
+    }
+  })();
+  derivSocketProbeCache={at:tick,promise};
+  return promise;
+}
+
 /** One coordination atom: the owner's single virtual USD 10 experiment. */
 export class PaperExperiment extends DurableObject<Env> {
   private config:ReturnType<typeof readConfig>;
@@ -198,6 +219,10 @@ export default {
       demoAutomationEnabled:String(env.DEMO_AUTO_ENABLED)==='true',
       note:'Estado técnico del Worker. No confirma sesión Deriv ni operaciones DEMO.'
     });
+    if(url.pathname==='/api/health/deriv-socket'&&request.method==='GET'){
+      const result=await readDerivSocketTransport();
+      return json({readOnly:true,version:release.version+'.0',...result},result.status==='CONNECTED'?200:503);
+    }
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
