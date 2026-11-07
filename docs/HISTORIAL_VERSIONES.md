@@ -52,6 +52,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.2 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T23:50:35.860Z (UTC).
+- **Commit de origen:** `726042e4e75c`.
+- Publicar ensayo de 10 contratos DEMO balanceados, paradas de riesgo y análisis CALL/PUT
+- Etiquetar con precisión P&L registrado por navegador sin verificación independiente
+
 ## v6.1 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:49:56.424Z (UTC).

@@ -1,10 +1,11 @@
 {
-  "version": "6.1",
-  "updatedAt": "2026-11-07T23:49:56.424Z",
-  "summary": "Validar flujo de 10 trades DEMO, confirmación, límites, pausas y trazabilidad CSV",
+  "version": "6.2",
+  "updatedAt": "2026-11-07T23:50:35.860Z",
+  "summary": "Publicar ensayo de 10 contratos DEMO balanceados, paradas de riesgo y análisis CALL/PUT",
   "changes": [
-    "Validar flujo de 10 trades DEMO, confirmación, límites, pausas y trazabilidad CSV"
+    "Publicar ensayo de 10 contratos DEMO balanceados, paradas de riesgo y análisis CALL/PUT",
+    "Etiquetar con precisión P&L registrado por navegador sin verificación independiente"
   ],
-  "sourceCommit": "19e44290ad7546d586e9a2c50a4a1741a6add7be",
+  "sourceCommit": "726042e4e75c6f66b2b368675e9a08d943b948b2",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
