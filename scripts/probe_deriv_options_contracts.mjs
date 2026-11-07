@@ -15,7 +15,11 @@ const requests=[
   {proposal:1,amount:0.35,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:81},
   {proposal:1,amount:0.50,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:82},
   {proposal:1,amount:0.75,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:83},
-  {proposal:1,amount:1,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:84}
+  {proposal:1,amount:1,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:84},
+  {proposal:1,amount:0.35,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:85},
+  {proposal:1,amount:0.50,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:86},
+  {proposal:1,amount:0.75,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:87},
+  {proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:88}
 ];
 const safe=x=>typeof x==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(x)?x:'UNSPECIFIED';
 const expected=new Set(requests.map(x=>x.req_id));
