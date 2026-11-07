@@ -1,49 +1,43 @@
-# Plan de integración: Deriv DEMO y evaluación verificable
+# Plan de entrenamiento Deriv DEMO — primera tanda de 10 contratos virtuales
 
-Fecha: 2026-11-07. Proyecto: `FUNDACIONECOPIENSAEVOLUTION/deriv-bot`.
+**Fecha de revisión:** 2026-11-07. **Proyecto:** FUNDACIONECOPIENSAEVOLUTION/deriv-bot.
+**Estado:** desarrollado en PR #11 (borrador), **no fusionado, no desplegado y sin operaciones con la cuenta DEMO del titular verificadas**.
 
-## Principio
+## Alcance y presupuesto
 
-**La cuenta DEMO es gratuita y usa saldo virtual.** Un contrato de USD 0,10 se pagaría con fondos virtuales si Deriv lo cotiza y permite comprarlo. No es una cuota por acceder al demo. Las APIs de terceros para IA pueden tener costos separados.
+- Cuenta oficial de Deriv **DEMO** exclusivamente (saldo virtual, sin depósitos); el saldo oficial no es el presupuesto de prueba.
+- Asignación interna del primer experimento: **US$10 virtuales**.
+- **Diez compras como máximo en la primera tanda**, con **US$1 virtual por contrato**. Máximo diez abiertas a la vez; cada compra usa una propuesta verificada de Deriv. Las propuestas rechazadas quedan anotadas y no son operaciones ganadoras ni perdedoras.
+- Duración inicial: 20 ticks, instrumento R_100, dirección **CALL** si la señal es alcista o **PUT** si es bajista. La señal procede de reglas públicas SMA/RSI, no de una IA que haya adquirido certeza predictiva.
+- Las diez compras se contabilizan en SQLite con identificador de contrato, señal, indicadores al entrar y respuesta del broker. Al registrar la décima, **no abrir más compras**, aun con saldo positivo, hasta estudiar sus liquidaciones y crear una nueva fase aprobada.
+- Exposición máxima simultánea US$10 virtuales; evaluación del riesgo considera todas las posiciones abiertas y el resultado neto confirmado. Además, pausa de día si diez o más operaciones liquidadas dejan resultado neto diario cero o negativo. Una compra con resultado desconocido detiene todo.
+- La cuenta real jamás se conecta desde esta implementación: **no existe ruta /real** ni promoción automática basada en porcentaje de aciertos.
 
-## Estados explícitos
+## Fases de seguridad
 
-1. `PAPER`: pronósticos/contabilidad hipotéticos, no son órdenes al broker.
-2. `BROKER_DEMO_QUOTE`: cotización oficial en cuenta demo, **sin buy** (implementado en PR #11, pendiente de validación en producción).
-3. `BROKER_DEMO_TRADING`: solo en etapa posterior, con orden real **en saldo virtual**, monitoreada y conciliada contra el broker; bloqueada por defecto.
-4. `BROKER_REAL`: deshabilitado y sin ruta de compra. Un 70-80 % de acierto no lo habilita automáticamente.
+1. PAPER: señales hipotéticas y cuentas de prueba internas, **no confundir con órdenes al broker**.
+2. DEMO_QUOTE: OAuth PKCE, OTP de una cuenta demo USD y propuesta oficial; ninguna compra.
+3. DEMO_BUY: requiere secretos del titular en Cloudflare, `DEMO_BUY_ENABLED=true` **solo después de validar conexión**, y acción privada autorizada. El modo automático además requiere `DEMO_AUTO_ENABLED=true` y botón de activación privado.
+4. DEMO_SETTLEMENT: conciliar cada contrato con `proposal_open_contract`, registrar ganancia/pérdida y spots si Deriv los suministra. Si se perdió el ACK, la operación queda UNKNOWN y hay que conciliar con el historial oficial antes de permitir más compras.
+5. DEMO_ANALYSIS: dividir resultados cronológicamente, diagnosticar pérdidas, neto, expectativa y drawdown. Registrar hipótesis, versionar estrategias, comparar en un lote posterior fuera de muestra. **No se reentrena ChatGPT en tiempo real automáticamente.**
+6. Cuenta real: fuera de alcance. Nunca autorizarla por alcanzar 90 %, 100 % ni cualquier otro porcentaje.
 
-## Cadena de ejecución demo pendiente
+## Protocolo para iniciar el primer experimento
 
-- OAuth oficial con PKCE, únicamente cuenta `account_type=demo`, `currency=USD`, `status=active`, y nunca permisos de pago o retiro.
-- Obtener OTP por REST, conectar exclusivamente a `/ws/demo`; rechazar cualquier URL de cuenta real.
-- Confirmar `contracts_for` y una `proposal` válida; si USD 0,10 o 20 ticks no son admitidos, mostrar el rechazo, sin aumentar el stake automáticamente.
-- Después de autorización manual de inicio de experimento DEMO, motor de reglas reproducible genera señal. Validar límites antes de cada orden. Una sola orden demo a la vez.
-- Emitir `buy` **solo en demo**, con propuesta cotizada y precio máximo fijo aceptado; jamás comprar en un socket `/real`.
-- Persistir cada identificador de contrato y estado de compra antes de permitir otra orden; ante desconexión, reconciliar con el historial del broker. Estado desconocido = nuevas compras bloqueadas.
-- Vigilar `proposal_open_contract` hasta vencimiento; registrar payout, ganancia/pérdida, comisiones y tiempos. Deduplicar eventos. Nunca inventar resultados.
-- Límite inicial propuesto, **solo virtual**: máximo USD 0,10 por contrato, pérdida diaria máxima USD 0,30, máximo 12 contratos por día, un contrato simultáneo, parada inmediata ante errores consecutivos o datos antiguos. Si el mínimo permitido por Deriv excede USD 0,10, no modificarlo sin decisión posterior del usuario.
-- Guardar en SQLite los resultados DEMO por `contract_id`, fecha, predicción, resultado oficial, valor gastado, payout, comisiones, proveedor de señal, versión de estrategia y clasificación real/virtual. Informes CSV, historial y métricas verificadas.
+- Conectar el panel privado Cloudflare con la cuenta **DEMO activa** de Deriv por el OAuth autorizado. No compartir tokens, contraseñas ni OTP en GitHub, enlaces públicos o mensajes.
+- Verificar una cotización oficial de **US$1**, R_100, CALL y PUT, 20 ticks. Si Deriv rechaza ese contrato, **no incrementar el precio ni sustituir el instrumento sin revisar la razón**.
+- Verificar una compra de US$1 virtual, su identificación, su liquidación y su registro correcto antes de autorizar la automatización del lote restante.
+- Conservar el apagado por defecto en ambos interruptores: `DEMO_BUY_ENABLED=false`, `DEMO_AUTO_ENABLED=false`. Activar **solo DEMO**, cuando lo anterior esté comprobado y el titular haya dado consentimiento operativo dentro del panel privado. Cron revisa cada minuto y como máximo evalúa una compra virtual por minuto cuando hay señal; no es un motor de alta frecuencia.
+- El límite de **diez compras acumuladas en la primera tanda** no se restablece automáticamente al cambiar de día ni al reiniciar el Worker.
+- Tras terminar, calcular victorias/derrotas, payout efectivo, resultado neto, pérdida máxima, errores de conexión, dirección, RSI y volatilidad. No atribuir la causa de un resultado solo por correlación.
+- Aunque la meta de investigación sea 90–100 % de acierto, **10 contratos son una muestra demasiado pequeña para verificar una tasa de éxito reproducible**. Se necesitan más tandas y evaluación prospectiva independiente.
+- Si falla la conexión, compra o liquidación: **no inventar resultados, no repetir órdenes inciertas y no activar fondos reales**.
 
-## Métricas antes de considerar dinero real
+## Fuentes oficiales
 
-- Porcentaje de acierto validado, tasa de rechazo, ganancia neta, retorno sobre capital, payout efectivo, expectativa por operación, drawdown máximo, intervalos de confianza, desviaciones por mercado/horario, frecuencia de operaciones y errores de red.
-- Separar entrenamiento/backtest y evaluación fuera de muestra; prohibido seleccionar únicamente operaciones ganadoras.
-- Como objetivo de investigación usar 70–80 % de acierto, **no como condición suficiente ni garantía de ganancia**. No automatizar el paso a real. Requiere revisión de rentabilidad después de costos, pérdidas máximas, y autorización expresa del titular.
-- La transición a dinero real exigirá otro proceso de seguridad, permisos mínimos, límites de riesgo y botón de habilitación manual separado, después de auditar resultados.
-
-## IA multiagente
-
-- La IA no se conecta por sí misma desde una ventana de ChatGPT a una cuenta persistente de Deriv. El Worker o un backend privado debe llamar APIs autorizadas de OpenAI/Gemini/DeepSeek/etc., si hay claves y cuota disponibles.
-- Las claves se almacenan **solo en secretos del servidor**, nunca en repositorio público ni frontend.
-- Cada modelo devuelve `UP` / `DOWN` / `HOLD` + confianza y justificación estructurada. El supervisor de riesgo aplica controles independientes y puede bloquear todas las órdenes.
-- Usar primero señales deterministas sin costos API. Integrar modelos uno a uno, medir latencia, costos y aportación estadística neta. Acuerdo de varios modelos no implica certeza.
-
-## Comprobaciones de aceptación
-
-- Todas las pruebas y typecheck aprobadas, más verificación real de quote en Cloudflare con cuenta demo autorizada.
-- DEMO `buy` nunca puede ejecutarse en el modo quote; pruebas que confirman que `/real` siempre se rechaza.
-- Confirmación de historial real de contratos **DEMO** con al menos una compra virtual consentida, liquidación y conciliación, sin dinero real.
-- Validación 24 horas de continuidad, reinicios y conservación de registros. Si el sistema no pudo verificar liquidación, informar la incertidumbre y bloquear nuevas órdenes.
-
-Documentación oficial: https://developers.deriv.com/docs/workflows/ , https://developers.deriv.com/docs/trading/proposal/ , https://developers.deriv.com/docs/trading/buy/ , https://developers.deriv.com/docs/trading/proposal-open-contract/ .
+- https://developers.deriv.com/docs/options/ws-demo/
+- https://developers.deriv.com/docs/options/websocket/
+- https://developers.deriv.com/docs/trading/proposal/
+- https://developers.deriv.com/docs/trading/buy/
+- https://developers.deriv.com/docs/trading/proposal-open-contract/
+- https://developers.deriv.com/docs/best-practices/
