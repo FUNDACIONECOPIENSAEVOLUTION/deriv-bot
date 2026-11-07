@@ -1,14 +1,12 @@
 {
-  "version": "1.7",
-  "updatedAt": "2026-11-07T19:53:23.600Z",
-  "summary": "Probar cinco tandas de diez, sus liquidaciones y parada tras 50 contratos DEMO",
+  "version": "1.8",
+  "updatedAt": "2026-11-07T19:56:05.812Z",
+  "summary": "Documentar autorización y controles de cinco tandas de diez contratos virtuales",
   "changes": [
-    "Probar cinco tandas de diez, sus liquidaciones y parada tras 50 contratos DEMO",
-    "Mostrar en el panel cinco tandas DEMO, aciertos, pérdidas y límite de US$10 por tanda",
-    "Registrar cinco lotes de 10, revisar resultados al liquidar y detener tras 50 operaciones DEMO",
-    "Aplicar límites de cada tanda y bloqueo hasta conciliar diez contratos DEMO",
-    "Preparar 5 tandas de 10 compras Deriv DEMO, presupuesto virtual US$10 por tanda y límite total 50"
+    "Documentar autorización y controles de cinco tandas de diez contratos virtuales",
+    "Documentar autorización y controles de cinco tandas de diez contratos virtuales",
+    "Probar reportes por tanda y espera de liquidación de 10 operaciones DEMO"
   ],
-  "sourceCommit": "b4a43690ac1b6bf72bab617bffddce0fc2236f34",
+  "sourceCommit": "16b99011e4abbc106f9ad4d312947de11482215d",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

@@ -8,6 +8,15 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v1.8 — 2026-11-07
+
+- **Actualizado:** 2026-11-07T19:56:05.812Z (UTC).
+- **Commit de origen:** `16b99011e4ab`.
+- Documentar autorización y controles de cinco tandas de diez contratos virtuales
+- Documentar autorización y controles de cinco tandas de diez contratos virtuales
+- Probar reportes por tanda y espera de liquidación de 10 operaciones DEMO
+
 ## v1.7 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T19:53:23.600Z (UTC).
