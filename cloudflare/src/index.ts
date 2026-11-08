@@ -389,9 +389,10 @@ export default {
           if(action==='ack'){
             const t=d.timing&&typeof d.timing==='object'&&!Array.isArray(d.timing)?
               d.timing as Record<string,unknown>:{};
-            const ms=(field:string)=>typeof t[field]==='number'&&
-              Number.isSafeInteger(t[field])&&t[field]>=0&&t[field]<=30000?
-                t[field] as number:undefined;
+            const ms=(field:string)=>{
+              const n=t[field];
+              return typeof n==='number'&&Number.isSafeInteger(n)&&n>=0&&n<=30000?n:undefined;
+            };
             return json(await demo.acknowledgeDemoBurst({
               nonce,id:d.id,response:d.response,
               timing:{preBuyAgeMs:ms('preBuyAgeMs'),
