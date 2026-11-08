@@ -803,6 +803,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
     askPrice:number;payout:number;direction?:'UP'|'DOWN';symbol?:DemoSymbol;evidence?:{
       fast?:number|null;slow?:number|null;rsi?:number|null;
       volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
+      proposalRttMs?:number|null;signalAgeAtProposalSec?:number|null;
+      pageLoadedEpoch?:number|null;browserNavigationType?:string;pageSessionId?:string;
       reason?:string}}){
     const b=this.burstState();
     // Freeze a single owner-approved direction for at most 45 seconds.
@@ -818,7 +820,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       throw Error('DEMO_BURST_SYMBOL_OR_DIRECTION_INVALID');
     const latestSignal=this.getBrowserSignal(symbol);
     if(!latestSignal.valid||latestSignal.direction!==direction||
-       latestSignal.quoteAgeSeconds===null||latestSignal.quoteAgeSeconds>5)
+       latestSignal.quoteAgeSeconds===null||latestSignal.quoteAgeSeconds>3)
       throw Error('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
     const credentials=await this.verifiedDemoCredentials();
     if(credentials.accountId!==b.accountId)throw Error('DEMO_ONLY');
@@ -879,6 +881,19 @@ export class DerivDemoConnection extends DurableObject<Env> {
           volatility:researchNumber(d.volatility,0,100),
           entryQuote:researchNumber(d.entryQuote,0,1000000),
           quoteAgeSeconds:researchNumber(d.quoteAgeSeconds,0,3600),
+          // Server reservation age (based on browser-supplied public market timestamps).
+          analysisAtEpoch:Number.isSafeInteger(latestSignal.at)?latestSignal.at:null,
+          lastSourceTickEpoch:Number.isSafeInteger(latestSignal.quoteAgeSeconds)?
+            epoch()-latestSignal.quoteAgeSeconds:null,
+          quoteAgeAtReserveSeconds:latestSignal.quoteAgeSeconds,
+          signalAgeAtProposalSec:researchNumber(d.signalAgeAtProposalSec,0,30),
+          proposalRttMs:researchNumber(d.proposalRttMs,0,30000),
+          pageLoadedEpoch:researchNumber(d.pageLoadedEpoch,0,2100000000),
+          browserNavigationType:['reload','navigate','back_forward','unknown'].includes(d.browserNavigationType||'')?
+            d.browserNavigationType:'unknown',
+          pageSessionId:typeof d.pageSessionId==='string'&&/^[0-9a-f-]{36}$/.test(d.pageSessionId)?
+            d.pageSessionId:null,
+          sourceIndicators:'150_public_ticks_not_minute_candles',
           reason:typeof d.reason==='string'&&/^[A-Z_]{1,45}$/.test(d.reason)
             ?d.reason:'UNVERIFIED',recordedAt:epoch()})
       );
