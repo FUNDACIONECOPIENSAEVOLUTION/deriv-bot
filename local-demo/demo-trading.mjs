@@ -234,8 +234,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
   const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','errorCode'];
-  const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,'_return {getSummary,requestIntent,cancel,approve,reconcile,
-  canUpdate:()=>active.get().n===0};')+'"';
+   const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(x[h])).join(',')).join('\r\n')+'\r\n';
  }
  return {getSummary,requestIntent,cancel,approve,reconcile,markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
