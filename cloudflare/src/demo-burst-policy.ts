@@ -6,6 +6,8 @@ import {DEMO_BATCH_BUDGET_CENTS,DEMO_MAX_OPEN,DEMO_PILOT_BUDGET_CENTS,
 export const DEMO_BURST_STAKE_CENTS=100;
 export type BurstLimits={
  pilotPurchases:number;pilotCommittedCents:number;batchCommittedCents:number;
+ /** Purchases already confirmed in THIS authorized burst (not campaign count modulo ten). */
+ burstPurchases:number;
  openContracts:number;unknownCount:number;exposureCents:number;
  brokerBalanceCents:number|null;balanceCheckedAt:number;now:number;
  demoConnected:boolean;autoActive:boolean;batchSettlementPending:boolean;halted:boolean;
@@ -14,12 +16,16 @@ export function planDemoBurst(n:number,limits:BurstLimits,stakeCents:number=DEMO
  if(!DEMO_STAKES_CENTS.some(x=>x===stakeCents))throw Error('DEMO_BURST_STAKE_INVALID');
  if(!Number.isSafeInteger(n)||n<1||n>DEMO_MAX_OPEN)
   throw Error('DEMO_BURST_COUNT_INVALID');
- const integers=[limits.pilotPurchases,limits.pilotCommittedCents,limits.batchCommittedCents,
+ const integers=[limits.pilotPurchases,limits.pilotCommittedCents,limits.batchCommittedCents,limits.burstPurchases,
    limits.openContracts,limits.unknownCount,limits.exposureCents,
    limits.balanceCheckedAt,limits.now];
- if(integers.some(x=>!Number.isSafeInteger(x)||x<0))
+ if(integers.some(x=>!Number.isSafeInteger(x)||x<0)||
+    limits.burstPurchases>DEMO_REVIEW_INTERVAL||limits.batchCommittedCents>DEMO_BATCH_BUDGET_CENTS)
   throw Error('DEMO_BURST_RISK_INVALID');
- const remainingInBatch=DEMO_REVIEW_INTERVAL-(limits.pilotPurchases%DEMO_REVIEW_INTERVAL);
+ // A new owner-authorized burst starts with ten available slots independently
+ // of whether the preceding settled burst contained 3, 5 or 10 contracts.
+ // The 50-contract campaign and US$50 gross ceiling remain cumulative.
+ const remainingInBatch=DEMO_REVIEW_INTERVAL-limits.burstPurchases;
  const remainingBudget=Math.max(0,DEMO_BATCH_BUDGET_CENTS-limits.batchCommittedCents);
  const totalRemaining=Math.max(0,DEMO_PILOT_MAX_PURCHASES-limits.pilotPurchases);
  const globalBudget=Math.max(0,DEMO_PILOT_BUDGET_CENTS-limits.pilotCommittedCents);
