@@ -178,7 +178,10 @@ try {
   }
   Registrar ('Módulos verificados y copiados: '+$filesToCopy.Count+'. Datos privados intactos.')
   # Tras copiar los módulos nuevos, impedir que las tareas muestren consola.
-  try { & (Join-Path $app 'Instalar-TareasOcultas.ps1') -Ruta $Ruta | Out-Null }
+  $isAdmin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  if($isAdmin){try{ & (Join-Path $app 'Instalar-TareasOcultas.ps1') -Ruta $Ruta | Out-Null }
+   catch{Registrar 'No fue posible registrar tareas automáticas; código actualizado.'}}
+  else{Registrar 'Código actualizado; tareas programadas sin instalar por falta de elevación.'}
   catch {
    Add-Content -LiteralPath (Join-Path $data 'tareas-ocultas.log') -Value ((Get-Date -Format s)+' Error de tareas: '+$_.Exception.GetType().Name)
   }
