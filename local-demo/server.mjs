@@ -139,10 +139,10 @@ function configureSymbols(ws,records){
   ws.send(JSON.stringify({ticks:symbol,subscribe:1,req_id:500+i}));
  });
  const groups=[
-  [/^(EUR\\/USD|Euro\\/US Dollar)$/i,'EUR/USD'],
-  [/^(USD\\/JPY|US Dollar\\/Japanese Yen)$/i,'USD/JPY'],
-  [/Gold|XAU\\/USD|XAUUSD/i,'Oro (XAU/USD)'],
-  [/Bitcoin|BTC\\/USD|BTCUSD/i,'Bitcoin (BTC/USD)']
+  [/^(EUR\/USD|Euro\/US Dollar)$/i,'EUR/USD'],
+  [/^(USD\/JPY|US Dollar\/Japanese Yen)$/i,'USD/JPY'],
+  [/Gold|XAU\/USD|XAUUSD/i,'Oro (XAU/USD)'],
+  [/Bitcoin|BTC\/USD|BTCUSD/i,'Bitcoin (BTC/USD)']
  ];
  let idx=0;
  for(const [expression,name] of groups){
