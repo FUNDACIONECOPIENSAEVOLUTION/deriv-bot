@@ -10,7 +10,8 @@ import {setTimeout as pause} from 'node:timers/promises';
 test('New underlying_symbol response produces 60 candles and prices in local API',async()=>{
  const cwd=fileURLToPath(new URL('../',import.meta.url));
  const server=fileURLToPath(new URL('../server.mjs',import.meta.url));
- const mock=fileURLToPath(new URL('./mock-public-websocket.mjs',import.meta.url));
+ // --import needs file:// URL on Windows, not D:\\filesystem path.
+ const mock=new URL('./mock-public-websocket.mjs',import.meta.url).href;
  const data=mkdtempSync(join(tmpdir(),'ecopiensa-test-feed-'));
  const port=22000+Math.floor(Math.random()*3000);
  const child=spawn(process.execPath,['--import',mock,server],{
