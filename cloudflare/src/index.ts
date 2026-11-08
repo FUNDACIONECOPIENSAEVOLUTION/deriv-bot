@@ -386,8 +386,18 @@ export default {
           if(typeof d.id!=='number'||!Number.isSafeInteger(d.id)||d.id<=0
              ||!d.response||typeof d.response!=='object'||Array.isArray(d.response))
              return json({code:'DEMO_BURST_RESULT_INVALID'},400);
-          if(action==='ack')return json(await demo.acknowledgeDemoBurst({
-            nonce,id:d.id,response:d.response}));
+          if(action==='ack'){
+            const t=d.timing&&typeof d.timing==='object'&&!Array.isArray(d.timing)?
+              d.timing as Record<string,unknown>:{};
+            const ms=(field:string)=>typeof t[field]==='number'&&
+              Number.isSafeInteger(t[field])&&t[field]>=0&&t[field]<=30000?
+                t[field] as number:undefined;
+            return json(await demo.acknowledgeDemoBurst({
+              nonce,id:d.id,response:d.response,
+              timing:{preBuyAgeMs:ms('preBuyAgeMs'),
+                reserveRttMs:ms('reserveRttMs'),buyAckRttMs:ms('buyAckRttMs')}
+            }));
+          }
           if(action==='settle')return json(await demo.settleDemoBurst({
             nonce,id:d.id,response:d.response}));
           return json({code:'DEMO_BURST_ACTION_INVALID'},404);
