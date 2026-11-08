@@ -1,0 +1,14 @@
+{
+  "version": "11.7",
+  "channel": "pc-local",
+  "execution": "windows-only",
+  "summary": "GitHub pc-local y PC con una versión común; OAuth separado y servidor supervisado",
+  "trading": "demo-read-only",
+  "notes": [
+    "Código completo respaldado en GitHub pc-local como paquete de distribución con SHA-256",
+    "La app presenta la versión local y la última versión conocida en GitHub",
+    "Los cambios se descargan en reposo o al siguiente inicio, sin tocar data, SQLite o OAuth",
+    "OAuth abre una ventana separada; watchdog reanuda Node si falla",
+    "BUY, SELL y REAL continúan deshabilitados hasta validación del motor local"
+  ]
+}

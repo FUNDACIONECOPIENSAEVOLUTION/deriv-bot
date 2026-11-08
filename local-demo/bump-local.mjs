@@ -1,0 +1,20 @@
+// Independent local version. GitHub pc-local never deploys main/Cloudflare.
+import {readFileSync,writeFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+const home=resolve(import.meta.dirname);
+const file=resolve(home,'local-release.json');
+const state=JSON.parse(readFileSync(file,'utf8'));
+if(!/^\d+\.[0-9]$/.test(state.version))throw Error('VERSION_LOCAL_INVALIDA');
+const previous=state.version;
+const [major,minor]=previous.split('.').map(Number),number=major*10+minor+1;
+state.version=Math.floor(number/10)+'.'+number%10;
+state.updatedAt=new Date().toISOString();
+state.summary='Respaldo de cambios del programa local PC (sin datos privados)';
+writeFileSync(file,JSON.stringify(state,null,2)+'\n');
+const history=resolve(home,'CHANGELOG-LOCAL.md');
+const text=readFileSync(history,'utf8');
+const title=`## v${state.version} — respaldo ${state.updatedAt.slice(0,10)}\n\n- Codigo guardado en GitHub pc-local; servidor solo en Windows.\n\n`;
+const pos=text.indexOf('\n## v');
+if(pos<0)throw Error('HISTORIAL_LOCAL_INVALIDO');
+writeFileSync(history,text.slice(0,pos)+'\n'+title+text.slice(pos));
+console.log(`PC: ${previous} -> ${state.version}`);
