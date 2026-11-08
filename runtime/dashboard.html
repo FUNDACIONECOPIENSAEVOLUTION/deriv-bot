@@ -102,6 +102,7 @@
 const $=id=>document.getElementById(id),ns='http://www.w3.org/2000/svg';
 let demoManualApproval=null,demoCurrent=null;
 let mcpIntentCurrent=null,mcpIntentBusy=false;
+let browserBotSignal=null,browserBotBusy=false;
 let demoBalancedRunning=false,demoBalancedStop=false; // Never persists across reloads; server verifies a one-use approval too.
 const money=c=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'USD'}).format(c/100);
 const price=v=>Number.isFinite(v)?new Intl.NumberFormat('es-CO',{maximumFractionDigits:5}).format(v):'—';
@@ -267,7 +268,7 @@ async function oneBrowserDemoBuy(approved,msg){
   reserved=await browserPrivate('reserve',{
    nonce:session.nonce,signal:direction,stakeCents,
    proposalId:p.id,askPrice:ask,payout,
-   evidence:demoResearchEvidence(approved.pilot==='balanced-ten'?'balanced-ten':'manual')
+   evidence:approved.browserIndicator||demoResearchEvidence(approved.pilot==='balanced-ten'?'balanced-ten':'manual')
   });
   if(reserved.mode!=='DEMO_BROWSER_RESERVED'||reserved.request?.price!==stakeCents/100)
    throw Error('DEMO_BROWSER_RESERVATION_INVALID');
@@ -710,6 +711,109 @@ $('mcp-approve').onclick=async()=>{
 };
 void loadMcpIntent();
 window.setInterval(()=>{if(!document.hidden&&!mcpIntentBusy)void loadMcpIntent();},12000);
+
+
+async function fetchFreshBrowserBotSignal(){
+ const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public');
+ try{
+  const response=await brokerMessage(ws,{
+   ticks_history:'R_100',count:150,end:'latest',style:'ticks',req_id:993
+  },12000);
+  if(response.msg_type!=='history'||response.error||response.errors
+    ||response.echo_req?.ticks_history!=='R_100'
+    ||!Array.isArray(response.history?.prices)
+    ||!Array.isArray(response.history?.times)
+    ||response.history.prices.length!==150||response.history.times.length!==150)
+    throw Error('DERIV_PUBLIC_HISTORY_NOT_VERIFIED');
+  const r=await fetch('/api/deriv/demo/signal',{
+   method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+   body:JSON.stringify({
+    symbol:'R_100',prices:response.history.prices,times:response.history.times
+   }),signal:AbortSignal.timeout(7000)
+  });
+  if(!r.ok)throw Error('DEMO_BOT_SIGNAL_UNAVAILABLE');
+  const result=await r.json();
+  if(!['UP','DOWN','HOLD'].includes(result.direction)||!Number.isInteger(result.at))
+    throw Error('DEMO_BOT_SIGNAL_INVALID');
+  return result;
+ }finally{try{ws.close();}catch{}}
+}
+async function updateBrowserBotSignal(){
+ const status=$('browser-bot-signal');
+ if(browserBotBusy)return null;
+ browserBotBusy=true;
+ $('browser-bot-analyze').disabled=true;$('browser-bot-buy').disabled=true;
+ try{
+  const result=await fetchFreshBrowserBotSignal();
+  browserBotSignal=result;
+  status.textContent='Señal del bot: '+(result.direction==='UP'?'CALL (sube)':
+   result.direction==='DOWN'?'PUT (baja)':'ESPERAR')+
+   ' · '+result.reason+' · edad del último tick '+result.quoteAgeSeconds+
+   ' s. Fuente: ticks públicos observados por el navegador; no verificados de manera independiente por Cloudflare.';
+  const canBuy=result.valid===true&&demoCurrent?.connected===true
+    &&demoCurrent?.demoTradingEnabled===true
+    &&demoCurrent?.tradeReport?.risk?.allowed===true;
+  $('browser-bot-buy').disabled=!canBuy;
+  setTimeout(()=>{if(browserBotSignal===result)$('browser-bot-buy').disabled=true;},9000);
+  return result;
+ }catch(error){
+  browserBotSignal=null;
+  status.textContent='No hay señal pública válida: '+
+   (error instanceof Error?error.message:'ERROR')+
+   '. El bot no puede comprar sin cotizaciones verificables.';
+  return null;
+ }finally{browserBotBusy=false;$('browser-bot-analyze').disabled=false;}
+}
+$('browser-bot-analyze').onclick=()=>void updateBrowserBotSignal();
+$('browser-bot-buy').onclick=async()=>{
+ if(browserBotBusy)return;
+ let signal=browserBotSignal;
+ if(!signal||!signal.valid||Date.now()-signal.at*1000>8000)
+  signal=await updateBrowserBotSignal();
+ if(!signal||!signal.valid||signal.direction==='HOLD')return;
+ if(!demoCurrent?.connected||!demoCurrent.demoTradingEnabled||
+    !demoCurrent.tradeReport?.risk?.allowed){
+  $('browser-bot-signal').textContent='Cuenta DEMO no está lista. Revisa la conexión, saldo y límites.';
+  return;
+ }
+ const stakeCents=demoCurrent.nextManualStakeCents;
+ if(![35,50,75,100].includes(stakeCents)){
+  $('browser-bot-signal').textContent='Importe DEMO fuera de los límites permitidos.';
+  return;
+ }
+ if(!window.confirm('El bot propone '+(signal.direction==='UP'?'CALL':'PUT')+
+   ' por '+money(stakeCents)+' de saldo virtual (R_100, 5 ticks). '+
+   'La cotización fue observada por el navegador. ¿Autorizar UNA COMPRA DEMO?'))return;
+ browserBotBusy=true;
+ $('browser-bot-buy').disabled=true;$('browser-bot-analyze').disabled=true;
+ const out=$('browser-bot-signal');
+ try{
+  const d=signal.indicator||{};
+  const evidence={
+   pilot:'manual',fast:d.fast,slow:d.slow,rsi:d.rsi,
+   volatility:d.volatility,entryQuote:null,
+   quoteAgeSeconds:signal.quoteAgeSeconds,reason:signal.reason
+  };
+  const outcome=await oneBrowserDemoBuy({
+   direction:signal.direction,stakeCents,browserIndicator:evidence
+  },out);
+  if(outcome?.state==='SETTLED'){
+   out.textContent='El bot compró '+(signal.direction==='UP'?'CALL':'PUT')+
+    ' en DEMO, contrato '+outcome.contractId+
+    '. Resultado '+money(outcome.pnlCents)+
+    ' virtuales. Liquidación observada por navegador, no verificada independientemente.';
+  }else{
+   out.textContent='Orden DEMO sin liquidación inequívoca. No repetir sin revisar Deriv.';
+  }
+ }catch(error){
+  out.textContent='Compra DEMO no confirmada: '+(error instanceof Error?error.message:'ERROR')+
+   '. Revisa el historial antes de iniciar otra compra.';
+ }finally{
+  browserBotBusy=false;browserBotSignal=null;
+  $('browser-bot-analyze').disabled=false;
+  await loadDemo();
+ }
+};
 
 $('deriv-callback').textContent=location.origin+'/api/deriv/callback';
 $('deriv-connect').onclick=async()=>{
