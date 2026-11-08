@@ -9,6 +9,7 @@ import {performance} from 'node:perf_hooks';
 import {readTraining} from './training.mjs';
 import {dispatchMcp} from './mcp-local.mjs';
 import {createDemoTrading} from './demo-trading.mjs';
+import {createDemoBurst} from './demo-burst.mjs';
 
 const HOME=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ECOPIENSA_DATA_DIR||join(HOME,'data');
@@ -133,13 +134,22 @@ const mcpKey=readFileSync(mcpKeyPath,'utf8').trim();
 if(!/^[a-f0-9]{64}$/.test(mcpKey))throw Error('MCP_KEY_INVALID');
 const mcpAuthPath=join(DATA,'.mcp-local-authorization');
 if(!existsSync(mcpAuthPath)){writeFileSync(mcpAuthPath,'Bearer '+mcpKey,{mode:0o600,flag:'wx'});}
+const bursts=createDemoBurst({
+ db,trading,marketSnapshot:symbol=>{const item=market.get(symbol);return item?snapshot(item):null;},
+ refreshAccount:async()=>{
+  const c=await credentials();
+  const a=selectAccount(await boundedFetch(API,{headers:brokerHeaders(c)}),c.accountId);
+  put('account',a);return a;
+ },getAccount:()=>get('account'),audit
+});
+const isMaintenance=()=>existsSync(join(DATA,'actualizacion-en-curso.flag'));
 const mcpHandlers={
  version:()=>localVersion(),
  status:()=>({...status(),orders:trading.getSummary()}),
  signals:()=>[...market.values()].map(snapshot),
  training:()=>readTraining(trainingFile),
  orders:()=>trading.getSummary(),
- request:args=>trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'})
+ request:args=>{if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});}
 };
 let server;
 server=http.createServer(async(req,res)=>{
@@ -152,6 +162,14 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/style.css'){return html(res,readFileSync(join(publicPath,'style.css')),'text/css; charset=utf-8');}
   if(req.method==='GET'&&path==='/api/training')return answer(res,200,readTraining(trainingFile));
    if(req.method==='GET'&&path==='/api/demo/orders')return answer(res,200,trading.getSummary());
+   if(req.method==='GET'&&path==='/api/demo/burst/status')return answer(res,200,bursts.status());
+   if(req.method==='GET'&&(path==='/api/demo/orders.csv'||path==='/api/demo/burst.csv')){
+    const csv=trading.exportCsv(path.endsWith('/burst.csv')?'last-burst':'all');
+    const filename=path.endsWith('burst.csv')?'ecopiensa-ultima-tanda-demo.csv':'ecopiensa-historial-demo.csv';
+    res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
+     'X-Content-Type-Options':'nosniff','Content-Disposition':'attachment; filename="'+filename+'"'});
+    res.end(csv);return;
+   }
    if(req.method==='GET'&&path==='/api/mcp/info')return answer(res,200,{
     endpoint:'http://127.0.0.1:'+PORT+'/mcp',connectedToChatGPT:false,
     localOnly:true,authentication:'Bearer local + Secure MCP Tunnel',realEnabled:false
@@ -165,7 +183,7 @@ server=http.createServer(async(req,res)=>{
     if(rpc===null){res.writeHead(202,{'Cache-Control':'no-store'});res.end();return;}
     return answer(res,200,rpc);
    }
-  if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate(),demoManualPilot:true,mcpLocal:true});
+  if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
   if(req.method==='GET'&&path==='/api/status')return answer(res,200,{...status(),marketConnected:publicConnected,marketError:publicLastError});
   if(req.method==='GET'&&path==='/api/markets')return answer(res,200,{connected:publicConnected,markets:[...market.values()].map(snapshot)});
   if(req.method==='GET'&&path==='/api/market-events'){
@@ -212,15 +230,20 @@ server=http.createServer(async(req,res)=>{
   if(path==='/api/demo/refresh')return answer(res,200,await refreshBalance());
   if(path==='/api/demo/quote')return answer(res,200,await quoteDemo(b));
   if(path==='/api/demo/profit')return answer(res,200,await recentProfit());
+   if(isMaintenance()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start'].includes(path))throw Error('LOCAL_UPDATE_IN_PROGRESS');
    if(path==='/api/demo/intent')return answer(res,200,trading.requestIntent({
     symbol:String(b.symbol||''),direction:String(b.direction||''),stakeCents:Number(b.stakeCents),source:'LOCAL_OWNER'}));
    if(path==='/api/demo/confirm')return answer(res,200,await trading.approve(String(b.id||''),String(b.confirmation||'')));
    if(path==='/api/demo/cancel')return answer(res,200,trading.cancel(String(b.id||'')));
    if(path==='/api/demo/reconcile')return answer(res,200,await trading.reconcile(String(b.id||'')));
+   if(path==='/api/demo/burst/start')return answer(res,200,bursts.start({
+    count:b.count,stakeCents:b.stakeCents,symbol:b.symbol,confirmation:b.confirmation
+   }));
+   if(path==='/api/demo/burst/stop')return answer(res,200,bursts.stop());
   return answer(res,404,{error:'RUTA_DESCONOCIDA'});
  }catch(e){console.warn('Petición rechazada:',errorCode(e));return answer(res,400,{error:errorCode(e),readOnly:true});}
 });
-server.listen(PORT,HOST,()=>console.log(`Ecopiensa Deriv DEMO LOCAL (solo lectura) ${BASE}`));
+server.listen(PORT,HOST,()=>console.log(`Ecopiensa Deriv DEMO LOCAL (compras virtuales autorizadas, REAL bloqueada) ${BASE}`));
 function shutdown(){
  clearInterval(heartbeat);
  for(const r of streams){try{r.end();}catch{}}
