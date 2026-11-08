@@ -930,6 +930,52 @@ $('deriv-connect').onclick=async()=>{
   try{const r=await fetch('/api/deriv/connect',{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:JSON.stringify({clientId}),signal:AbortSignal.timeout(8000)});if(!r.ok)throw Error();const data=await r.json(),url=new URL(data.url);if(url.origin!=='https://auth.deriv.com'||url.pathname!=='/oauth2/auth')throw Error();location.assign(url.href);}
   catch{out.textContent='No se pudo iniciar la autorización. Conserva el identificador y vuelve a intentarlo.';$('deriv-connect').disabled=false;}
 };
+$('demo-apply-stake').onclick=async()=>{
+ const out=$('demo-stake-selection-status');
+ const selected=Number($('demo-quote-stake').value);
+ if(![35,50,75,90,100].includes(selected)){
+  out.textContent='Importe fuera de la lista DEMO permitida.';return;
+ }
+ const btn=$('demo-apply-stake');btn.disabled=true;demoManualApproval=null;
+ try{
+  const refreshed=await syncBrokerBalance(true);
+  if(!refreshed)throw Error('SALDO_DEMO_NO_ACTUALIZADO');
+  const response=await fetch('/api/deriv/demo/manual-stake',{
+   method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+   body:JSON.stringify({stakeCents:selected}),signal:AbortSignal.timeout(9000)
+  });
+  if(!response.ok){const err=await demoResponseError(response);throw Error(err.code);}
+  const confirmation=await response.json();
+  if(confirmation.mode!=='DEMO_MANUAL_STAKE_SET'||confirmation.stakeCents!==selected
+     ||confirmation.noBrokerOrders!==true)throw Error('DEMO_STAKE_CONFIRMATION_INVALID');
+  out.textContent='Apuesta elegida: '+money(selected)+' virtuales para UNA compra DEMO manual. '+
+   'El servidor verificó el saldo y los límites. No se compró ningún contrato.';
+  await loadDemo();
+ }catch(error){
+  out.textContent='No se pudo guardar el importe: '+
+   (error instanceof Error?error.message:'ERROR')+
+   '. Revisa el saldo actualizado y contratos abiertos.';
+ }finally{btn.disabled=!(demoCurrent?.connected&&demoCurrent?.demoTradingEnabled);}
+};
+$('demo-max-concurrent').oninput=()=>{
+ const field=$('demo-max-concurrent');field.dataset.userEdited='1';
+ const n=Number(field.value),msg=$('demo-stake-selection-status');
+ if(!Number.isInteger(n)||n<1||n>100){
+  msg.textContent='Escribe un número entero de 1 a 100 para planificación; no se autoriza ninguna compra.';
+ }else if(n>10){
+  msg.textContent='Solicitados '+n+' contratos: BLOQUEADO. Máximo validado del servidor: 10; '+
+   'este navegador ejecuta una compra a la vez hasta implementar y probar conciliación concurrente.';
+ }else{
+  msg.textContent='Solicitados '+n+' contratos: límite del servidor '+n+
+   ', pero el flujo por navegador sigue comprando y liquidando de UNO EN UNO. '+
+   'No implica autorización de operaciones.';
+ }
+};
+$('demo-quote-stake').addEventListener('change',()=>{
+ $('demo-stake-selection-status').textContent='Seleccionaste '+money(Number($('demo-quote-stake').value))+
+  ' virtuales. Pulsa «Fijar importe para UNA compra DEMO» para validar saldo y guardar esta elección; todavía no es una orden.';
+});
+
 $('deriv-refresh').onclick=async()=>{const out=$('demo-feedback');$('deriv-refresh').disabled=true;try{const r=await fetch('/api/deriv/refresh',{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error();renderDemo(await r.json());out.textContent='Saldo demo verificado en Deriv. Las compras DEMO requieren propuesta válida y confirmación; no se ejecutó ningún contrato.';}catch{out.textContent='No se pudo actualizar la cuenta demo. Puede ser necesario autorizarla nuevamente.';await loadDemo();}};
 $('deriv-market-check').onclick=async()=>{
   const btn=$('deriv-market-check'),out=$('demo-market-check');
@@ -1149,7 +1195,9 @@ $('demo-buy-once').onclick=async()=>{
     $('demo-trade-status').textContent='Cotización caducada o rechazada. Solicita una propuesta aceptada antes de comprar.';
     return;
   }
-  if(!window.confirm('Confirmar UNA compra de US$0,35 a US$1 virtual (importe rotativo), duración 5 ticks, dentro de cinco tandas de 10 contratos (US$10 máximo por tanda y US$50 total). No se usará dinero real. ¿Continuar?'))return;
+  if(!window.confirm('Confirmar UNA compra '+($('demo-quote-direction').value==='UP'?'CALL':'PUT')+
+    ' de '+money(demoManualApproval.stakeCents)+' virtuales en la cuenta DEMO · R_100 · 5 ticks. '+
+    'Máximo US$10 por tanda y US$50 en total. Nunca dinero real. ¿Continuar?'))return;
   const approval=demoManualApproval;
   demoManualApproval=null;
   const btn=$('demo-buy-once'),msg=$('demo-trade-status');btn.disabled=true;
@@ -1179,7 +1227,10 @@ for(const kind of ['start','stop']){
     const start=kind==='start';
     const maxConcurrent=Number($('demo-max-concurrent').value);
     if(start&&(!Number.isSafeInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>10))return;
-    if(start&&!window.confirm('Autorizar únicamente DEMO, importes de US$0,35, US$0,50, US$0,75 y US$1, máximo '+maxConcurrent+' contratos simultáneos, CINCO TANDAS de 10 compras (máximo US$10 por tanda; US$50 total) con espera de liquidación, y límite adicional de pérdida de US$100 del saldo de US$10.000. Nunca dinero real. ¿Activar?'))return;
+    if(start&&!window.confirm('Autorizar únicamente DEMO: apuestas automáticas US$0,35/0,50/0,75/1, '+
+    'máximo del servidor '+maxConcurrent+' posiciones simultáneas (el navegador sigue limitado a una), '+
+    'cinco tandas de 10 compras (US$10 máximo por tanda y US$50 total), '+
+    'saldo de parada US$9.900. Nunca dinero real. ¿Activar?'))return;
     const btn=$('demo-auto-'+kind);btn.disabled=true;
     try{
       const r=await fetch('/api/deriv/demo/auto-'+kind,{
