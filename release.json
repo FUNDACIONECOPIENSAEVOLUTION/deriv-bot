@@ -1,10 +1,10 @@
 {
-  "version": "7.7",
-  "updatedAt": "2026-11-08T00:13:22.221Z",
-  "summary": "Publicar gateway MCP DEMO, señal de navegador y comprobar que acceso anónimo queda bloqueado",
+  "version": "7.8",
+  "updatedAt": "2026-11-08T00:27:06.536Z",
+  "summary": "Verificar si Deriv admite apuestas virtuales US$0.90 para CALL y PUT sin realizar compras",
   "changes": [
-    "Publicar gateway MCP DEMO, señal de navegador y comprobar que acceso anónimo queda bloqueado"
+    "Verificar si Deriv admite apuestas virtuales US$0.90 para CALL y PUT sin realizar compras"
   ],
-  "sourceCommit": "6efa2539bdd1f9f02044299ded62c1e5d77008b9",
+  "sourceCommit": "15a32e9db29b5ef8567c888c2d378d8091929395",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

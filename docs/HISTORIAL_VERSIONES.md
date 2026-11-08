@@ -68,6 +68,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.8 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:27:06.536Z (UTC).
+- **Commit de origen:** `15a32e9db29b`.
+- Verificar si Deriv admite apuestas virtuales US$0.90 para CALL y PUT sin realizar compras
+
 ## v7.7 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:13:22.221Z (UTC).
