@@ -1,11 +1,10 @@
 {
-  "version": "6.9",
-  "updatedAt": "2026-11-08T00:01:15.324Z",
-  "summary": "Actualizar estado del MCP con herramienta PAPER 10 sin permisos de broker",
+  "version": "7.0",
+  "updatedAt": "2026-11-08T00:05:42.139Z",
+  "summary": "Crear servidor MCP HTTP en Cloudflare con herramientas DEMO seguras y cola de aprobación en navegador",
   "changes": [
-    "Actualizar estado del MCP con herramienta PAPER 10 sin permisos de broker",
-    "Añadir comando MCP paper-ten al listado y pruebas sin broker"
+    "Crear servidor MCP HTTP en Cloudflare con herramientas DEMO seguras y cola de aprobación en navegador"
   ],
-  "sourceCommit": "126f76b55362e61d451821cc326d5e3714ecd6c6",
+  "sourceCommit": "cd5884edb2d1e0c7599aad1ad61f812e9e2cb857",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

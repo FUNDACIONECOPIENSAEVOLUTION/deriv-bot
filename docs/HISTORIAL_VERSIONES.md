@@ -60,6 +60,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.0 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:05:42.139Z (UTC).
+- **Commit de origen:** `cd5884edb2d1`.
+- Crear servidor MCP HTTP en Cloudflare con herramientas DEMO seguras y cola de aprobación en navegador
+
 ## v6.9 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:01:15.324Z (UTC).
