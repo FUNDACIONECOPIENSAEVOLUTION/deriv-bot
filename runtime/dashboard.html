@@ -1358,6 +1358,12 @@ $('demo-burst-start').onclick=async()=>{
     '¿Autorizas estas '+count+' compras DEMO?'
   );
   if(!approved){status.textContent='No se autorizaron compras DEMO.';return;}
+  // A human confirmation can take longer than the ten-second quote window.
+  // Refresh the bot signal but NEVER silently change the approved direction.
+  const renewed=await updateBrowserBotSignal();
+  if(!renewed||!renewed.valid||renewed.direction!==direction||
+      Date.now()-renewed.at*1000>9000)
+    throw Error('DEMO_BURST_APPROVED_DIRECTION_NO_LONGER_CURRENT');
   status.textContent='Solicitando sesión DEMO autenticada para '+count+
     ' órdenes independientes. Todavía no se ha comprado ningún contrato.';
   const session=await demoBurstPost('begin',{count,signal:direction});
