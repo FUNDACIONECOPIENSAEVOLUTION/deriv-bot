@@ -522,6 +522,65 @@ async function syncBrokerBalance(force=false){
  }finally{brokerSyncBusy=false;}
 }
 
+async function loadDemoSymbolCandles(symbol){
+ if(symbol==='R_100')return;
+ if(!demoScanSymbols.includes(symbol))throw Error('DERIV_CHART_SYMBOL_INVALID');
+ if(demoOtherChartLoading)return;
+ if(demoOtherChart?.symbol===symbol&&Date.now()-demoOtherChartAt<30000)return;
+ demoOtherChartLoading=true;
+ const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public')
+    .catch(()=>null);
+ if(!ws){demoOtherChartLoading=false;throw Error('DERIV_CHART_SOCKET_UNAVAILABLE');}
+ try{
+  const reply=await brokerMessage(ws,{
+   ticks_history:symbol,count:720,end:'latest',style:'ticks',req_id:953
+  },12000);
+  if(reply.msg_type!=='history'||reply.error||reply.errors||
+    reply.echo_req?.ticks_history!==symbol||
+    !Array.isArray(reply.history?.prices)||!Array.isArray(reply.history?.times)||
+    reply.history.prices.length!==reply.history.times.length||
+    reply.history.prices.length<30)throw Error('DERIV_CHART_HISTORY_INVALID');
+  const buckets=new Map();
+  let prev=0;
+  for(let i=0;i<reply.history.times.length;i++){
+   const at=Number(reply.history.times[i]),q=Number(reply.history.prices[i]);
+   if(!Number.isSafeInteger(at)||at<prev||!Number.isFinite(q)||q<=0||
+      at>Date.now()/1000+5)throw Error('DERIV_CHART_PRICE_INVALID');
+   prev=at;
+   const minute=Math.floor(at/60)*60;
+   if(!buckets.has(minute))buckets.set(minute,{
+      time:minute,open:q,high:q,low:q,close:q,partial:false
+   });
+   const bar=buckets.get(minute);
+   bar.high=Math.max(bar.high,q);bar.low=Math.min(bar.low,q);bar.close=q;
+  }
+  const candles=[...buckets.values()].sort((a,b)=>a.time-b.time);
+  if(!candles.length)throw Error('DERIV_CHART_HISTORY_EMPTY');
+  candles.at(-1).partial=true;
+  demoOtherChart={symbol,candles};
+  demoOtherChartAt=Date.now();
+  if($('provider').value==='deriv'&&$('demo-chart-symbol').value===symbol){
+   drawCandles();
+   $('platform-note').textContent='Velas '+symbol+' agregadas desde ticks públicos Deriv. '+
+     'Solo se muestran minutos con datos observados; no se rellenan periodos faltantes.';
+  }
+ }finally{try{ws.close();}catch{}demoOtherChartLoading=false;}
+}
+$('demo-chart-symbol').onchange=async()=>{
+ const symbol=$('demo-chart-symbol').value;
+ $('provider').value='deriv';
+ stopLiveTicks();liveTick=null;
+ if(symbol!=='R_100'){
+  demoOtherChart=null;demoOtherChartAt=0;
+  $('platform-note').textContent='Consultando historial de ticks públicos '+symbol+'…';
+  try{await loadDemoSymbolCandles(symbol);}
+  catch(e){$('platform-note').textContent='No se pudieron verificar velas de '+symbol+
+    ': '+(e instanceof Error?e.message:'ERROR');}
+ }
+ ensureLiveTicks();
+ render();
+};
+
 function svg(parent,name,attrs={},text){const el=document.createElementNS(ns,name);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,String(v));if(text!==undefined)el.textContent=text;parent.appendChild(el);return el;}
 function chip(id,text,tone=''){const el=$(id);el.textContent=text;el.className='chip '+tone;}
 function showBar(bar){$('ohlc').textContent=date(bar.time)+' · Apertura '+price(bar.open)+' · Máximo '+price(bar.high)+' · Mínimo '+price(bar.low)+' · Cierre '+price(bar.close)+(bar.partial?' · Vela parcial':'');}
@@ -739,10 +798,13 @@ function render(){
   $('stake').textContent=money(x.config.stakeCents);$('budget').textContent=money(x.config.dailyLossCents);$('loss').textContent=money(x.daily.lossCents);$('payout').textContent=x.config.payoutPct+' %';$('cost').textContent='Costo supuesto por liquidación: '+money(x.config.costCents)+'. No es una condición cotizada por Deriv.';
   $('controls').hidden=!x.serverManaged;$('paper-start').disabled=provider!=='deriv'||x.running===true;$('paper-stop').disabled=x.running===false;
   const catalog=x.providers||[],selected=catalog.find(p=>p.id===provider);
-  $('chart-title').textContent=selected?selected.name+' · '+(provider==='deriv'?x.config.symbol:selected.symbol):'Mercado';
+  $('chart-title').textContent=provider==='deriv'
+    ?'Deriv · '+$('demo-chart-symbol').value+' (ticks públicos y contratos DEMO)'
+    :selected?selected.name+' · '+selected.symbol:'Mercado';
   if(selected){$('platform-link').href=selected.url;$('platform-link').textContent='Abrir plataforma '+selected.name+' ↗';}
   if(provider==='deriv'){
-    $('platform-note').textContent='Deriv: datos públicos y simulación automática. Las señales pertenecen al motor y se conservan en su registro.';
+    $('platform-note').textContent='Deriv: precios públicos del índice seleccionado y marcas del broker DEMO '+
+      'solo con hora y spot observados. La simulación PAPER queda separada.';
     chip('chart-status',x.running===false?'Historial · en pausa':live?'Datos recientes · 5 s':'Esperando cotización',x.running===false?'warn':live?'live':'offline');
   }else{
     $('platform-note').textContent='Solo consulta pública de velas cada 30 segundos. La simulación automática sigue vinculada a Deriv; esta vista no coloca operaciones en '+(selected?.name||provider)+'.';
