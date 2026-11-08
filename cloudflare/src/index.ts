@@ -222,26 +222,45 @@ export default {
       note:'Estado técnico del Worker. No confirma sesión Deriv ni operaciones DEMO.'
     });
     if(url.pathname==='/api/health/dependencies'&&request.method==='GET'){
-      // Only publish booleans for storage reachability; never return user account,
-      // balances, internal errors, OAuth data, or private DO state.
-      const probe=async(component:'PAPER'|'DERIV_DEMO',check:()=>Promise<unknown>)=>{
-        try{await check();return true;}
+      // Safe, read-only health: classify failures without exposing tokens, App ID,
+      // account identifiers, balances or internal exception details.
+      const classify=(error:unknown):string=>{
+        const message=error instanceof Error?error.message:'';
+        if(message==='EXPERIMENT_CONFIG_CHANGED')return 'PAPER_CONFIG_MISMATCH';
+        if(/no such table|no such column|SQLITE|D1_ERROR|database is locked/i.test(message))
+          return 'DO_DATABASE_ERROR';
+        if(/exceeded|quota|too many|rate limit/i.test(message))return 'DO_QUOTA';
+        if(/timeout|timed out|unavailable|connection closed/i.test(message))
+          return 'DO_RPC_UNAVAILABLE';
+        if(/not a function|cannot read properties of undefined|binding/i.test(message))
+          return 'DO_BINDING_ERROR';
+        return 'DO_UNKNOWN_ERROR';
+      };
+      const probe=async(component:'PAPER'|'DERIV_DEMO',
+        check:()=>Promise<unknown>)=>{
+        try{await check();return {state:'ready',errorCode:null};}
         catch(error){
-          // Include only a fixed, non-sensitive error classification in Worker logs.
-          const code=error instanceof Error&&error.message==='EXPERIMENT_CONFIG_CHANGED'
-            ?'EXPERIMENT_CONFIG_CHANGED':'STORAGE_UNAVAILABLE';
-          console.error(JSON.stringify({type:'readiness_failed',component,code}));
-          return false;
+          const errorCode=classify(error);
+          console.error(JSON.stringify({type:'readiness_failed',component,code:errorCode}));
+          return {state:'unavailable',errorCode};
         }
       };
-      const [paperReady,demoReady]=await Promise.all([
+      const [paper,demoStorage]=await Promise.all([
         probe('PAPER',()=>env.PAPER.getByName(EXPERIMENT).status()),
-        probe('DERIV_DEMO',()=>env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status())
+        probe('DERIV_DEMO',()=>env.DERIV_DEMO.getByName('owner-deriv-demo-v1').storageHealth())
       ]);
+      let demoReport={state:'unavailable',errorCode:'DO_STORAGE_UNAVAILABLE'};
+      if(demoStorage.state==='ready'){
+        const report=await probe('DERIV_DEMO',()=>env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status());
+        demoReport=report;
+      }
+      const demoReady=demoStorage.state==='ready'&&demoReport.state==='ready';
       return json({version:release.version+'.0',
-        paper:paperReady?'ready':'unavailable',
+        paper:paper.state,paperErrorCode:paper.errorCode,
         demo:demoReady?'ready':'unavailable',
-        // A ready storage service is NOT the same as an authenticated broker session.
+        demoStorage:demoStorage.state,demoErrorCode:demoStorage.errorCode,
+        demoReport:demoReport.state,demoReportErrorCode:demoReport.errorCode,
+        // This endpoint has no access to account authorization or balances.
         brokerAuthorization:'not_checked',noOrders:true},
         demoReady?200:503,{'Cache-Control':'no-store'});
     }
