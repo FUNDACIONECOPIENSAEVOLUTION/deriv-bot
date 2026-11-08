@@ -79,7 +79,11 @@ jobs:
           grep -F 'demo-apply-stake' ../runtime/dashboard.html
           grep -F 'DEMO_MANUAL_STAKE_SET' src/deriv-demo.ts
           grep -F 'syncBrokerBalance' ../runtime/dashboard.html
-          grep -F "ticks:'R_100',subscribe:1" ../runtime/dashboard.html
+          grep -F "ticks:symbol,subscribe:1" ../runtime/dashboard.html
+          grep -F "loadDemoSymbolCandles" ../runtime/dashboard.html
+          grep -F "scanDemoMarkets" ../runtime/dashboard.html
+          grep -F "DEMO_SUPPORTED_SYMBOLS" src/demo-symbols.ts
+          grep -F "demoBurstPlans" src/deriv-demo.ts
           grep -F 'demo-max-concurrent' ../runtime/dashboard.html
           grep -F "DEMO_BURST_STAKE_CENTS=100" src/demo-burst-policy.ts
           grep -F 'beginDemoBurst' src/deriv-demo.ts
