@@ -339,6 +339,18 @@ it('manual stake controls deny unsupported amounts, unauthorized access and real
   expect(calls).not.toContain('buy');
 });
 
+it('private CSV routes never expose the DEMO ledger without owner authentication',async()=>{
+ for(const path of ['/api/deriv/demo/trades.csv','/api/deriv/demo/burst.csv']){
+  const denied=await request(path);
+  expect(denied.r.status).toBe(401);
+  const ok=await request(path,{headers});
+  expect(ok.r.status).toBe(200);
+  expect(ok.r.headers.get('Content-Type')).toContain('text/csv');
+  expect(ok.r.headers.get('Content-Disposition')).toContain('attachment');
+  expect(ok.body).toContain('"fuente"');
+  expect(ok.body).not.toContain('fixture-demo-access');
+ }
+});
 it('ten independent DEMO contracts require owner auth, cannot use 100, and never open on page load',async()=>{
  const unauthorized=await request('/api/deriv/demo/burst/status');
  expect(unauthorized.r.status).toBe(401);
@@ -442,5 +454,14 @@ it('records ten distinct confirmed broker DEMO contract IDs, one buy reservation
  const final=await stub.demoBurstStatus();
  expect(final).toMatchObject({status:'COMPLETE',confirmed:10,opened:0,
   settled:10,commitmentCents:1000,realizedPnlCents:800});
+ const batchCsv=await stub.exportDemoCsv('last-burst');
+ expect(batchCsv.count).toBe(10);
+ expect(batchCsv.csv).toContain('"DERIV_DEMO"');
+ expect(batchCsv.csv).toContain('"900000"');
+ expect(batchCsv.csv).not.toContain('"PAPER"');
+ expect(batchCsv.csv.split('\\r\\n').filter(x=>x.includes('"DERIV_DEMO"')).length).toBe(10);
+ const allCsv=await stub.exportDemoCsv('all');
+ expect(allCsv.count).toBe(10);
+ expect(allCsv.csv).toContain('"TREND_AND_MOMENTUM"');
  expect(calls).not.toContain('buy');
 });
