@@ -537,7 +537,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       throw Error('DEMO_MCP_INTENT_PENDING');
     const intent={id:crypto.randomUUID(),state:'PENDING' as const,
       signal:input.signal,stakeCents:input.stakeCents,createdAt:epoch(),
-      expiresAt:epoch()+120};
+      expiresAt:epoch()+45};
     this.write('demo-mcp-intent',intent);
     return {status:'PENDING_OWNER_CONFIRMATION',intentId:intent.id,
       signal:intent.signal,stakeCents:intent.stakeCents,expiresAt:intent.expiresAt,
