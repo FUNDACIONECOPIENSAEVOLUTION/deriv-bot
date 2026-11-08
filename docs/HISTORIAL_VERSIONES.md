@@ -92,6 +92,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.2 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:41:14.932Z (UTC).
+- **Commit de origen:** `234c4f5d4b6a`.
+- Calcular P&L total y tasa de aciertos por tanda DEMO, y agrupar historial por runId real
+- Destacar total neto, monto apostado, tasa de aciertos y estado de última tanda DEMO; tabla de resultados por tanda
+
 ## v10.1 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:22:09.568Z (UTC).
