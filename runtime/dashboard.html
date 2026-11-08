@@ -62,6 +62,17 @@
   <button id="demo-export-csv" disabled>Exportar auditoría DEMO CSV</button>
 </div>
 <p id="demo-balanced-status" class="note" role="status">Prueba balanceada no iniciada. Los contratos de la cuenta DEMO solo se compran tras tu autorización en este panel.</p>
+
+<div class="divider"></div>
+<h3>Control de solicitudes MCP · únicamente DEMO</h3>
+<p class="note">ChatGPT puede preparar una propuesta cuando exista una conexión MCP autenticada y una señal vigente. La orden NO llega a Deriv hasta que la apruebes aquí. Una sola compra por autorización; nunca se habilita la cuenta real.</p>
+<div class="tools">
+  <button id="mcp-review" type="button">Consultar solicitudes MCP</button>
+  <button id="mcp-approve" type="button" disabled>Aprobar UNA compra DEMO desde MCP</button>
+  <button id="mcp-reject" type="button" disabled>Rechazar solicitud MCP</button>
+</div>
+<p id="mcp-intent-status" class="note" role="status">Sin solicitudes consultadas. El MCP no está conectado a este chat.</p>
+
 <div class="tools" aria-label="Comandos seguros para la cuenta demo"><label for="demo-command">Comando de entrenamiento (solo DEMO)</label>
 <input id="demo-command" type="text" maxlength="80" autocomplete="off" placeholder="estado, cotizar, comprar demo, verificar, iniciar demo 3, pausar demo"/>
 <button type="button" id="demo-command-submit">Ejecutar comando seguro</button></div>
@@ -83,6 +94,7 @@
 'use strict';
 const $=id=>document.getElementById(id),ns='http://www.w3.org/2000/svg';
 let demoManualApproval=null,demoCurrent=null;
+let mcpIntentCurrent=null,mcpIntentBusy=false;
 let demoBalancedRunning=false,demoBalancedStop=false; // Never persists across reloads; server verifies a one-use approval too.
 const money=c=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'USD'}).format(c/100);
 const price=v=>Number.isFinite(v)?new Intl.NumberFormat('es-CO',{maximumFractionDigits:5}).format(v):'—';
