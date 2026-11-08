@@ -57,9 +57,12 @@ try {
   $health=Invoke-RestMethod 'http://127.0.0.1:8765/api/health' -TimeoutSec 2
   if($health.ok -eq $true -and $health.cloudflareDependent -eq $false){$running=$true}
  }catch{}
- if($running){
+ # Desde v11.8: el programa se actualiza sin intervención si no hay órdenes,
+ # solicitudes, tandas ni liquidaciones pendientes. Nunca se interrumpe una compra.
+ $restartAfter=$running -and $health.safeToUpdate -eq $true
+ if($running -and -not $restartAfter){
   Set-Content -LiteralPath (Join-Path $data 'actualizacion-pendiente.txt') -Value $remote -Encoding Ascii
-  Registrar ('GitHub v'+$remote+' disponible; se instalará al cerrar y abrir el bot.');return
+  Registrar ('GitHub v'+$remote+' pendiente: contrato o tanda aún en ejecución.');return
  }
  # Only code archive from the fixed Ecopiensa repo, with SHA256 verified.
  # Split code archive into small plain-text parts for reliable GitHub storage.
@@ -105,6 +108,30 @@ try {
   if($tests.Count -lt 2){throw 'PAQUETE_SIN_PRUEBAS'}
   & node --test @tests
   if($LASTEXITCODE -ne 0){throw 'PRUEBAS_NO_APROBADAS'}
+  # Los archivos ya fueron descargados, revisados por SHA-256, sintaxis y tests.
+  # Solo entonces se pausa el programa, de forma segura y con guardia de mantenimiento.
+  $maintenance=Join-Path $data 'actualizacion-en-curso.flag'
+  if($restartAfter){
+   Set-Content -LiteralPath $maintenance -Value $remote -Encoding Ascii
+   try{
+    $recheck=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 3
+    if($recheck.safeToUpdate -ne $true){Registrar 'Compra pendiente: no se interrumpe.';return}
+    & (Join-Path $app 'Cerrar-Ecopiensa.ps1') -Ruta $Ruta
+    for($attempt=0;$attempt -lt 20;$attempt++){
+     Start-Sleep -Milliseconds 300
+     try{Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 1 | Out-Null}
+     catch{break}
+    }
+    try{
+     Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 1 | Out-Null
+     throw 'No se pudo cerrar el servidor sin riesgo. Se cancela la actualización.'
+    }catch{
+     if($_.Exception.Message -match 'No se pudo cerrar'){throw}
+    }
+   }finally{
+    # El flag permanece durante el cambio de archivos, pero se limpiará al final.
+   }
+  }
   $backup=Join-Path $Ruta ('copias-privadas-codigo\antes_'+$remote+'_'+(Get-Date -Format 'yyyyMMdd_HHmmss'))
   New-Item -ItemType Directory -Path $backup -Force | Out-Null
   Get-ChildItem -LiteralPath $app -Force | Where-Object {$_.Name -notin @('data','node_modules')} |
@@ -127,7 +154,23 @@ try {
   }
   Remove-Item -LiteralPath (Join-Path $data 'actualizacion-pendiente.txt') -Force -ErrorAction SilentlyContinue
   Registrar ('Código actualizado desde GitHub pc-local a v'+$remote+'. Datos privados preservados.')
- }finally {Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue}
+  if($restartAfter){
+   Remove-Item -LiteralPath $maintenance -Force -ErrorAction SilentlyContinue
+   # Reabrir únicamente el servicio Node, sin duplicar ventanas del navegador.
+   Set-Content -LiteralPath (Join-Path $data 'ejecucion-habilitada.flag') -Value 'ACTIVO' -Encoding Ascii
+   & (Join-Path $app 'Vigilar-Ecopiensa.ps1') -Ruta $Ruta
+   Registrar 'Reinicio automático del servicio solicitado. El panel web se recargará a la nueva versión.'
+  }
+ }finally {
+  if($restartAfter){
+   Remove-Item -LiteralPath (Join-Path $data 'actualizacion-en-curso.flag') -Force -ErrorAction SilentlyContinue
+   # En caso de fallo a mitad de actualización, el watchdog podrá recuperar el servicio.
+   if(-not(Test-Path (Join-Path $data 'ejecucion-habilitada.flag'))){
+    Set-Content -LiteralPath (Join-Path $data 'ejecucion-habilitada.flag') -Value 'ACTIVO' -Encoding Ascii
+   }
+  }
+  Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+ }
 }finally{
  if($acquired){$mutex.ReleaseMutex()}
  $mutex.Dispose()
