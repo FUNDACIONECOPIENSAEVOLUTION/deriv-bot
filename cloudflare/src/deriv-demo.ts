@@ -1,4 +1,5 @@
 import { dayAt, analyzeSignal } from '../../runtime/core.mjs';
+import {planDemoBurst,DEMO_BURST_STAKE_CENTS} from './demo-burst-policy';
 import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
@@ -364,7 +365,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
       allowedManualStakesCents:DEMO_STAKES_CENTS,
       maxBrowserConcurrent:1,
       demoLossAlert:this.read<boolean>('demo-loss-halt')===true,
-      tradeReport:this.reportDemo()};
+      tradeReport:this.reportDemo(),
+      demoBurst:this.demoBurstStatus(),
+      demoBurstPlan:this.planDemoBurst(10)};
   }
   async refresh(){
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');
@@ -660,7 +663,243 @@ export class DerivDemoConnection extends DurableObject<Env> {
     return {state:'CANCELLED',brokerOrders:0};
   }
 
+  /** One owner-confirmed campaign can open up to ten DISTINCT DEMO options.
+   * BUY commands are sent by the owner's authenticated browser, never by MCP.
+   * No `/ws/real`, no retries of any uncertain buy acknowledgement.
+   */
+  private burstState(){
+    return this.read<{id:string;nonce:string;state:string;signal:'UP'|'DOWN';
+      accountId:string;count:number;stakeCents:number;startedAt:number;
+      ids:number[];pendingId:number|null}>('demo-burst');
+  }
+  demoBurstStatus(){
+    const b=this.burstState();
+    if(!b)return {status:'EMPTY',accountType:'demo',confirmed:0,requested:0,
+      opened:0,settled:0,commitmentCents:0,brokerOrders:0};
+    const rows=b.ids.map(id=>this.ctx.storage.sql.exec<{
+      id:number;contract_id:number|null;state:string;buy_cents:number|null;
+      pnl_cents:number|null;contract_type:string|null
+    }>('SELECT id,contract_id,state,buy_cents,pnl_cents,contract_type FROM demo_trades WHERE id=?',id).toArray()[0])
+      .filter((r):r is {id:number;contract_id:number|null;state:string;buy_cents:number|null;
+        pnl_cents:number|null;contract_type:string|null}=>!!r);
+    return {status:b.state,accountType:'demo',runId:b.id,
+      requested:b.count,confirmed:rows.length,
+      opened:rows.filter(r=>r.state==='OPEN').length,
+      settled:rows.filter(r=>r.state==='SETTLED').length,
+      commitmentCents:rows.reduce((n,r)=>n+(r.buy_cents||0),0),
+      realizedPnlCents:rows.filter(r=>r.state==='SETTLED')
+        .reduce((n,r)=>n+(r.pnl_cents||0),0),
+      uncertain:b.pendingId!==null,
+      contracts:rows.map(r=>({id:r.id,contractId:r.contract_id,state:r.state,
+        stakeCents:r.buy_cents,pnlCents:r.pnl_cents,direction:r.contract_type})),
+      lastUpdatedAt:epoch(),independentlyVerified:false};
+  }
+  planDemoBurst(requested:number){
+    const snapshot=this.getRiskSnapshot(),saved=this.read<{expiresAt:number}>('snapshot');
+    const active=this.burstState();
+    const blocked=active&&['PREPARING','BUYING','RECONCILING','REVIEW'].includes(active.state);
+    const planning=planDemoBurst(requested,{
+      pilotPurchases:snapshot.pilotPurchases,
+      pilotCommittedCents:snapshot.pilotCommittedCents,
+      batchCommittedCents:snapshot.batchCommittedCents,
+      openContracts:snapshot.openContracts,unknownCount:snapshot.unknownCount,
+      exposureCents:snapshot.exposureCents,brokerBalanceCents:snapshot.brokerBalanceCents,
+      balanceCheckedAt:this.read<number>('demo-last-balance-at')||0,now:epoch(),
+      demoConnected:!!saved&&saved.expiresAt>epoch()&&!!this.read('credentials'),
+      autoActive:this.read<boolean>('demo-auto')===true,
+      batchSettlementPending:snapshot.batchSettlementPending,halted:snapshot.halted
+    });
+    return blocked?{...planning,allowed:false,reason:'DEMO_BURST_ALREADY_ACTIVE'}:planning;
+  }
+  async beginDemoBurst(input:{count:number;signal:'UP'|'DOWN'}){
+    if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
+    if(!input||!Number.isSafeInteger(input.count)||input.count<1||input.count>10||
+       !['UP','DOWN'].includes(input.signal))throw Error('DEMO_BURST_REQUEST_INVALID');
+    if(this.burstState()&&
+      ['PREPARING','BUYING','RECONCILING','REVIEW'].includes(this.burstState()!.state))
+      throw Error('DEMO_BURST_ALREADY_ACTIVE');
+    // Read-only official account refresh before any OTP or buy.
+    await this.refresh();
+    const signal=this.getBrowserSignal();
+    if(!signal.valid||signal.direction!==input.signal||
+       signal.quoteAgeSeconds===null||signal.quoteAgeSeconds>10)
+      throw Error('DEMO_BURST_FRESH_SIGNAL_REQUIRED');
+    const plan=this.planDemoBurst(input.count);
+    if(!plan.allowed)throw Error(plan.reason||'DEMO_BURST_RISK_BLOCKED');
+    const creds=await this.verifiedDemoCredentials();
+    const b={id:crypto.randomUUID(),nonce:random(),state:'PREPARING',
+      signal:input.signal,accountId:creds.accountId,
+      count:input.count,stakeCents:DEMO_BURST_STAKE_CENTS,
+      startedAt:epoch(),ids:[] as number[],pendingId:null as number|null};
+    this.write('demo-burst',b);
+    this.write('demo-auto',false);
+    try{
+      const wsUrl=await this.otpDemoUrl(creds);
+      if(this.burstState()?.id!==b.id)throw Error('DEMO_BURST_CONFLICT');
+      this.write('demo-burst-ws-session',await this.seal({url:wsUrl,runId:b.id}));
+      this.write('demo-burst',{...b,state:'BUYING'});
+      // OTP is returned ONLY to the owner's private browser. Never to MCP/status.
+      return {mode:'DEMO_BROWSER_BURST',accountType:'demo',wsUrl,
+        nonce:b.nonce,runId:b.id,count:b.count,stakeCents:b.stakeCents,
+        requiresDistinctBrokerAcks:true,autoRetry:false};
+    }catch{
+      if(this.burstState()?.id===b.id)this.write('demo-burst',{...b,state:'HALTED'});
+      throw Error('DEMO_BURST_OTP_UNAVAILABLE');
+    }
+  }
+  async reserveDemoBurst(input:{nonce:string;proposalId:string;
+    askPrice:number;payout:number;evidence?:{
+      fast?:number|null;slow?:number|null;rsi?:number|null;
+      volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
+      reason?:string}}){
+    const b=this.burstState();
+    if(!b||b.state!=='BUYING'||input?.nonce!==b.nonce||
+      b.pendingId!==null||b.ids.length>=b.count||epoch()-b.startedAt>120)
+      throw Error('DEMO_BURST_RESERVATION_NOT_ALLOWED');
+    if(!this.getBrowserSignal().valid||
+       this.getBrowserSignal().direction!==b.signal)
+      throw Error('DEMO_BURST_SIGNAL_STALE');
+    const credentials=await this.verifiedDemoCredentials();
+    if(credentials.accountId!==b.accountId)throw Error('DEMO_ONLY');
+    const session=this.read<{iv:string;data:string}>('demo-burst-ws-session');
+    if(!session)throw Error('DEMO_BURST_SESSION_REQUIRED');
+    const verified=await this.unseal<{url:string;runId:string}>(session);
+    if(verified.runId!==b.id)throw Error('DEMO_BURST_SESSION_INVALID');
+    const quote:DemoQuoteForBuy={
+      id:input.proposalId,askPrice:input.askPrice,payout:input.payout,
+      quotedAt:epoch(),stakeCents:b.stakeCents,
+      symbol:'R_100',durationTicks:5,contractType:b.signal==='UP'?'CALL':'PUT'
+    };
+    const risk=this.getRiskSnapshot();
+    if(risk.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
+    const buy=buildDemoBuyRequest({
+      accountType:'demo',currency:'USD',userEnabledDemoExecution:true,
+      socketUrl:verified.url,signal:b.signal,quote,now:epoch(),
+      openContracts:risk.openContracts,unknownCount:risk.unknownCount,
+      exposureCents:risk.exposureCents,lifetimeNetCents:risk.lifetimeNetCents,
+      brokerBalanceCents:risk.brokerBalanceCents,
+      baselineBalanceCents:risk.baselineBalanceCents,
+      halted:risk.halted,maxConcurrent:10,
+      pilotPurchases:risk.pilotPurchases,pilotCommittedCents:risk.pilotCommittedCents,
+      batchCommittedCents:risk.batchCommittedCents,
+      batchSettlementPending:risk.batchSettlementPending
+    });
+    const id=this.ctx.storage.transactionSync(()=>{
+      const latest=this.burstState(),snap=this.getRiskSnapshot();
+      if(!latest||latest.id!==b.id||latest.state!=='BUYING'||
+        latest.pendingId!==null||latest.ids.length>=latest.count||snap.unknownCount>0)
+        throw Error('DEMO_BURST_ATOMIC_LOCK');
+      if(epoch()-(this.read<number>('demo-last-balance-at')||0)>30)
+        throw Error('DEMO_BALANCE_REFRESH_REQUIRED');
+      const limits=planDemoBurst(1,{
+        pilotPurchases:snap.pilotPurchases,
+        pilotCommittedCents:snap.pilotCommittedCents,
+        batchCommittedCents:snap.batchCommittedCents,
+        openContracts:0,unknownCount:0,exposureCents:snap.exposureCents,
+        brokerBalanceCents:snap.brokerBalanceCents,
+        balanceCheckedAt:this.read<number>('demo-last-balance-at')||0,now:epoch(),
+        demoConnected:true,autoActive:false,batchSettlementPending:snap.batchSettlementPending,
+        halted:snap.halted
+      });
+      if(!limits.allowed)throw Error(limits.reason||'DEMO_BURST_RISK_LIMIT');
+      const d=input.evidence||{};
+      this.ctx.storage.sql.exec(
+        "INSERT INTO demo_trades(date,created_at,state,buy_cents,contract_type,decision_json,code) VALUES(?,?,'UNKNOWN',?,?,?,'CLIENT_PENDING')",
+        dayAt(epoch()),epoch(),b.stakeCents,quote.contractType,
+        JSON.stringify({strategy:'owner-browser-burst-v1',
+          runId:b.id,source:'owner-browser-unverified',direction:b.signal,
+          stakeCents:b.stakeCents,contractType:quote.contractType,
+          fast:researchNumber(d.fast,0,1000000),slow:researchNumber(d.slow,0,1000000),
+          rsi:researchNumber(d.rsi,0,100),
+          volatility:researchNumber(d.volatility,0,100),
+          entryQuote:researchNumber(d.entryQuote,0,1000000),
+          quoteAgeSeconds:researchNumber(d.quoteAgeSeconds,0,3600),
+          reason:typeof d.reason==='string'&&/^[A-Z_]{1,45}$/.test(d.reason)
+            ?d.reason:'UNVERIFIED',recordedAt:epoch()})
+      );
+      const id=this.ctx.storage.sql.exec<{id:number}>('SELECT last_insert_rowid() AS id').one().id;
+      this.write('demo-burst',{...latest,pendingId:id});
+      return id;
+    });
+    return {mode:'DEMO_BURST_RESERVED',accountType:'demo',id,request:buy,
+      contractCountRequested:b.count,buyOrdersInThisResponse:0};
+  }
+  acknowledgeDemoBurst(input:{nonce:string;id:number;response:unknown}){
+    const b=this.burstState();
+    if(!b||b.state!=='BUYING'||b.nonce!==input?.nonce||
+       b.pendingId!==input.id)throw Error('DEMO_BURST_ACK_NOT_ALLOWED');
+    const row=this.ctx.storage.sql.exec<{buy_cents:number}>(
+      "SELECT buy_cents FROM demo_trades WHERE id=? AND state='UNKNOWN'",input.id
+    ).toArray()[0];
+    if(!row)throw Error('DEMO_BURST_ACK_NOT_ALLOWED');
+    const ack=parseDemoBuyResponse(input.response,row.buy_cents);
+    this.ctx.storage.transactionSync(()=>{
+      if(!ack.accepted){
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET state='REJECTED',code=? WHERE id=? AND state='UNKNOWN'",
+          ack.code,input.id);
+        this.write('demo-burst',{...b,state:'HALTED',pendingId:null});
+      }else{
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET state='OPEN',contract_id=?,buy_cents=?,code='CLIENT_ACK' WHERE id=? AND state='UNKNOWN'",
+          ack.contractId,ack.buyCents,input.id);
+        const ids=[...b.ids,input.id];
+        this.write('demo-burst',{...b,ids,pendingId:null,
+          state:ids.length===b.count?'RECONCILING':'BUYING'});
+      }
+    });
+    return {mode:'DEMO_BURST_ACK',accepted:ack.accepted,
+      contractId:ack.accepted?ack.contractId:null,
+      state:ack.accepted?'OPEN':'REJECTED',
+      requested:b.count,confirmed:ack.accepted?b.ids.length+1:b.ids.length,
+      accountType:'demo',independentlyVerified:false};
+  }
+  haltDemoBurst(){
+    const b=this.burstState();
+    if(!b)return {status:'EMPTY',brokerOrders:0};
+    if(!['BUYING','PREPARING'].includes(b.state))return this.demoBurstStatus();
+    this.write('demo-burst',{...b,state:b.pendingId===null?'HALTED':'REVIEW'});
+    return this.demoBurstStatus();
+  }
+  async beginDemoBurstSettlement(){
+    const b=this.burstState();
+    if(!b||b.ids.length===0)throw Error('DEMO_BURST_NO_KNOWN_CONTRACTS');
+    if(b.state==='BUYING')this.write('demo-burst',{...b,state:'RECONCILING'});
+    const creds=await this.verifiedDemoCredentials();
+    if(creds.accountId!==b.accountId)throw Error('DEMO_ONLY');
+    const url=await this.otpDemoUrl(creds);
+    const known=this.demoBurstStatus();
+    return {mode:'DEMO_BURST_SETTLEMENT',accountType:'demo',
+      wsUrl:url,nonce:b.nonce,runId:b.id,noOrders:true,
+      contracts:known.contracts.filter(t=>t.state==='OPEN'&&t.contractId)};
+  }
+  settleDemoBurst(input:{nonce:string;id:number;response:unknown}){
+    const b=this.burstState();
+    if(!b||b.nonce!==input?.nonce||!b.ids.includes(input.id))
+      throw Error('DEMO_BURST_SETTLEMENT_NOT_ALLOWED');
+    const row=this.ctx.storage.sql.exec<{
+      contract_id:number;buy_cents:number;contract_type:string
+    }>("SELECT contract_id,buy_cents,contract_type FROM demo_trades WHERE id=? AND state='OPEN'",input.id).toArray()[0];
+    if(!row)throw Error('DEMO_BURST_SETTLEMENT_NOT_ALLOWED');
+    const settlement=parseDemoSettlement(input.response,row.contract_id,
+      row.contract_type==='PUT'?'PUT':'CALL',row.buy_cents);
+    if(!settlement)return {state:'OPEN',independentlyVerified:false};
+    this.ctx.storage.transactionSync(()=>{
+      this.ctx.storage.sql.exec(
+        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=?,code='CLIENT_OBSERVED' WHERE id=? AND state='OPEN'",
+        settlement.profitCents,settlement.payoutCents,
+        settlement.entrySpot??null,settlement.exitSpot??null,input.id);
+      const status=this.demoBurstStatus();
+      if(status.settled===b.count&&status.uncertain===false)
+        this.write('demo-burst',{...b,state:'COMPLETE'});
+    });
+    return {state:'SETTLED',independentlyVerified:false,settlement,
+      run:this.demoBurstStatus()};
+  }
+
   async beginBrowserPilot(signal:'UP'|'DOWN',stakeCents:number) {
+    if(['BUYING','PREPARING','RECONCILING','REVIEW'].includes(this.burstState()?.state||''))
+      throw Error('DEMO_BURST_ALREADY_ACTIVE');
     if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
     if((signal!=='UP'&&signal!=='DOWN')||!DEMO_STAKES_CENTS.some(s=>s===stakeCents))
       throw Error('DEMO_BROWSER_PARAMETERS_INVALID');
