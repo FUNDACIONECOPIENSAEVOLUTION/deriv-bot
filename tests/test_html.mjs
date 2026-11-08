@@ -62,6 +62,16 @@ assert.ok(panel.includes("trade.symbol||'R_100'"),'Marcas de contratos deben res
 assert.ok(panel.includes("demoOtherChart?.symbol===chartSymbol"),'Nunca dibujar velas de un índice bajo otro');
 
 assert.ok(panel.includes('scoreDemoMarketSignal'),'No presentar score SMA/RSI como probabilidad de ganancia');
+for(const id of ['demo-burst-net','demo-burst-gross','demo-burst-hit-rate',
+  'demo-burst-finished','demo-batches-rows','demo-burst-market-rows'])
+ assert.ok(panel.includes('id="'+id+'"'),'El panel debe mostrar el resultado total de cada tanda: '+id);
+assert.ok(panel.includes('renderDemoBatches(report.history||[])'),
+ 'El historial debe agrupar todas las tandas por runId sin usar PAPER');
+assert.ok(panel.includes("pairCounts.get(key)||0")&&panel.includes(">=2"),
+ 'No concentrar más de dos contratos en una misma combinación índice/dirección');
+assert.ok(panel.includes('extensionPenalty'),
+ 'La puntuación heurística debe evitar recompensar sin límite RSI extremo');
+
 
 assert.ok(panel.includes("c.contractId??'SIN CONFIRMAR'"), 'Mostrar los identificadores por contrato devueltos por Deriv');
 
