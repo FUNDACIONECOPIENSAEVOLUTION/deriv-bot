@@ -21,7 +21,16 @@ const requests=[
   {proposal:1,amount:0.75,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:87},
   {proposal:1,amount:1,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:88},
   {proposal:1,amount:0.90,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:89},
-  {proposal:1,amount:0.90,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:90}
+  {proposal:1,amount:0.90,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:90},
+  {proposal:1,amount:0.10,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:91},
+  {proposal:1,amount:0.10,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:92},
+  {proposal:1,amount:0.25,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:93},
+  {proposal:1,amount:0.35,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_75',req_id:94},
+  {proposal:1,amount:0.35,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_75',req_id:95},
+  {proposal:1,amount:0.35,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_10',req_id:96},
+  {proposal:1,amount:0.35,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'R_10',req_id:97},
+  {proposal:1,amount:0.35,basis:'stake',contract_type:'CALL',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'1HZ100V',req_id:98},
+  {proposal:1,amount:0.35,basis:'stake',contract_type:'PUT',currency:'USD',duration:5,duration_unit:'t',underlying_symbol:'1HZ100V',req_id:99}
 ];
 const safe=x=>typeof x==='string'&&/^[A-Za-z0-9_]{1,64}$/.test(x)?x:'UNSPECIFIED';
 const expected=new Set(requests.map(x=>x.req_id));
