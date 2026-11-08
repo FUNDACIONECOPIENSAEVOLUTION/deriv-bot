@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ecopiensa | Deriv DEMO local ligero</title><link rel="stylesheet" href="/style.css"/><script src="/app.js" defer></script></head>
 <body><main>
- <header><div><p class="eyebrow">Fundación Ecopiensa Evolution · solo en este computador</p><h1 id="version-title">Deriv DEMO · aplicación local v12.5</h1><p>Datos oficiales de Deriv y análisis de ticks. Sin Cloudflare, sin PAPER y sin órdenes automáticas.</p></div><span id="online" class="pill">Cargando...</span></header>
+ <header><div><p class="eyebrow">Fundación Ecopiensa Evolution · solo en este computador</p><h1 id="version-title">Deriv DEMO · aplicación local v12.5</h1><p>Datos públicos de Deriv, 60 velas y evaluación multifactorial. Solo cuenta DEMO, nunca REAL.</p></div><span id="online" class="pill">Cargando...</span></header>
  <div class="warning" id="pending-update" hidden><b>Nueva versión disponible en GitHub.</b> Puedes actualizar sin cerrar manualmente el panel si no hay contratos pendientes.</div>
- <div class="warning"><b>DEMO:</b> compras virtuales secuenciales, con señales recientes y límites de riesgo. <b>REAL:</b> compras, ventas y retiros deshabilitados. El historial pasado no garantiza resultados.</div>
+ <div class="warning"><b>DEMO:</b> tandas virtuales con hasta 5 operaciones simultáneas, señales recientes y límites de riesgo. <b>REAL:</b> compras, ventas y retiros deshabilitados. El historial pasado no garantiza resultados.</div>
  <section class="cards"><article><span>Versión local</span><strong id="version">—</strong><small id="github-version" style="display:block;margin-top:6px;opacity:.8">GitHub pc-local: comprobando...</small><button id="update-now" class="outline" style="margin-top:8px;padding:7px 10px">Comprobar actualización</button><small id="update-message" style="display:block;margin-top:5px;overflow-wrap:anywhere"></small></article><article><span>Saldo DEMO verificado</span><strong id="balance">Sin conexión</strong></article><article><span>Estado OAuth</span><strong id="connection">Sin verificar</strong></article><article><span>Origen de precios</span><strong id="feed">Conectando...</strong></article></section>
  <section><h2>1. Conectar cuenta oficial DEMO</h2><p>Introduce el App ID público que ya tenías en Deriv. Registra como redirección <code>http://localhost:8765/api/oauth/callback</code> en el portal de la aplicación. Las credenciales se cifran y quedan exclusivamente en el PC.</p>
   <div class="actions"><label>App ID público <input id="app-id" placeholder="App ID OAuth 2.0 o PAT" maxlength="128" autocomplete="off"></label><button id="authorize">Autorizar OAuth 2.0</button><button id="refresh" class="outline">Actualizar saldo</button><button id="history" class="outline">Consultar últimos contratos</button></div>
@@ -14,16 +14,17 @@
   </details>
   <p id="auth-message" class="msg"></p><div id="trades"></div>
  </section>
- <section><h2>2. Cotizaciones en vivo y señales</h2><p>Se conservan hasta 150 ticks recientes por mercado en memoria. Las decisiones son orientativas y se marcan como ESPERAR si no están frescas.</p><div id="markets" class="markets"></div><div class="charts"><div><h3>Precios en vivo</h3><canvas id="chart" width="940" height="210" aria-label="Precios tick a tick"></canvas></div><div><h3>Velas OHLC agrupadas por 10 ticks</h3><canvas id="candles" width="940" height="220" aria-label="Velas OHLC por 10 ticks"></canvas></div></div><small>Velas calculadas sobre grupos de 10 ticks recibidos. No equivalen a velas de un minuto ni predicen resultados.</small></section>
+ <section><h2>2. Cotizaciones en vivo y señales</h2><p>Se consultan hasta 660 ticks históricos por índice disponible para 60 velas completas de 10 ticks. El bot calcula EMA20, EMA50, RSI14, ATR14, pendiente y momento. Estas métricas no constituyen una predicción garantizada.</p><div id="markets" class="markets"></div><div class="charts"><div><h3>Precios en vivo</h3><canvas id="chart" width="940" height="210" aria-label="Precios tick a tick"></canvas></div><div><h3>Velas OHLC agrupadas por 10 ticks</h3><canvas id="candles" width="940" height="220" aria-label="Velas OHLC por 10 ticks"></canvas></div></div><small>Las 60 velas se agrupan por 10 ticks, no por minutos. Son datos históricos, no una garantía de aciertos.</small><p id="market-analysis" class="msg">Cargando análisis de mercado...</p></section>
+ <section><h2>2B. Precios externos — solo cotizaciones</h2><p>Observatorio separado: USD/COP, EUR/USD, USD/JPY, oro y Bitcoin si Deriv los ofrece. No se utilizan para pronosticar los índices sintéticos ni activan compras.</p><div id="watchlist" class="training">Consultando mercados externos...</div></section>
  <section><h2>3. Historial y entrenamiento experimental</h2><p>Datos de las 48 operaciones recuperadas; la fuente fue observada desde navegador y no está conciliada de forma independiente. No existe todavía un modelo entrenado y validado.</p>
  <div id="training" class="training"></div></section>
- <section><h2>4. Cotización sin comprar</h2><div class="actions"><label>Índice <select id="quote-symbol"><option>R_100</option><option>R_75</option><option>R_10</option><option>1HZ100V</option></select></label><label>Dirección <select id="quote-dir"><option>CALL</option><option>PUT</option></select></label><label>Apuesta virtual <select id="quote-stake"><option value="0.35">US$0,35</option><option value="0.5">US$0,50</option><option value="0.75">US$0,75</option><option value="0.9">US$0,90</option><option value="1">US$1,00</option></select></label><button id="quote-btn" class="outline">Consultar propuesta oficial</button></div><p id="quote-message" class="msg"></p></section>
+ <section><h2>4. Cotización sin comprar</h2><div class="actions"><label>Índice <select id="quote-symbol"><option>R_100</option><option>R_75</option><option>R_50</option><option>R_25</option><option>R_10</option><option>1HZ100V</option><option>1HZ50V</option><option>1HZ500V</option></select></label><label>Dirección <select id="quote-dir"><option>CALL</option><option>PUT</option></select></label><label>Apuesta virtual <select id="quote-stake"><option value="0.35">US$0,35</option><option value="0.5">US$0,50</option><option value="0.75">US$0,75</option><option value="0.9">US$0,90</option><option value="1">US$1,00</option></select></label><button id="quote-btn" class="outline">Consultar propuesta oficial</button></div><p id="quote-message" class="msg"></p></section>
  <section><h2>5. Piloto de compras DEMO y MCP local</h2>
-  <p>Solo se permite comprar un contrato DEMO a la vez, con señal fresca y saldo oficial verificado. Si no hay confirmación del broker, las nuevas compras quedan bloqueadas hasta conciliación. El canal REAL no está implementado.</p>
+  <p>Hasta cinco contratos DEMO simultáneos, con señal verificada, 60 velas y saldo oficial. Las órdenes inciertas bloquean nuevas compras hasta conciliarlas. REAL no está implementado.</p>
   <div class="actions">
    <button id="demo-intent" class="outline">Preparar UNA compra DEMO</button>
    <button id="demo-refresh" class="outline">Ver órdenes y solicitudes MCP</button>
-   <label>Confirmar <input id="demo-confirm-text" placeholder="CONFIRMAR COMPRA DEMO" autocomplete="off" spellcheck="false"></label>
+   <span>Al pulsar «Confirmar compra DEMO» autorizas esa única compra virtual.</span>
    <button id="demo-confirm" disabled>Confirmar compra DEMO</button>
   </div>
   <div class="actions"><button id="demo-cancel" class="outline" disabled>Cancelar solicitud no enviada</button><button id="demo-reconcile" class="outline">Revisar contrato pendiente</button></div>
@@ -33,25 +34,25 @@
   <div class="warning">Hasta validar las operaciones DEMO, no hay automatización, aumento de apuestas, acceso a REAL ni retiros.</div>
  </section>
  <section id="burst-panel"><h2>6. Tandas de compras DEMO — bot elige la señal</h2>
- <p>Selecciona de 1 a 10 contratos de entrenamiento (máximo US$10 por tanda). El bot analiza SMA, RSI y antigüedad de los ticks; elige CALL/PUT y compra <b>uno a uno</b> al encontrar datos frescos. Nunca opera la cuenta REAL.</p>
+ <p>Selecciona de 1 a 10 compras DEMO (máximo US$10 por tanda) y hasta 5 simultáneas. AUTO evalúa índices disponibles, 60 velas y tendencia. Si no hay señal fiable, espera. Nunca opera REAL.</p>
  <div class="actions">
   <label>Número de compras <input type="number" id="burst-count" min="1" max="10" value="1"></label>
   <label>Apuesta por compra <select id="burst-stake"><option value="35">US$0,35</option><option value="50" selected>US$0,50</option><option value="75">US$0,75</option><option value="90">US$0,90</option><option value="100">US$1,00</option></select></label>
-  <label>Índice <select id="burst-symbol"><option value="AUTO">AUTO · bot selecciona</option><option value="R_100">Volatility 100</option><option value="R_75">Volatility 75</option><option value="R_10">Volatility 10</option><option value="1HZ100V">Volatility 100 (1s)</option></select></label>
-  <label>Autorización <input id="burst-confirm" autocomplete="off" spellcheck="false" placeholder="CONFIRMAR TANDA DEMO"></label>
+  <label>Índice <select id="burst-symbol"><option value="AUTO">AUTO · bot selecciona</option><option value="R_100">Volatility 100</option><option value="R_75">Volatility 75</option><option value="R_50">Volatility 50</option><option value="R_25">Volatility 25</option><option value="R_10">Volatility 10</option><option value="1HZ100V">Volatility 100 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ500V">Volatility 500 (1s) si disponible</option><option value="R_500">Volatility 500 si disponible</option></select></label>
+  <label>Máximo simultáneas <select id="burst-concurrency"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5" selected>5</option></select></label>
  </div>
- <div class="actions"><button id="burst-start">Iniciar tanda DEMO autorizada</button><button id="burst-stop" class="outline">Detener siguientes compras</button><button id="burst-check" class="outline">Actualizar resultados</button></div>
+ <p><small>Un clic en el botón autoriza únicamente la tanda DEMO, el número de compras y el presupuesto seleccionados; no debes escribir una frase.</small></p><div class="actions"><button id="burst-start">Iniciar tanda DEMO autorizada</button><button id="burst-stop" class="outline">Detener siguientes compras</button><button id="burst-check" class="outline">Actualizar resultados</button></div>
  <p class="msg" id="burst-message">Sin tanda activa. Verifica el saldo DEMO antes de comprar.</p>
  <div class="cards metrics">
   <article><span>Neto de la última tanda</span><strong id="burst-net">US$0,00</strong></article>
-  <article><span>Compras liquidadas</span><strong id="burst-settled">0 / 0</strong></article>
+  <article><span>Ejecutadas / liquidadas</span><strong id="burst-settled">0 / 0</strong></article>
   <article><span>Ganadas / perdidas</span><strong id="burst-winloss">0 / 0</strong></article>
   <article><span>Latencia media compra</span><strong id="burst-latency">—</strong></article>
  </div>
  <div class="actions"><a class="download-link" href="/api/demo/burst.csv" download>Descargar CSV última tanda DEMO</a><a class="download-link" href="/api/demo/orders.csv" download>Descargar CSV completo DEMO</a></div>
- <div class="table-wrap"><table><thead><tr><th>Inicio</th><th>Índice</th><th>Señal</th><th>RSI</th><th>Edad señal</th><th>Compra confirmada</th><th>Liquidación</th><th>Latencia</th><th>Resultado</th></tr></thead><tbody id="burst-rows"><tr><td colspan="9">Todavía no hay contratos nuevos.</td></tr></tbody></table></div>
+ <div class="table-wrap"><table><thead><tr><th>Inicio</th><th>Índice</th><th>Señal</th><th>RSI</th><th>Edad señal</th><th>Compra confirmada</th><th>Liquidación</th><th>Latencia</th><th>Entrada</th><th>Salida</th><th>Resultado</th></tr></thead><tbody id="burst-rows"><tr><td colspan="11">Todavía no hay contratos nuevos.</td></tr></tbody></table></div>
  <h3>Evolución del resultado neto DEMO liquidado</h3><canvas id="equity-chart" width="940" height="170" aria-label="Curva de resultados netos DEMO"></canvas>
- <div class="warning"><b>Protección:</b> una compra abierta o incierta bloquea la siguiente. No se garantizan diez compras sin señal fresca. Dinero REAL deshabilitado.</div>
+ <div class="warning"><b>Protección:</b> máximo 5 órdenes simultáneas, reserva del presupuesto, señal fresca y parada ante órdenes UNKNOWN. No se garantiza el 90 % de aciertos. REAL deshabilitado.</div>
  </section>
  <footer>Ejecuta solo desde el PC. Versión oficial de código: GitHub, rama <code>pc-local</code> (actualizaciones al cerrar/abrir). Bases de datos, App ID y secretos <b>nunca</b> se suben a GitHub.</footer>
 </main></body></html>

@@ -1,0 +1,32 @@
+name: PC local · revisión Windows + Linux sin publicar
+on:
+  push:
+    branches: ['fix/pc-local-extended-markets-demo-20261108']
+  pull_request:
+    branches: [pc-local]
+permissions:
+  contents: read
+jobs:
+  check:
+    name: Node 24 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verificar módulos, interfaz y reglas de órdenes
+        shell: bash
+        run: |
+          set -e
+          node --check local-demo/server.mjs
+          node --check local-demo/demo-burst.mjs
+          node --check local-demo/demo-trading.mjs
+          node --check local-demo/market-analysis.mjs
+          node --check local-demo/public/app.js
+          node --test local-demo/test/*.test.mjs
