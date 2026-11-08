@@ -438,7 +438,9 @@ let liveTick=null,liveTickSocket=null,liveTickRetry=null,lastLiveChartAt=0,broke
 let demoOtherChart=null,demoOtherChartAt=0,demoOtherChartLoading=false;
 
 function paintLiveTick(){
- if($('provider').value!=='deriv'||!liveTick||Date.now()-liveTick.receivedAt>5000){
+ if($('provider').value!=='deriv'||!liveTick||
+    liveTick.symbol!==$('demo-chart-symbol').value||
+    Date.now()-liveTick.receivedAt>5000){
   $('browser-tick-status').textContent='Ticker público directo: '+
     (document.hidden?'pausado (pestaña oculta)':'sin precio reciente; se muestra la última lectura del servidor');
   return;
@@ -446,7 +448,7 @@ function paintLiveTick(){
  $('quote').textContent=price(liveTick.quote);
  $('quoteTime').textContent=time(liveTick.epoch)+' · tick público directo · recibido hace '+
    Math.max(0,Math.floor((Date.now()-liveTick.receivedAt)/1000))+' s';
- $('browser-tick-status').textContent='Fuente R_100: WebSocket público Deriv; actualiza en cada tick, '+
+ $('browser-tick-status').textContent='Fuente '+liveTick.symbol+': WebSocket público Deriv; actualiza en cada tick, '+
   'no es saldo ni valor de contrato DEMO abierto.';
 }
 function stopLiveTicks(){
@@ -456,6 +458,8 @@ function stopLiveTicks(){
 }
 function ensureLiveTicks(){
  if(document.hidden||liveTickSocket||liveTickRetry!==null)return;
+ const symbol=$('demo-chart-symbol').value;
+ if(!demoScanSymbols.includes(symbol))return;
  let ws;
  try{ws=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');}
  catch{
@@ -465,7 +469,7 @@ function ensureLiveTicks(){
  liveTickSocket=ws;
  ws.addEventListener('open',()=>{
   if(ws!==liveTickSocket||document.hidden)return;
-  try{ws.send(JSON.stringify({ticks:'R_100',subscribe:1,req_id:941}));}
+  try{ws.send(JSON.stringify({ticks:symbol,subscribe:1,req_id:941}));}
   catch{try{ws.close();}catch{}}
  });
  ws.addEventListener('message',event=>{
@@ -473,11 +477,11 @@ function ensureLiveTicks(){
   try{
    const msg=JSON.parse(event.data);
    if(msg.error||msg.errors){try{ws.close();}catch{}return;}
-   if(msg.msg_type!=='tick'||msg.tick?.symbol!=='R_100')return;
+   if(msg.msg_type!=='tick'||msg.tick?.symbol!==symbol)return;
    const q=Number(msg.tick.quote),t=Number(msg.tick.epoch),now=Math.floor(Date.now()/1000);
    if(!Number.isFinite(q)||q<=0||!Number.isSafeInteger(t)||t<now-15||t>now+5)return;
-   if(liveTick&&t<liveTick.epoch)return;
-   liveTick={quote:q,epoch:t,receivedAt:Date.now()};
+   if(liveTick&&liveTick.symbol===symbol&&t<liveTick.epoch)return;
+   liveTick={symbol,quote:q,epoch:t,receivedAt:Date.now()};
    paintLiveTick();
    if($('provider').value==='deriv'&&state&&Date.now()-lastLiveChartAt>=1000){
     lastLiveChartAt=Date.now();drawCandles();
@@ -523,11 +527,17 @@ function chip(id,text,tone=''){const el=$(id);el.textContent=text;el.className='
 function showBar(bar){$('ohlc').textContent=date(bar.time)+' · Apertura '+price(bar.open)+' · Máximo '+price(bar.high)+' · Mínimo '+price(bar.low)+' · Cierre '+price(bar.close)+(bar.partial?' · Vela parcial':'');}
 function drawCandles(){
   const root=$('candles');root.replaceChildren();crosshair=null;activeBars=[];
-  const provider=$('provider').value,view=provider==='deriv'?state?.chart:marketView;
+  const provider=$('provider').value,
+    chartSymbol=$('demo-chart-symbol').value,
+    view=provider==='deriv'
+      ?chartSymbol==='R_100'?state?.chart:
+       demoOtherChart?.symbol===chartSymbol?demoOtherChart:null
+      :marketView;
   const bars=(view?.candles||[]).slice(-Number($('window').value)).map(b=>({...b}));
   // Client live price overlays ONLY the visible candle; it never modifies the
   // PaperExperiment ledger or pretends to revalue an open broker contract.
-  if(provider==='deriv'&&liveTick&&Date.now()-liveTick.receivedAt<5000&&bars.length){
+  if(provider==='deriv'&&liveTick&&liveTick.symbol===chartSymbol&&
+     Date.now()-liveTick.receivedAt<5000&&bars.length){
     const minute=Math.floor(liveTick.epoch/60)*60,tail=bars.at(-1);
     if(minute===tail.time){
       tail.high=Math.max(tail.high,liveTick.quote);
@@ -553,7 +563,7 @@ function drawCandles(){
     if(historyMode==='DEMO'){
       const historical=demoCurrent?.tradeReport?.history||[];
       for(const trade of historical){
-        if((trade.symbol||'R_100')!=='R_100')continue;
+        if((trade.symbol||'R_100')!==chartSymbol)continue;
         const dir=trade.contractType==='PUT'?'↓':'↑';
         // We never substitute a reservation time for the confirmed buy time.
         const entries=[
@@ -578,7 +588,7 @@ function drawCandles(){
         }
       }
       $('demo-chart-marker-stats').textContent=
-       'Gráfico R_100 · '+marks+' contratos DEMO de R_100 con al menos una marca respaldada por precio y hora; '+
+       'Gráfico '+chartSymbol+' · '+marks+' contratos de ese índice con al menos una marca respaldada por hora y precio; '+
        missing+' registros sin marcas exactas. Las compras anteriores al periodo visible '+
        'no se representan fuera de la ventana. El gráfico no incluye contratos de otros mercados.';
     }else{
