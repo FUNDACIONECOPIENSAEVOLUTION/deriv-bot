@@ -2,9 +2,11 @@
   "version": "11.7",
   "channel": "pc-local",
   "runtime": "Windows desktop only",
-  "distribution": "manual-patch",
-  "expectedFile": "ecopiensa-deriv-PC-actualizacion-11.7.zip",
-  "notes": "La versión 11.7 del PC coincide con pc-local. Próximas entregas requieren publicar un paquete íntegro firmado antes de habilitar la actualización automática.",
+  "distribution": "versioned source archive + readable source files",
+  "parts": 1,
+  "archiveSha256": "070e050e8f39b920f849d195bc1e523fb4f75bd50ac544da5fa688123612f108",
+  "archive": "pc-bundles/ecopiensa-local-11.7.zip.b64.part00",
   "trading": "demo-read-only",
+  "summary": "OAuth separado; servidor supervisado; PC descarga GitHub y muestra la misma versión",
   "updatedAt": "2026-11-08"
 }
