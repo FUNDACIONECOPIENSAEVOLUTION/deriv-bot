@@ -1,11 +1,10 @@
 {
-  "version": "10.7",
-  "updatedAt": "2026-11-08T01:44:26.382Z",
-  "summary": "Asegurar totales visibles por tanda, desglose por mercado y límite de concentración en test de interfaz",
+  "version": "10.8",
+  "updatedAt": "2026-11-08T02:21:35.723Z",
+  "summary": "fix(demo): sincronización, trazabilidad y versionado verificable",
   "changes": [
-    "Asegurar totales visibles por tanda, desglose por mercado y límite de concentración en test de interfaz",
-    "Probar que CSV no atribuya pago efectivo US$0.66 a una pérdida DEMO de US$0.35"
+    "fix(demo): sincronización, trazabilidad y versionado verificable"
   ],
-  "sourceCommit": "dbdc538ba0a508db0d9b07ff5c8c5e68846c419b",
+  "sourceCommit": "536af35cb139af343e396a795ab71d9cce3b738d",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

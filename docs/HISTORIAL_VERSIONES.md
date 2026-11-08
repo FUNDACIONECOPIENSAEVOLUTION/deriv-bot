@@ -98,6 +98,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.8 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T02:21:35.723Z (UTC).
+- **Commit de origen:** `536af35cb139`.
+- fix(demo): sincronización, trazabilidad y versionado verificable
+
 ## v10.7 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:44:26.382Z (UTC).
