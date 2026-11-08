@@ -17,6 +17,12 @@ const cleanError=error=>String(error?.message||'DEMO_BROKER_ERROR').replace(/[^A
 
 export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,accountLookup,otpLookup,marketSnapshot,audit}) {
  db.exec("CREATE TABLE IF NOT EXISTS demo_local_orders (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, state TEXT NOT NULL, source TEXT NOT NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL, stake_cents INTEGER NOT NULL, contract_id TEXT, buy_cents INTEGER, pnl_cents INTEGER, error_code TEXT)");
+ const columns=new Set(db.prepare("PRAGMA table_info(demo_local_orders)").all().map(x=>x.name));
+ for(const [name,sqlType] of Object.entries({batch_id:'TEXT',created_at_ms:'INTEGER',bought_at_ms:'INTEGER',
+  settled_at_ms:'INTEGER',proposal_latency_ms:'INTEGER',buy_latency_ms:'INTEGER',
+  signal_age_ms:'INTEGER',signal_rsi:'REAL',signal_sma_fast:'REAL',signal_sma_slow:'REAL'})){
+  if(!columns.has(name))db.exec('ALTER TABLE demo_local_orders ADD COLUMN '+name+' '+sqlType);
+ }
  // Any interrupted BUY may have reached the broker. Do NOT send another until reconciled.
  db.prepare("UPDATE demo_local_orders SET state='UNKNOWN',updated_at=? WHERE state IN ('PREPARING','SENDING')").run(epoch());
  const one=db.prepare('SELECT * FROM demo_local_orders WHERE id=?');
@@ -24,15 +30,29 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const active=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN')");
  const unresolved=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state IN ('PREPARING','SENDING','UNKNOWN','OPEN')");
  const losses=db.prepare("SELECT COALESCE(SUM(CASE WHEN pnl_cents<0 THEN -pnl_cents ELSE 0 END),0) AS loss FROM demo_local_orders WHERE state='SETTLED' AND created_at>=?");
- const list=db.prepare('SELECT id,created_at,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode FROM demo_local_orders ORDER BY created_at DESC LIMIT 60');
+ const list=db.prepare('SELECT id,created_at AS createdAt,created_at_ms AS createdAtMs,bought_at_ms AS boughtAtMs,settled_at_ms AS settledAtMs,batch_id AS batchId,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode,proposal_latency_ms AS proposalLatencyMs,buy_latency_ms AS buyLatencyMs,signal_age_ms AS signalAgeMs,signal_rsi AS rsi,signal_sma_fast AS smaFast,signal_sma_slow AS smaSlow FROM demo_local_orders ORDER BY created_at DESC,id DESC LIMIT 60');
  const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents) VALUES(?,?,?,?,?,?,?,?)');
  const change=db.prepare('UPDATE demo_local_orders SET state=?,updated_at=?,error_code=? WHERE id=?');
- const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=? WHERE id=?");
- const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=? WHERE id=?");
+ const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=? WHERE id=?");
+ const markBatch=db.prepare("UPDATE demo_local_orders SET batch_id=? WHERE id=?");
+ const purchasedAt=db.prepare("UPDATE demo_local_orders SET created_at_ms=? WHERE id=?");
+ const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=?,settled_at_ms=? WHERE id=?");
 
  function getSummary(){
-  const stats=summary.get(),rows=list.all();
+  const stats=summary.get(),rows=list.all(),closed=rows.filter(x=>x.state==='SETTLED');
+  const group=new Map();
+  for(const row of rows){
+   if(!row.batchId)continue;
+   if(!group.has(row.batchId))group.set(row.batchId,{id:row.batchId,orders:0,settled:0,wins:0,losses:0,stakeCents:0,netCents:0});
+   const b=group.get(row.batchId);if(!['CANCELLED','REJECTED','EXPIRED'].includes(row.state))b.orders++;
+   b.stakeCents+=row.stakeCents||0;
+   if(row.state==='SETTLED'){b.settled++;b.netCents+=row.pnlCents||0;if(row.pnlCents>0)b.wins++;if(row.pnlCents<0)b.losses++;}
+  }
   return {mode:'DEMO_ONLY',realEnabled:false,maxConcurrent:MAX_CONCURRENT,
+   settled:closed.length,wins:closed.filter(x=>x.pnlCents>0).length,
+   losses:closed.filter(x=>x.pnlCents<0).length,
+   netCents:closed.reduce((a,x)=>a+(x.pnlCents||0),0),
+   batches:[...group.values()].sort((a,b)=>b.id.localeCompare(a.id)),
    campaignPurchases:stats.n,campaignGrossCents:stats.gross,maxPurchases:MAX_CAMPAIGN_PURCHASES,
    pendingOrOpen:unresolved.get().n,awaitingApproval:active.get().n-unresolved.get().n,
    orders:rows,canUpdate:active.get().n===0,
@@ -66,6 +86,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   riskCheck(symbol,direction,stakeCents,cents(a.balance));
   const id=randomUUID();
   insert.run(id,epoch(),epoch(),'PENDING_APPROVAL',source,symbol,direction,stakeCents);
+  purchasedAt.run(Date.now(),id);
   audit('DEMO_REVIEW_REQUEST','Solicitud pendiente. No se envió ningún BUY.');
   return {id,state:'PENDING_APPROVAL',accountType:'demo',symbol,direction,stakeCents,expiresAt:epoch()+45,
    brokerOrders:0,requiresOwnerConfirmation:true};
@@ -152,6 +173,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
     contract_type:row.direction,currency:'USD',duration:5,duration_unit:'t',
     underlying_symbol:row.symbol,req_id:804};
    const t=performance.now(),quote=await sendAndWait(socket,request,'proposal');
+   const proposalLatency=Math.round(performance.now()-t);
    const proposal=quote.proposal||{};
    const price=Number(proposal.ask_price);
    if(typeof proposal.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(proposal.id)
@@ -159,6 +181,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
      throw Error('DEMO_QUOTE_INVALID');
    if(performance.now()-t>2000||!signalValid(row.symbol,row.direction))throw Error('DEMO_QUOTE_STALE');
    change.run('SENDING',epoch(),null,id);
+   const observed=marketSnapshot(row.symbol);
+   const buyStart=performance.now();
    // No automatic retries if the buy acknowledgement is lost.
    dispatched=true;
    const buy=await sendAndWait(socket,{buy:proposal.id,price,req_id:805},'buy',8000);
@@ -166,11 +190,13 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
      throw Error('DEMO_BUY_ACK_INVALID');
    acknowledged=true;
    const contractId=String(buy.buy.contract_id),paid=Number(buy.buy.buy_price);
-   recordBuy.run(epoch(),contractId,Number.isFinite(paid)?cents(paid):row.stake_cents,id);
+   recordBuy.run(epoch(),contractId,Number.isFinite(paid)?cents(paid):row.stake_cents,Date.now(),
+    proposalLatency,Math.round(performance.now()-buyStart),
+    observed?.ageReceivedMs??null,observed?.rsi14??null,observed?.sma8??null,observed?.sma21??null,id);
    audit('DEMO_BUY_CONFIRMED','Contrato DEMO confirmado por broker');
    const result=await readSettlement(socket,contractId);
    if(result.settled){
-    recordSettlement.run(epoch(),result.pnlCents,id);audit('DEMO_SETTLED','Resultado DEMO verificado');
+    recordSettlement.run(epoch(),result.pnlCents,Date.now(),id);audit('DEMO_SETTLED','Resultado DEMO verificado');
    }
    return {state:result.settled?'SETTLED':'OPEN',id,contractId,
     pnlCents:result.settled?result.pnlCents:null,accountType:'demo',brokerOrders:1};
@@ -197,12 +223,21 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    if(contract?.is_sold===1||contract?.is_sold===true){
     const profit=Number(contract.profit);
     if(!Number.isFinite(profit))throw Error('DEMO_PROFIT_INVALID');
-    recordSettlement.run(epoch(),cents(profit),id);
+    recordSettlement.run(epoch(),cents(profit),Date.now(),id);
     return {id,state:'SETTLED',pnlCents:cents(profit)};
    }
    return {id,state:'OPEN',note:'La liquidación no ha sido confirmada.'};
   }finally{socket.close();}
  }
- return {getSummary,requestIntent,cancel,approve,reconcile,
+ function exportCsv(scope='all'){
+  const rows=list.all();
+  const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
+  const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
+  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','errorCode'];
+  const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,'_return {getSummary,requestIntent,cancel,approve,reconcile,
+  canUpdate:()=>active.get().n===0};')+'"';
+  return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(x[h])).join(',')).join('\r\n')+'\r\n';
+ }
+ return {getSummary,requestIntent,cancel,approve,reconcile,markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
   canUpdate:()=>active.get().n===0};
 }
