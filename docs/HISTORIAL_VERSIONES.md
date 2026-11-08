@@ -63,6 +63,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.3 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:10:19.686Z (UTC).
+- **Commit de origen:** `9208c0fd9b75`.
+- Documentar MCP DEMO en Worker, secreto separado, OAuth futuro y aprobación de compra por navegador
+
 ## v7.2 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:09:20.667Z (UTC).

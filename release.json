@@ -1,18 +1,10 @@
 {
-  "version": "7.2",
-  "updatedAt": "2026-11-08T00:09:20.667Z",
-  "summary": "Esperar RPC async del Durable Object antes de analizar señal MCP y compilar TS",
+  "version": "7.3",
+  "updatedAt": "2026-11-08T00:10:19.686Z",
+  "summary": "Documentar MCP DEMO en Worker, secreto separado, OAuth futuro y aprobación de compra por navegador",
   "changes": [
-    "Esperar RPC async del Durable Object antes de analizar señal MCP y compilar TS",
-    "Prohibir cola MCP de compra DEMO sin señal fresca o dirección opuesta al bot",
-    "Probar protocolo MCP, solicitudes DEMO sin compras, señales HOLD y rechazo de funciones reales",
-    "No permitir reintentos MCP después de reclamar orden con posible compra DEMO pendiente",
-    "Alinear handlers MCP síncronos de DurableObject con firmas Promise del protocolo",
-    "Conectar cola MCP del Worker al botón de compra DEMO del navegador con consentimiento y liquidación",
-    "Añadir panel de aprobación explícita para solicitudes MCP de una compra DEMO",
-    "Caducar órdenes MCP DEMO tras 45 segundos para evitar señales obsoletas",
-    "Integrar gateway MCP privado en Cloudflare y comandos DEMO pendientes de aprobación por navegador"
+    "Documentar MCP DEMO en Worker, secreto separado, OAuth futuro y aprobación de compra por navegador"
   ],
-  "sourceCommit": "fb808eb14d1b61571ece237484be850cd47bb37c",
+  "sourceCommit": "9208c0fd9b75651f5c16cda8706ab75d3c2a3843",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
