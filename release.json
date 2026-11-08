@@ -1,10 +1,10 @@
 {
-  "version": "8.0",
-  "updatedAt": "2026-11-08T00:34:01.675Z",
-  "summary": "Mostrar P&L provisional de contratos DEMO abiertos sin confundirlo con saldo ni ganancias realizadas",
+  "version": "8.1",
+  "updatedAt": "2026-11-08T00:41:03.333Z",
+  "summary": "Definir lote DEMO con N compras independientes US$1 y límite US$10 por tanda sin exceder piloto",
   "changes": [
-    "Mostrar P&L provisional de contratos DEMO abiertos sin confundirlo con saldo ni ganancias realizadas"
+    "Definir lote DEMO con N compras independientes US$1 y límite US$10 por tanda sin exceder piloto"
   ],
-  "sourceCommit": "f3d5a037b9719a229f882aea34c1b95702093ea9",
+  "sourceCommit": "bb691e52c5909a963e60c1f92cbbcabf7ee842a3",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

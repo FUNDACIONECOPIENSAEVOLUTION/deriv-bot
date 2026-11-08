@@ -71,6 +71,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.1 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:41:03.333Z (UTC).
+- **Commit de origen:** `bb691e52c590`.
+- Definir lote DEMO con N compras independientes US$1 y límite US$10 por tanda sin exceder piloto
+
 ## v8.0 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:34:01.675Z (UTC).
