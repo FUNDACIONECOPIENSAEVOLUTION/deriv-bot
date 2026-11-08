@@ -1,10 +1,11 @@
 {
-  "version": "8.4",
-  "updatedAt": "2026-11-08T00:49:42.574Z",
-  "summary": "Documentar diez contratos DEMO reales distintos, máximo US$10 por tanda, saldo por ACK y límites de ejecución",
+  "version": "8.5",
+  "updatedAt": "2026-11-08T00:50:36.196Z",
+  "summary": "Impedir publicación si faltan diez órdenes DEMO distintas, confirmaciones o conciliación de lote",
   "changes": [
-    "Documentar diez contratos DEMO reales distintos, máximo US$10 por tanda, saldo por ACK y límites de ejecución"
+    "Impedir publicación si faltan diez órdenes DEMO distintas, confirmaciones o conciliación de lote",
+    "Refrescar señal del bot tras confirmación humana sin cambiar la dirección aprobada ni operar señal caducada"
   ],
-  "sourceCommit": "ab6a540c54e3dbfcbfa3932074a368c314a1a22b",
+  "sourceCommit": "dcd1fb44a1665a9f5d173d110bc2f95c13306958",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

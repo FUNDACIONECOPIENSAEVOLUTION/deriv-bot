@@ -75,6 +75,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.5 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:50:36.196Z (UTC).
+- **Commit de origen:** `dcd1fb44a166`.
+- Impedir publicación si faltan diez órdenes DEMO distintas, confirmaciones o conciliación de lote
+- Refrescar señal del bot tras confirmación humana sin cambiar la dirección aprobada ni operar señal caducada
+
 ## v8.4 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:49:42.574Z (UTC).
