@@ -1,6 +1,7 @@
 import { dayAt, analyzeSignal } from '../../runtime/core.mjs';
 import {planDemoBurst,DEMO_BURST_STAKE_CENTS} from './demo-burst-policy';
 import {demoTradesCsv,type DemoCsvRow} from './demo-csv';
+import {DEMO_SUPPORTED_SYMBOLS,isDemoSymbol,type DemoSymbol} from './demo-symbols';
 import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
@@ -127,7 +128,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_quote_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, stake_cents INTEGER NOT NULL, contract_type TEXT NOT NULL, accepted INTEGER NOT NULL, code TEXT)");
 
     const cols=new Set(ctx.storage.sql.exec<{name:string}>('PRAGMA table_info(demo_trades)').toArray().map(r=>r.name));
-    for(const [name,kind] of [['decision_json','TEXT'],['entry_spot','REAL'],['exit_spot','REAL'],['contract_type','TEXT'],['bought_at','INTEGER'],['settled_at','INTEGER']]){
+    for(const [name,kind] of [['decision_json','TEXT'],['entry_spot','REAL'],['exit_spot','REAL'],['contract_type','TEXT'],['bought_at','INTEGER'],['settled_at','INTEGER'],['symbol','TEXT']]){
       if(!cols.has(name))ctx.storage.sql.exec('ALTER TABLE demo_trades ADD COLUMN '+name+' '+kind);
     }
 
@@ -284,7 +285,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
   private reportDemo() {
     type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;
       buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null;
-      decision_json:string|null;entry_spot:number|null;exit_spot:number|null;contract_type:string|null;bought_at:number|null;settled_at:number|null};
+      decision_json:string|null;entry_spot:number|null;exit_spot:number|null;contract_type:string|null;bought_at:number|null;settled_at:number|null;symbol:string|null};
     const sql=this.ctx.storage.sql;
     const stats=sql.exec<{settled:number;wins:number;losses:number;net:number}>(
       "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents<0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED'"
@@ -367,6 +368,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
         buyCents:r.buy_cents,payoutCents:r.payout_cents,pnlCents:r.pnl_cents,
         code:r.code,createdAt:r.created_at,boughtAt:r.bought_at??null,settledAt:r.settled_at??null,entrySpot:r.entry_spot??null,exitSpot:r.exit_spot??null,
         contractType:r.contract_type==='PUT'?'PUT':r.contract_type==='CALL'?'CALL':null,
+        symbol:isDemoSymbol(r.symbol)?r.symbol:'R_100',
         decision:r.decision_json?JSON.parse(r.decision_json):null}))
     };
   }
@@ -565,7 +567,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(!history||typeof history!=='object'||Array.isArray(history))
       throw Error('DEMO_BROWSER_PRICES_INVALID');
     const h=history as {symbol?:unknown;prices?:unknown;times?:unknown};
-    if(h.symbol!=='R_100'||!Array.isArray(h.prices)||!Array.isArray(h.times)
+    if(!isDemoSymbol(h.symbol)||!Array.isArray(h.prices)||!Array.isArray(h.times)
       ||h.prices.length!==150||h.times.length!==150)
       throw Error('DEMO_BROWSER_PRICES_INVALID');
     const n=epoch(),prices:number[]=[],times:number[]=[];
@@ -584,22 +586,23 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const a=analyzeSignal(prices);
     const direction=a.direction===1?'UP':a.direction===-1?'DOWN':'HOLD';
     const record={direction,reason:a.reason,quoteAgeSeconds:n-times[149],
-      at:n,source:'OWNER_BROWSER_REPORTED_PUBLIC_R_100',
+      at:n,symbol:h.symbol,source:'OWNER_BROWSER_REPORTED_PUBLIC_'+h.symbol,
       verifiedIndependently:false,valid:direction!=='HOLD',
       indicator:{fast:a.fast,slow:a.slow,rsi:a.rsi,volatility:a.volatility}};
-    this.write('demo-browser-signal',record);
+    this.write('demo-browser-signal:'+h.symbol,record);
+    if(h.symbol==='R_100')this.write('demo-browser-signal',record);
     return record;
   }
 
-  getBrowserSignal(){
+  getBrowserSignal(symbol:DemoSymbol='R_100'){
     const saved=this.read<{
       direction:'UP'|'DOWN'|'HOLD';reason:string;quoteAgeSeconds:number;
       at:number;source:string;verifiedIndependently:boolean;valid:boolean;
       indicator:{fast:number|null;slow:number|null;rsi:number|null;volatility:number|null}
-    }>('demo-browser-signal');
+    }>(symbol==='R_100'?'demo-browser-signal':'demo-browser-signal:'+symbol);
     if(!saved||epoch()-saved.at>10||saved.at>epoch())return {
       direction:'HOLD' as const,reason:'NO_FRESH_BROWSER_PRICE_FEED',
-      source:'OWNER_BROWSER_PUBLIC_R_100',quoteAgeSeconds:null,
+      source:'OWNER_BROWSER_PUBLIC_'+symbol,quoteAgeSeconds:null,
       valid:false,verifiedIndependently:false
     };
     return {...saved,quoteAgeSeconds:saved.quoteAgeSeconds+(epoch()-saved.at)};
