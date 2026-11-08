@@ -13,6 +13,72 @@ function marketCard(m){let c=$('market-'+m.symbol);if(!c){c=document.createEleme
 function draw(){const m=markets.get(chosen),cv=$('chart'),ctx=cv.getContext('2d');const w=cv.width,h=cv.height;ctx.clearRect(0,0,w,h);const points=m?.lastPrices||[];if(points.length<2)return;const lo=Math.min(...points),hi=Math.max(...points),range=hi-lo||1;ctx.strokeStyle='#3ed6bd';ctx.lineWidth=2;ctx.beginPath();points.forEach((v,i)=>{const x=10+i*(w-20)/(points.length-1),y=h-10-(v-lo)/range*(h-20);if(!i)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();ctx.fillStyle='#a8c7d4';ctx.font='12px Arial';ctx.fillText(chosen+' · '+points.length+' ticks · '+fmt(points.at(-1)),12,17);}
 function market(m){markets.set(m.symbol,m);marketCard(m);if(m.symbol===chosen&&Date.now()-lastNetwork>150)draw();}
 function setMessage(text){$('auth-message').textContent=text;}
+// No order is placed by MCP; an explicit owner confirmation in this local panel is required.
+let demoIntentId=null,demoIntentState=null;
+async function showDemoOrders(){
+ try {
+  const d=await get('/api/demo/orders');
+  const rows=d.orders||[];
+  const awaiting=rows.find(x=>x.state==='PENDING_APPROVAL');
+  demoIntentId=awaiting?.id||null;
+  demoIntentState=awaiting?.state||null;
+  $('demo-confirm').disabled=!demoIntentId;
+  $('demo-cancel').disabled=!demoIntentId;
+  $('demo-order-stats').textContent='DEMO compras confirmadas o pendientes: '+d.campaignPurchases+
+   '/'+d.maxPurchases+' · apuesta acumulada '+usd((d.campaignGrossCents||0)/100)+
+   ' · pendientes '+d.pendingOrOpen+
+   (awaiting?' · SOLICITUD '+awaiting.source+' '+awaiting.symbol+' '+awaiting.direction+
+     ' '+usd(awaiting.stakeCents/100)+' (requiere aprobación local)':'')+
+   '\nÚltimas: '+rows.slice(0,6).map(x=>x.state+' '+x.symbol+' '+(x.pnlCents===null?'pendiente':usd(x.pnlCents/100))).join(' | ');
+  return d;
+ }catch(e){$('demo-order-stats').textContent='No disponible: '+e.message;return null;}
+}
+$('demo-refresh').onclick=showDemoOrders;
+$('demo-intent').onclick=async()=>{
+ try{
+  $('demo-message').textContent='Comprobando saldo y señal: no se ha enviado ninguna compra.';
+  const params={symbol:$('quote-symbol').value,direction:$('quote-dir').value,
+   stakeCents:Math.round(Number($('quote-stake').value)*100)};
+  const q=await post('/api/demo/intent',params);
+  $('demo-message').textContent='Solicitud '+q.id.slice(0,8)+' creada; no se envió BUY. Escribe la confirmación exacta en esta ventana.';
+ }catch(e){$('demo-message').textContent='Solicitud bloqueada: '+e.message;}
+ await showDemoOrders();
+};
+$('demo-confirm').onclick=async()=>{
+ if(!demoIntentId)return;
+ const confirmation=$('demo-confirm-text').value.trim();
+ if(confirmation!=='CONFIRMAR COMPRA DEMO'){
+  $('demo-message').textContent='Escribe exactamente CONFIRMAR COMPRA DEMO para autorizar una orden.';return;
+ }
+ const id=demoIntentId;
+ $('demo-confirm').disabled=true;$('demo-cancel').disabled=true;
+ $('demo-message').textContent='Comprobando saldo y cotización oficiales. No repitas el clic.';
+ try{
+  const r=await post('/api/demo/confirm',{id,confirmation});
+  $('demo-message').textContent='Resultado: '+r.state+
+   (r.contractId?' · contrato '+r.contractId:'')+
+   (r.pnlCents!==null&&r.pnlCents!==undefined?' · neto '+usd(r.pnlCents/100):'')+
+   '. Si está UNKNOWN o OPEN, no abras una nueva compra antes de conciliar.';
+ }catch(e){
+  $('demo-message').textContent='No reintentes sin revisar el estado en Deriv: '+e.message;
+ }finally{$('demo-confirm-text').value='';await showDemoOrders();}
+};
+$('demo-cancel').onclick=async()=>{
+ if(!demoIntentId)return;
+ try{await post('/api/demo/cancel',{id:demoIntentId});$('demo-message').textContent='Solicitud cancelada sin comprar.';}
+ catch(e){$('demo-message').textContent=e.message;}
+ await showDemoOrders();
+};
+$('demo-reconcile').onclick=async()=>{
+ const orders=await showDemoOrders();
+ const unresolved=(orders?.orders||[]).find(x=>x.state==='OPEN'&&x.contractId);
+ if(!unresolved){$('demo-message').textContent='No hay contrato OPEN con ID registrado. Para UNKNOWN revisa Deriv manualmente; no se reenvía BUY.';return;}
+ try{
+  const r=await post('/api/demo/reconcile',{id:unresolved.id});
+  $('demo-message').textContent='Conciliación '+r.state+(r.pnlCents!==undefined?' · '+usd(r.pnlCents/100):'');
+ }catch(e){$('demo-message').textContent='No se pudo conciliar: '+e.message;}
+ await showDemoOrders();
+};
 
 // Open OAuth outside the Edge "app" window. Do not replace the dashboard!
 $('authorize').onclick=async()=>{
@@ -54,8 +120,8 @@ $('pat-connect').onclick=async()=>{
 $('refresh').onclick=async()=>{try{setMessage('Consultando saldo en Deriv...');await post('/api/demo/refresh',{});await poll();setMessage('Saldo DEMO consultado oficialmente.');}catch(e){setMessage(e.message);}};
 $('history').onclick=async()=>{try{setMessage('Consultando los últimos contratos oficiales...');const d=await post('/api/demo/profit',{});const t=d.trades||[];$('trades').innerHTML='<p>'+t.length+' registros obtenidos de Deriv (consulta sin comprar).</p><div style="overflow-x:auto"><table><thead><tr><th>Contrato</th><th>Mercado</th><th>P&L</th></tr></thead><tbody>'+t.slice(0,30).map(x=>'<tr><td>'+escapeText(x.contractId)+'</td><td>'+escapeText(x.symbol)+'</td><td>'+usd(x.profit)+'</td></tr>').join('')+'</tbody></table></div>';setMessage('Consulta terminada.');}catch(e){setMessage(e.message);}};
 $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando propuesta (sin comprar)...';const r=await post('/api/demo/quote',{symbol:$('quote-symbol').value,direction:$('quote-dir').value,stake:Number($('quote-stake').value)});$('quote-message').textContent='Deriv: apuesta '+usd(r.askPrice)+' · pago posible '+usd(r.payout)+' · latencia propuesta '+r.proposalRttMs+' ms. NINGUNA COMPRA.';}catch(e){$('quote-message').textContent=e.message;}};
-(async()=>{await poll();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
+(async()=>{await poll();await showDemoOrders();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
- setInterval(poll,15000);
+ setInterval(poll,15000);setInterval(showDemoOrders,15000);
 })();
