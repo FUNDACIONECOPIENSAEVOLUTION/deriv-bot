@@ -1432,15 +1432,24 @@ $('demo-burst-start').onclick=async()=>{
     throw Error('DEMO_BURST_SESSION_INVALID');
   nonce=session.nonce;
   ws=await browserSocket(session.wsUrl,'demo');
-  const evidence=signal.indicator||{};
   for(let i=0;i<count;i++){
    if(demoBurstStopRequested||document.hidden){
     status.textContent='Pausado antes de la orden '+(i+1)+'. '+confirmed+
       ' contratos confirmados; no se enviarán compras adicionales.';
     break;
    }
-   status.textContent='Preparando compra DEMO '+(i+1)+'/'+count+
-      ', '+decision+', US$1 virtual. Confirmadas: '+confirmed+'.';
+   status.textContent='Recalculando SMA/RSI antes de la compra '+(i+1)+
+      '/'+count+'. Confirmadas: '+confirmed+'.';
+   // Every contract requires fresh public ticks, not a recycled first signal.
+   const currentSignal=await fetchFreshBrowserBotSignal();
+   if(!currentSignal||currentSignal.valid!==true||
+      currentSignal.direction!==direction||!Number.isInteger(currentSignal.at)||
+      Date.now()-currentSignal.at*1000>8000||
+      currentSignal.quoteAgeSeconds>5)
+     throw Error('DEMO_BURST_SIGNAL_CHANGED_OR_STALE_NO_NEW_BUYS');
+   const eachEvidence=currentSignal.indicator||{};
+   status.textContent='Señal actual '+decision+' · compra '+(i+1)+'/'+count+
+     ' · RSI '+(eachEvidence.rsi??'—')+' · US$1 virtual · confirmadas '+confirmed+'.';
    const quote=await brokerMessage(ws,proposalRequest(direction,100),8500);
    const p=quote.proposal||{},ask=Number(p.ask_price),payout=Number(p.payout);
    if(quote.msg_type!=='proposal'||quote.error||quote.errors||
@@ -1451,10 +1460,10 @@ $('demo-burst-start').onclick=async()=>{
    // Durable UNKNOWN reservation commits before any buy message leaves browser.
    const reservation=await demoBurstPost('reserve',{
     nonce,proposalId:p.id,askPrice:ask,payout,
-    evidence:{fast:evidence.fast,slow:evidence.slow,rsi:evidence.rsi,
-     volatility:evidence.volatility,
+    evidence:{fast:eachEvidence.fast,slow:eachEvidence.slow,rsi:eachEvidence.rsi,
+     volatility:eachEvidence.volatility,
      entryQuote:liveTick?.quote??null,
-     quoteAgeSeconds:signal.quoteAgeSeconds,reason:signal.reason}
+     quoteAgeSeconds:currentSignal.quoteAgeSeconds,reason:currentSignal.reason}
    });
    if(reservation.mode!=='DEMO_BURST_RESERVED'||
       reservation.accountType!=='demo'||
