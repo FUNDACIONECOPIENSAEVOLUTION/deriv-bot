@@ -120,15 +120,24 @@ try{
   Copy-Item -LiteralPath $file.FullName -Destination $target -Force
  }
  $installed=$true
- & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Instalar-TareasOcultas.ps1') -Ruta $Ruta
- if($LASTEXITCODE -ne 0){Write-Warning 'Las tareas ocultas no se registraron automáticamente.'}
+ $isAdmin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+ $tasksReady=$false
+ if($isAdmin){
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Instalar-TareasOcultas.ps1') -Ruta $Ruta
+  $tasksReady=($LASTEXITCODE -eq 0)
+ }
+ if(-not $tasksReady){
+  Write-Warning 'El código sí se instaló, pero las tareas automáticas NO quedaron activadas (permiso 0x80070005 o política de Windows).'
+  Write-Host 'Para repararlas: abrir PowerShell como administrador y ejecutar Reparar-Tareas-PC.ps1.' -ForegroundColor Yellow
+ }
  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Abrir-Ecopiensa.ps1') -Ruta $Ruta
  if($LASTEXITCODE -ne 0){throw 'EL_PANEL_NO_SE_PUDO_ABRIR'}
  Start-Sleep -Seconds 2
  $verified=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 6
  if($verified.version -ne ('v'+$remote) -or $verified.ok -ne $true){throw 'VERIFICACION_FINAL_DE_VERSION_FALLIDA'}
  Write-Host "Ecopiensa actualizado a v$remote en D:\deriv-bot\programa; cuenta REAL bloqueada." -ForegroundColor Green
- Write-Host 'Desde ahora, las tareas de actualización y vigilancia deberían abrirse ocultas.' -ForegroundColor Green
+ if($tasksReady){Write-Host 'Tareas automáticas registradas de forma oculta.' -ForegroundColor Green}
+ else{Write-Warning 'Tareas automáticas NO registradas; puedes abrir Ecopiensa manualmente, pero no habrá vigilancia programada.'}
  Write-Host ('Registro de tareas: '+(Join-Path $data 'tareas-ocultas.log'))
 }catch{
  $message=$_.Exception.Message
