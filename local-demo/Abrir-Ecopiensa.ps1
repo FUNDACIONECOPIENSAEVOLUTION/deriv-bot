@@ -37,20 +37,14 @@ try {
     }
     if (-not $listo) { throw "No arranco el bot. Revisa el archivo $errores (no compartas datos privados)." }
   }
-  # Keep a lightweight check every 2 minutes. Windows sleep/hibernation still
-  # pauses processes; this check resumes when Windows allows scheduled tasks.
-  New-Item -ItemType Directory -Path (Join-Path $app 'data') -Force | Out-Null
-  Set-Content -Path (Join-Path $app 'data\ejecucion-habilitada.flag') -Value 'ACTIVO' -Encoding Ascii
+  # Task Scheduler no abrirá consolas: ambas tareas usan wscript.exe oculto.
   try {
-    $watch=Join-Path $app 'Vigilar-Ecopiensa.ps1'
-    if(Test-Path $watch){
-      $args='-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "'+$watch+'" -Ruta "'+$Ruta+'"'
-      $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $args
-      $trigger=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) -RepetitionInterval (New-TimeSpan -Minutes 2)
-      $settings=New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-      Register-ScheduledTask -TaskName 'Ecopiensa_Deriv_PC_VigilarServidor' -Action $action -Trigger $trigger -Settings $settings -Description 'Reinicia solo el servidor Ecopiensa si se cierra inesperadamente' -Force | Out-Null
-    }
-  }catch {Write-Warning 'Vigilancia automática no disponible. Puedes volver a abrir el icono si el servidor se detiene.'}
+    & (Join-Path $app 'Instalar-TareasOcultas.ps1') -Ruta $Ruta | Out-Null
+  } catch {
+    $log=Join-Path $app 'data\tareas-ocultas.log'
+    Add-Content -LiteralPath $log -Value ((Get-Date -Format s)+' No se pudieron instalar las tareas ocultas: '+$_.Exception.GetType().Name)
+    Write-Warning 'No se pudo instalar la tarea oculta; se puede abrir Ecopiensa normalmente.'
+  }
   $url='http://localhost:8765'
   $edgeCandidates=@()
   if (${env:ProgramFiles(x86)}) { $edgeCandidates += (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe') }
