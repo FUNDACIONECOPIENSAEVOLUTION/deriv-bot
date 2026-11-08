@@ -70,6 +70,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.0 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:34:01.675Z (UTC).
+- **Commit de origen:** `f3d5a037b971`.
+- Mostrar P&L provisional de contratos DEMO abiertos sin confundirlo con saldo ni ganancias realizadas
+
 ## v7.9 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:33:22.590Z (UTC).
