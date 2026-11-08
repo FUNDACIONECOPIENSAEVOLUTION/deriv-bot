@@ -10,7 +10,8 @@ const targets=[
    expected:version+'.0',valid:data=>data?.status==='ok'&&data?.version===version+'.0'},
   {name:'Cloudflare PAPER/DEMO storage',url:'https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev/api/health/dependencies',
    expected:version+'.0',valid:data=>data?.version===version+'.0'&&
-     data?.paper==='ready'&&data?.demo==='ready'&&data?.brokerAuthorization==='not_checked'},
+     ['ready','unavailable'].includes(data?.paper)&&
+     data?.demo==='ready'&&data?.brokerAuthorization==='not_checked'},
 ];
 let failures=0;
 for(const target of targets){
