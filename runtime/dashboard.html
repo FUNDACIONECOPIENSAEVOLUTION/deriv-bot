@@ -20,7 +20,7 @@
 <div class="workspace"><section class="card">
 <header class="chart-head"><div><h2 id="chart-title">Deriv · R_100</h2><p>Velas de 1 minuto · Hora de Colombia (UTC−5)</p></div><span id="chart-status" class="chip">Esperando datos</span></header>
 <div class="tools" role="status"><span id="chart-demo-balance" class="chip">Deriv DEMO: saldo no conectado</span><span id="chart-demo-locked" class="chip">Comprometido: sin verificar</span><span id="chart-demo-pnl" class="chip">P&L del bot: sin operaciones verificadas</span></div>
-<div class="tools"><label>Plataforma<select id="provider"><option value="deriv">Deriv · R_100</option><option value="binance">Binance · BTC / USDT</option><option value="coinbase">Coinbase · BTC / USD</option></select></label><label>Ventana<select id="window"><option value="60">60 velas</option><option value="120">120 velas</option><option value="180">180 velas</option></select></label></div>
+<div class="tools"><label>Plataforma<select id="provider"><option value="deriv">Deriv · R_100</option><option value="binance">Binance · BTC / USDT</option><option value="coinbase">Coinbase · BTC / USD</option></select></label><label>Índice para graficar<select id="demo-chart-symbol"><option value="R_100">Volatility 100 (R_100)</option><option value="R_75">Volatility 75 (R_75)</option><option value="R_10">Volatility 10 (R_10)</option><option value="1HZ100V">Volatility 100 (1s)</option></select></label><label>Ventana<select id="window"><option value="60">60 velas</option><option value="120">120 velas</option><option value="180">180 velas</option></select></label></div>
 <p id="platform-note" class="note">Deriv: precios públicos y simulaciones automáticas. El servicio funciona aunque cierres este panel.</p>
 <p class="note" id="chart-demo-last-trades" role="status">Historial DEMO del broker: no conectado.</p>
 <div class="chart-wrap"><svg id="candles" viewBox="0 0 920 350" role="img" aria-label="Velas de precio y marcas de operaciones simuladas"></svg></div>
@@ -435,6 +435,7 @@ const reasons={WARMUP:'Espera al menos 30 precios.',HIGH_VOLATILITY:'La volatili
 const feedLabels={stopped:'Detenida',live:'Recibiendo precios',connecting:'Conectando',syncing:'Cargando historial',disconnected:'Desconectada',recovering:'Recuperando'};
 let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0,arbFetched=0;
 let liveTick=null,liveTickSocket=null,liveTickRetry=null,lastLiveChartAt=0,brokerSyncBusy=false,lastBrokerSyncAt=0;
+let demoOtherChart=null,demoOtherChartAt=0,demoOtherChartLoading=false;
 
 function paintLiveTick(){
  if($('provider').value!=='deriv'||!liveTick||Date.now()-liveTick.receivedAt>5000){
