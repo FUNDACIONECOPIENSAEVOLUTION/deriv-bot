@@ -11,7 +11,7 @@ if(-not(Test-Path (Join-Path $app 'local-release.json'))){throw 'FALTA_VERSION_L
 if(-not(Test-Path (Join-Path $app 'data'))){throw 'FALTA_CARPETA_PRIVADA'}
 $local=[string]((Get-Content -LiteralPath (Join-Path $app 'local-release.json') -Raw | ConvertFrom-Json).version)
 if($local -notmatch '^[0-9]+\.[0-9]$'){throw 'VERSION_LOCAL_INVALIDA'}
-$manifest=Invoke-RestMethod -Uri ($base+'/pc-release.json') -TimeoutSec 25
+$manifest=Invoke-RestMethod -Uri ($base+'/pc-release.json?cb='+[guid]::NewGuid().ToString('N')) -TimeoutSec 25 -Headers @{'Cache-Control'='no-cache';'User-Agent'='Ecopiensa-PC-Reparador'}
 $remote=[string]$manifest.version
 if($remote -notmatch '^[0-9]+\.[0-9]$' -or $manifest.channel -ne 'pc-local' -or [int]$manifest.parts -lt 1 -or [int]$manifest.parts -gt 24){throw 'MANIFIESTO_PUBLICACION_INVALIDO'}
 function Valor([string]$version){$n=$version.Split('.');return [int]$n[0]*10+[int]$n[1]}
@@ -19,7 +19,15 @@ if((Valor $remote) -lt (Valor $local)){throw 'GITHUB_VERSION_MENOR_QUE_PC'}
 $node=Get-Command node -ErrorAction Stop
 if([int](((& node --version).TrimStart('v')).Split('.')[0]) -lt 24){throw 'NODE24_REQUERIDO'}
 Write-Host "Ecopiensa PC: instalada v$local; disponible GitHub v$remote." -ForegroundColor Cyan
-$work=Join-Path $env:TEMP ('EcopiensaPC-Reparar-'+[guid]::NewGuid().ToString('N'))
+# No utilizar C:\Users\...\AppData\Local\Temp: puede estar lleno aunque D: tenga espacio.
+# Node y Expand-Archive utilizan TEMP/TMP, por eso se reubican durante la reparación.
+$disk=[System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($Ruta))
+if($disk.AvailableFreeSpace -lt 200MB){throw 'ESPACIO_INSUFICIENTE_EN_D_LIBERA_200MB_ANTES_DE_ACTUALIZAR'}
+$oldTemp=$env:TEMP;$oldTmp=$env:TMP
+$tempRoot=Join-Path $Ruta '_temporales-actualizacion'
+New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
+$env:TEMP=$tempRoot;$env:TMP=$tempRoot
+$work=Join-Path $tempRoot ('EcopiensaPC-Reparar-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 $stopped=$false;$installed=$false;$backup=''
 try{
@@ -137,4 +145,5 @@ try{
  throw
 }finally{
  Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+ $env:TEMP=$oldTemp;$env:TMP=$oldTmp
 }

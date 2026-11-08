@@ -27,6 +27,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Validar sintaxis de ambos actualizadores PowerShell
+        shell: pwsh
+        run: |
+          $scripts = @('local-demo/Reparar-Actualizador-PC.ps1', 'local-demo/Actualizar-Desde-GitHub.ps1')
+          foreach ($script in $scripts) {
+            $tokens = $null; $issues = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$issues)
+            if ($issues.Count -gt 0) { $issues | Format-List | Out-String | Write-Host; throw "ERROR_SINTAXIS_POWERSHELL: $script" }
+          }
       - name: Probar arranque y controles PC en Windows
         shell: pwsh
         run: |
