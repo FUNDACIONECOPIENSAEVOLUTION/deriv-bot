@@ -46,6 +46,8 @@ test('DEMO risk blocks stale or opposing signals, unverified account, 10,000-to-
 });
 test('Burst of three supports parallel DEMO approvals without real broker BUY',async()=>{
  const db=new DatabaseSync(':memory:');
+ // El motor real crea esta tabla antes de construir createDemoBurst.
+ db.exec("CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)");
  const calls=[],account={accountId:'DOT-D',currency:'USD',balance:10000};
  let inFlight=0,peak=0;
  const trading={canUpdate:()=>true,requestIntent:input=>{calls.push(['request',input]);return {id:'i'+calls.length}},
