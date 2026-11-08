@@ -224,14 +224,20 @@ export default {
     if(url.pathname==='/api/health/dependencies'&&request.method==='GET'){
       // Only publish booleans for storage reachability; never return user account,
       // balances, internal errors, OAuth data, or private DO state.
-      const results=await Promise.allSettled([
-        env.PAPER.getByName(EXPERIMENT).status(),
-        env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status()
+      const probe=async(component:'PAPER'|'DERIV_DEMO',check:()=>Promise<unknown>)=>{
+        try{await check();return true;}
+        catch(error){
+          // Include only a fixed, non-sensitive error classification in Worker logs.
+          const code=error instanceof Error&&error.message==='EXPERIMENT_CONFIG_CHANGED'
+            ?'EXPERIMENT_CONFIG_CHANGED':'STORAGE_UNAVAILABLE';
+          console.error(JSON.stringify({type:'readiness_failed',component,code}));
+          return false;
+        }
+      };
+      const [paperReady,demoReady]=await Promise.all([
+        probe('PAPER',()=>env.PAPER.getByName(EXPERIMENT).status()),
+        probe('DERIV_DEMO',()=>env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status())
       ]);
-      const paperReady=results[0].status==='fulfilled';
-      const demoReady=results[1].status==='fulfilled';
-      if(!paperReady)console.error(JSON.stringify({type:'readiness_failed',component:'PAPER'}));
-      if(!demoReady)console.error(JSON.stringify({type:'readiness_failed',component:'DERIV_DEMO'}));
       return json({version:release.version+'.0',
         paper:paperReady?'ready':'unavailable',
         demo:demoReady?'ready':'unavailable',
