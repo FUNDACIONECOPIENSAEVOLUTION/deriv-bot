@@ -515,7 +515,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
       state:'PENDING'|'CLAIMED'|'SETTLED'|'CANCELLED';signal:'UP'|'DOWN';
       stakeCents:number;contractId?:number}>('demo-mcp-intent');
     if(!x)return {status:'EMPTY',brokerOrders:0};
-    if((x.state==='PENDING'||x.state==='CLAIMED')&&x.expiresAt<epoch())
+    // Once the browser claims an intent, never expire it automatically:
+    // a Deriv buy may be in flight or its acknowledgement may be uncertain.
+    if(x.state==='PENDING'&&x.expiresAt<epoch())
       return {...x,state:'EXPIRED',brokerOrders:0};
     return {...x,brokerOrders:0,requiresOwnerApproval:x.state==='PENDING'};
   }
