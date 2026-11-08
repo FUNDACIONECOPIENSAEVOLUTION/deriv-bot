@@ -149,7 +149,7 @@ const demoPageNavigationType=(()=>{
  const type=performance.getEntriesByType('navigation')[0]?.type;
  return ['reload','navigate','back_forward'].includes(type)?type:'unknown';
 })();
-const DEMO_BURST_FRESHNESS_SECONDS=3;
+const DEMO_BURST_FRESHNESS_SECONDS=1;
 const demoAgeSinceSignal=(signal,receivedAtMs)=>Number(signal?.quoteAgeSeconds)+
  (performance.now()-receivedAtMs)/1000;
 let historyMode='DEMO'; // Never persists across reloads; server verifies a one-use approval too.
@@ -1504,8 +1504,9 @@ function presentMarketScan(rows){
   'Se revisaron '+rows.length+' índices públicos. '+rows.filter(x=>x.valid).length+
   ' señales técnicas aceptadas, '+rows.filter(x=>!x.valid).length+
   ' mercados ESPERAR/no verificables. Score comparativo SMA/RSI, NO porcentaje de aciertos. '+
-  'Antes de BUY se valida que la señal tenga máximo 3 s en reserva, '+
-  'sin recargar la página. No garantiza sincronización subsegundo.';
+  'Antes de BUY se descarta cualquier señal que llegue a 1 segundo, '+
+  'comprobando el stream de ticks públicos sin recargar la página. '+
+  'La red y el broker pueden superar un segundo: no se garantiza latencia subsegundo.';
 }
 async function scanDemoMarkets(){
  if(demoMarketScanBusy)return [];
@@ -2019,7 +2020,7 @@ $('demo-burst-start').onclick=async()=>{
    }
    if(!selected||!quote){
     output.textContent='ESPERAR: no hubo cotización con señal, pago, frescura y '+
-      'límite de concentración aceptables. Descartes por señal vieja (>3 s): '+
+      'límite de concentración aceptables. Descartes por señal cambiada/retrasada (≥1 s): '+
       staleSkipped+'. Confirmadas: '+confirmed+'.';break;
    }
    const p=quote.proposal,e=selected.indicator||{};
@@ -2054,7 +2055,7 @@ $('demo-burst-start').onclick=async()=>{
   // cancel the UNSENT reservation before writing a BUY to the socket.
   const reserveRttMs=Math.max(0,Math.round(performance.now()-reserveStartedAtMs));
   const preBuyAgeSec=demoAgeSinceSignal(selected,selected.signalReceivedAtMs);
-  if(document.hidden||demoBurstStopRequested||preBuyAgeSec>2||reserveRttMs>1000||
+  if(document.hidden||demoBurstStopRequested||preBuyAgeSec>=1||reserveRttMs>=1000||
      !demoTickMatchesSignal(marketFeed?.latest(selected.symbol),selected)){
    const cancelled=await demoBurstPost('cancel',{nonce,id:reserved.id});
    if(cancelled.mode!=='DEMO_BURST_PREBUY_CANCELLED'||cancelled.brokerOrders!==0)
@@ -2063,9 +2064,12 @@ $('demo-burst-start').onclick=async()=>{
      'Reserva '+reserveRttMs+' ms; edad '+preBuyAgeSec.toFixed(2)+' s. Cero órdenes enviadas.';
    staleSkipped++;continue;
   }
+  const buySentAtMs=performance.now();
   const brokerAck=await brokerMessage(ws,reserved.request,10000);
+  const buyAckRttMs=Math.max(0,Math.round(performance.now()-buySentAtMs));
    const registered=await demoBurstPost('ack',{
-     nonce,id:reserved.id,response:brokerAck
+     nonce,id:reserved.id,response:brokerAck,
+     timing:{preBuyAgeMs:Math.round(preBuyAgeSec*1000),reserveRttMs,buyAckRttMs}
    });
    if(registered.mode!=='DEMO_BURST_ACK'||registered.accepted!==true||
       !Number.isSafeInteger(registered.contractId))
