@@ -1,14 +1,14 @@
 {
-  "version": "12.6",
+  "version": "12.7",
   "channel": "pc-local",
   "execution": "windows-only",
   "summary": "Compras DEMO 1-10, OHLC, P&L, CSV, MCP privado y actualización automática",
   "trading": "demo-owner-authorized-bursts",
   "notes": [
     "Solo el PC ejecuta el bot; GitHub es fuente y respaldo del código.",
-    "Compras secuenciales DEMO con aprobación local explícita; REAL inaccesible.",
+    "Compras paralelas de hasta cinco contratos DEMO con clic local explícito; REAL inaccesible.",
     "MCP localhost con Bearer privado permite análisis y solicitudes, NO compras directas.",
-    "Velas OHLC de 10 ticks, historial SQLite, cronología de compras y CSV.",
+    "60 velas OHLC, indicadores multifactoriales, historial SQLite, cronología y CSV.",
     "Actualización en reposo con SHA-256 y reinicio supervisado; nunca durante contrato abierto.",
     "No hay garantías de rentabilidad, tasa de acierto ni latencia."
   ]
