@@ -448,6 +448,9 @@ const feedLabels={stopped:'Detenida',live:'Recibiendo precios',connecting:'Conec
 let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0,arbFetched=0;
 let liveTick=null,liveTickSocket=null,liveTickRetry=null,lastLiveChartAt=0,brokerSyncBusy=false,lastBrokerSyncAt=0;
 let demoOtherChart=null,demoOtherChartAt=0,demoOtherChartLoading=false;
+// Avoid overlapping status requests and stale snapshots.
+let demoLoadBusy=false,lastDemoLoadAttempt=0;
+const demoBurstActive=()=>Boolean(demoBurstRunning||demoBurstSettling||demoBalancedRunning||['PREPARING','BUYING','RECONCILING','REVIEW'].includes(demoCurrent?.demoBurst?.status));
 
 function paintLiveTick(){
  if($('provider').value!=='deriv'||!liveTick||
@@ -458,10 +461,11 @@ function paintLiveTick(){
   return;
  }
  $('quote').textContent=price(liveTick.quote);
- $('quoteTime').textContent=time(liveTick.epoch)+' · tick público directo · recibido hace '+
-   Math.max(0,Math.floor((Date.now()-liveTick.receivedAt)/1000))+' s';
- $('browser-tick-status').textContent='Fuente '+liveTick.symbol+': WebSocket público Deriv; actualiza en cada tick, '+
-  'no es saldo ni valor de contrato DEMO abierto.';
+ const marketAge=Math.max(0,Math.floor(Date.now()/1000)-liveTick.epoch);
+ const localAge=Math.max(0,Math.floor((Date.now()-liveTick.receivedAt)/1000));
+ $('quoteTime').textContent=time(liveTick.epoch)+' · antigüedad del mercado '+marketAge+' s · desde recepción '+localAge+' s';
+ $('browser-tick-status').textContent='Fuente '+liveTick.symbol+' · época '+liveTick.epoch+' · edad mercado '+marketAge+' s · edad local '+localAge+' s'+
+  (marketAge>3?' · AVISO: cotización retrasada':'')+'. No es saldo ni valor de contrato DEMO abierto.';
 }
 function stopLiveTicks(){
  if(liveTickRetry!==null){clearTimeout(liveTickRetry);liveTickRetry=null;}
@@ -511,7 +515,7 @@ function ensureLiveTicks(){
 }
 async function syncBrokerBalance(force=false){
  if(brokerSyncBusy||document.hidden||!demoCurrent?.connected)return false;
- if(!force&&Date.now()-lastBrokerSyncAt<20000)return false;
+ if(!force&&Date.now()-lastBrokerSyncAt<(demoBurstActive()?5000:20000))return false;
  brokerSyncBusy=true;lastBrokerSyncAt=Date.now();
  const label=$('official-demo-sync');
  try{
@@ -524,7 +528,7 @@ async function syncBrokerBalance(force=false){
     ||!Number.isFinite(result.account.balance))throw Error('DERIV_DEMO_BALANCE_INVALID');
   demoFetched=Date.now();renderDemo(result);
   label.textContent='Saldo oficial comprobado en Deriv a las '+date(result.account.checkedAt)+
-   ' · consulta periódica cada ~20 s mientras la pestaña esté visible. '+
+   ' · consulta periódica cada '+(demoBurstActive()?'~5':'~20')+' s mientras la pestaña esté visible. '+
    'El precio del índice cambia por ticks; el saldo cambia por movimientos de cuenta.';
   return true;
  }catch{
@@ -855,9 +859,9 @@ async function loadMarket(force=false){
 }
 async function refresh(){
   clearTimeout(timer);if(busy)return;if(document.hidden){timer=setTimeout(refresh,5000);return;}busy=true;
-  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500)}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();$('demo-connection').hidden=!state.serverManaged;if(state.serverManaged&&Date.now()-demoFetched>10000)await loadDemo();if(demoCurrent?.connected)void syncBrokerBalance();if(Date.now()-arbFetched>60000)await loadArbitrage();}
+  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500)}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();$('demo-connection').hidden=!state.serverManaged;if(state.serverManaged&&Date.now()-lastDemoLoadAttempt>(demoBurstActive()?2000:5000))await loadDemo();if(demoCurrent?.connected)void syncBrokerBalance();if(Date.now()-arbFetched>60000)await loadArbitrage();}
   catch{$('error').textContent='No se pudo actualizar. Los valores visibles pueden estar desactualizados.';chip('engine-status','Deriv · estado sin confirmar','offline');chip('chart-status','Sin actualización verificada','offline');$('paper-start').disabled=true;}
-  finally{busy=false;timer=setTimeout(refresh,5000);}
+  finally{busy=false;timer=setTimeout(refresh,demoBurstActive()?2000:5000);}
 }
 $('provider').onchange=async()=>{marketView=null;marketError='';marketFetched=0;render();await loadMarket(true);render();};$('window').onchange=drawCandles;
 for(const action of ['start','stop'])$('paper-'+action).onclick=async()=>{const out=$('paper-control-status');$('paper-start').disabled=true;$('paper-stop').disabled=true;try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();out.textContent=action==='start'?'Deriv: simulación iniciada.':'Deriv: simulación pausada.';await refresh();}catch{out.textContent='No se pudo confirmar el cambio. Comprueba el estado antes de reintentar.';}};
@@ -1274,7 +1278,10 @@ function renderDemo(data){
   $('demo-balance').textContent=data.account?'Saldo demo oficial: '+money(Math.round(data.account.balance*100))+' · '+data.account.label+' · Consultado '+date(data.account.checkedAt):'Saldo demo oficial: pendiente de conexión. Los USD 10 de arriba pertenecen a otra simulación.';
   if(!data.connected&&data.discovery){const d=data.discovery,migration={pending:'en curso',complete:'completa',failed:'fallida',not_applicable:'no aplica',unavailable:'no disponible',unknown:'sin confirmar',not_checked:'sin consultar'}[d.migration]||'sin confirmar';$('demo-feedback').textContent='La aplicación fue autorizada, pero la API no permitió verificar una cuenta demo activa en USD. Demo/USD activas informadas: '+d.activeDemoUsd+'. Migración de plataforma: '+migration+'.';}
 }
-async function loadDemo(){demoFetched=Date.now();try{const r=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(4500)});if(!r.ok)throw Error();renderDemo(await r.json());}catch{
+async function loadDemo(){
+ if(demoLoadBusy)return;
+ demoLoadBusy=true;lastDemoLoadAttempt=Date.now();
+ try{const r=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(4500),cache:'no-store'});if(!r.ok)throw Error();demoFetched=Date.now();renderDemo(await r.json());}catch{
   chip('demo-state','Estado demo sin confirmar','offline');$('deriv-refresh').disabled=true;$('deriv-quote').disabled=true;
   $('official-demo-balance').textContent='No verificado';
   $('official-demo-time').textContent='No usar como saldo vigente';
@@ -1282,7 +1289,8 @@ async function loadDemo(){demoFetched=Date.now();try{const r=await fetch('/api/d
   $('chart-demo-locked').textContent='Comprometido: sin verificar';
   $('chart-demo-pnl').textContent='P&L DEMO: sin datos fiables';
   $('chart-demo-last-trades').textContent='Historial DEMO del broker: sin verificar';
-}}
+ }finally{demoLoadBusy=false;}
+}
 
 async function loadMcpIntent(){
  if(mcpIntentBusy)return;
@@ -2164,6 +2172,11 @@ document.addEventListener('visibilitychange',()=>{
  if(document.hidden){stopLiveTicks();paintLiveTick();}
  else{ensureLiveTicks();lastBrokerSyncAt=0;void refresh();}
 });
+// A WebSocket may stall without closing: age and reconnect when ticks go stale.
+window.setInterval(()=>{if(!document.hidden){paintLiveTick();if(liveTick&&(Date.now()-liveTick.receivedAt>5000||Math.floor(Date.now()/1000)-liveTick.epoch>5)){
+ $('browser-tick-status').textContent='ALERTA: cotización con más de 5 s de antigüedad; no operar con esta lectura. Reconectando…';
+ if(liveTickSocket){try{liveTickSocket.close();}catch{}}
+ }}},1000);
 ensureLiveTicks();refresh();
 $('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
 </script></main></body></html>

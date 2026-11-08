@@ -1,6 +1,6 @@
 # Deriv IA Trader — laboratorio de datos y simulación
 
-**Versión 1.3 · 27/10/2026**
+**Versión vigente:** consultar [release.json](release.json) y el [historial de versiones](docs/HISTORIAL_VERSIONES.md). Cada publicación incrementa +0,1 automáticamente; las instrucciones permanentes para agentes están en [AGENTS.md](AGENTS.md).
 
 Panel web independiente de Fundación Ecopiensa Evolution para visualizar cotizaciones públicas y probar operaciones VIRTUALES.
 

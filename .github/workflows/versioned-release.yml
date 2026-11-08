@@ -110,6 +110,8 @@ jobs:
           VERSION=$(node -p "require('./release.json').version")
           cd cloudflare
           npx cf deploy --prebuilt --mode production --message "Deriv IA Trader v$VERSION · DEMO bajo autorización; compras desactivadas"
+      - name: Comprobar que GitHub Pages y Cloudflare sirven la MISMA nueva versión
+        run: node scripts/verify_published_release.mjs
       - name: Registrar las URLs de verificación
         run: |
           {
