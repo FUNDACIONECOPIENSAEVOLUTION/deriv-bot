@@ -97,6 +97,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.7 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:44:26.382Z (UTC).
+- **Commit de origen:** `dbdc538ba0a5`.
+- Asegurar totales visibles por tanda, desglose por mercado y límite de concentración en test de interfaz
+- Probar que CSV no atribuya pago efectivo US$0.66 a una pérdida DEMO de US$0.35
+
 ## v10.6 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:43:47.376Z (UTC).

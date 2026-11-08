@@ -1,11 +1,11 @@
 {
-  "version": "10.6",
-  "updatedAt": "2026-11-08T01:43:47.376Z",
-  "summary": "Guardar precio de señal recién actualizada para cada contrato y no el de escaneo anterior",
+  "version": "10.7",
+  "updatedAt": "2026-11-08T01:44:26.382Z",
+  "summary": "Asegurar totales visibles por tanda, desglose por mercado y límite de concentración en test de interfaz",
   "changes": [
-    "Guardar precio de señal recién actualizada para cada contrato y no el de escaneo anterior",
-    "Retornar último tick de la misma señal pública para comparar entrada real y evitar registrar cotización anterior"
+    "Asegurar totales visibles por tanda, desglose por mercado y límite de concentración en test de interfaz",
+    "Probar que CSV no atribuya pago efectivo US$0.66 a una pérdida DEMO de US$0.35"
   ],
-  "sourceCommit": "e054226c729deb75914e36cae04767aaeca8cda8",
+  "sourceCommit": "dbdc538ba0a508db0d9b07ff5c8c5e68846c419b",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
