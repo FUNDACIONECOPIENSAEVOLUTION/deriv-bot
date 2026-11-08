@@ -457,6 +457,7 @@ const feedLabels={stopped:'Detenida',live:'Recibiendo precios',connecting:'Conec
 let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0,arbFetched=0;
 let liveTick=null,liveTickSocket=null,liveTickRetry=null,lastLiveChartAt=0,brokerSyncBusy=false,lastBrokerSyncAt=0;
 let demoOtherChart=null,demoOtherChartAt=0,demoOtherChartLoading=false;
+let lastPaperStatusAttempt=0;
 // Avoid overlapping status requests and stale snapshots.
 let demoLoadBusy=false,lastDemoLoadAttempt=0;
 const demoBurstActive=()=>Boolean(demoBurstRunning||demoBurstSettling||demoBalancedRunning||['PREPARING','BUYING','RECONCILING','REVIEW'].includes(demoCurrent?.demoBurst?.status));
@@ -507,8 +508,20 @@ function ensureLiveTicks(){
    if(!Number.isFinite(q)||q<=0||!Number.isSafeInteger(t)||t<now-15||t>now+5)return;
    if(liveTick&&liveTick.symbol===symbol&&t<liveTick.epoch)return;
    liveTick={symbol,quote:q,epoch:t,receivedAt:Date.now()};
+   if(demoOtherChart?.symbol===symbol){
+    const candles=demoOtherChart.candles,last=candles.at(-1);
+    const minute=Math.floor(t/60)*60;
+    if(last&&last.time===minute){
+     last.high=Math.max(last.high,q);last.low=Math.min(last.low,q);
+     last.close=q;last.partial=true;
+    }else if(!last||minute>last.time){
+     if(last)last.partial=false;
+     candles.push({time:minute,open:q,high:q,low:q,close:q,partial:true});
+     if(candles.length>240)candles.shift();
+    }
+   }
    paintLiveTick();
-   if($('provider').value==='deriv'&&state&&Date.now()-lastLiveChartAt>=1000){
+   if($('provider').value==='deriv'&&Date.now()-lastLiveChartAt>=1000){
     lastLiveChartAt=Date.now();drawCandles();
    }
   }catch{}
@@ -524,7 +537,7 @@ function ensureLiveTicks(){
 }
 async function syncBrokerBalance(force=false){
  if(brokerSyncBusy||document.hidden||!demoCurrent?.connected)return false;
- if(!force&&Date.now()-lastBrokerSyncAt<(demoBurstActive()?5000:20000))return false;
+ if(!force&&Date.now()-lastBrokerSyncAt<(demoBurstActive()?5000:60000))return false;
  brokerSyncBusy=true;lastBrokerSyncAt=Date.now();
  const label=$('official-demo-sync');
  try{
@@ -537,7 +550,7 @@ async function syncBrokerBalance(force=false){
     ||!Number.isFinite(result.account.balance))throw Error('DERIV_DEMO_BALANCE_INVALID');
   demoFetched=Date.now();renderDemo(result);
   label.textContent='Saldo oficial comprobado en Deriv a las '+date(result.account.checkedAt)+
-   ' · consulta periódica cada '+(demoBurstActive()?'~5':'~20')+' s mientras la pestaña esté visible. '+
+   ' · consulta periódica cada '+(demoBurstActive()?'~5':'~60')+' s mientras la pestaña esté visible. '+
    'El precio del índice cambia por ticks; el saldo cambia por movimientos de cuenta.';
   return true;
  }catch{
@@ -548,7 +561,6 @@ async function syncBrokerBalance(force=false){
 }
 
 async function loadDemoSymbolCandles(symbol){
- if(symbol==='R_100')return;
  if(!demoScanSymbols.includes(symbol))throw Error('DERIV_CHART_SYMBOL_INVALID');
  if(demoOtherChartLoading)return;
  if(demoOtherChart?.symbol===symbol&&Date.now()-demoOtherChartAt<30000)return;
@@ -595,7 +607,7 @@ $('demo-chart-symbol').onchange=async()=>{
  const symbol=$('demo-chart-symbol').value;
  $('provider').value='deriv';
  stopLiveTicks();liveTick=null;
- if(symbol!=='R_100'){
+ {
   demoOtherChart=null;demoOtherChartAt=0;
   $('platform-note').textContent='Consultando historial de ticks públicos '+symbol+'…';
   try{await loadDemoSymbolCandles(symbol);}
@@ -614,8 +626,8 @@ function drawCandles(){
   const provider=$('provider').value,
     chartSymbol=$('demo-chart-symbol').value,
     view=provider==='deriv'
-      ?chartSymbol==='R_100'?state?.chart:
-       demoOtherChart?.symbol===chartSymbol?demoOtherChart:null
+      ?demoOtherChart?.symbol===chartSymbol?demoOtherChart:
+       chartSymbol==='R_100'?state?.chart:null
       :marketView;
   const bars=(view?.candles||[]).slice(-Number($('window').value)).map(b=>({...b}));
   // Client live price overlays ONLY the visible candle; it never modifies the
@@ -873,9 +885,9 @@ async function refresh(){
   finally{
    // The private DEMO connection must never depend on the PAPER endpoint.
    $('demo-connection').hidden=false;
-   if(!document.hidden&&Date.now()-lastDemoLoadAttempt>(demoBurstActive()?2000:5000))await loadDemo();
+   if(!document.hidden&&Date.now()-lastDemoLoadAttempt>(demoBurstActive()?2000:15000))await loadDemo();
    if(demoCurrent?.connected)void syncBrokerBalance();
-   busy=false;timer=setTimeout(refresh,demoBurstActive()?2000:5000);
+   busy=false;timer=setTimeout(refresh,demoBurstActive()?2000:15000);
   }
 }
 $('provider').onchange=async()=>{marketView=null;marketError='';marketFetched=0;render();await loadMarket(true);render();};$('window').onchange=drawCandles;
