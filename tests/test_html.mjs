@@ -30,7 +30,14 @@ for(const id of ['demo-apply-stake','demo-stake-selection-status','official-demo
 }
 assert.ok(panel.includes("ticks:symbol,subscribe:1"),'El índice elegido debe recibir ticks públicos en vivo');
 assert.ok(panel.includes('syncBrokerBalance()'),'El saldo oficial debe refrescarse automáticamente');
-assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<20000'),'La consulta de saldo debe ser acotada');
+assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<(demoBurstActive()?5000:20000)'),
+  'La sincronización de saldo debe estar acotada: 5 segundos en tanda y 20 en reposo');
+assert.ok(panel.includes('demoLoadBusy') && panel.includes('cache:\'no-store\''),
+  'El estado DEMO debe evitar consultas superpuestas y respuestas almacenadas');
+assert.ok(panel.includes('Date.now()-lastDemoLoadAttempt>(demoBurstActive()?2000:5000)'),
+  'El estado DEMO debe actualizarse cada 2 segundos en tanda y 5 en reposo');
+assert.ok(panel.includes('marketAge') && panel.includes('localAge'),
+  'El panel debe rastrear la antigüedad del tick en el mercado y en el navegador');
 assert.ok(panel.includes('demo-max-concurrent'), 'Se debe informar el límite configurable de contratos');
 assert.ok(panel.includes('n>10'), 'Las solicitudes de más de 10 contratos deben quedar bloqueadas');
 assert.ok(panel.includes('DEMO_MANUAL_STAKE_SET'), 'El importe elegido requiere validación del servidor');
