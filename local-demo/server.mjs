@@ -210,6 +210,7 @@ function publicSocket(){
    if(!parsed.valid){publicStats.diagnosticCode='HISTORIAL_INVALIDO';return;}
    const rows=parsed.rows;
    if(m.ticks.length===0)publicStats.historyLoaded++;
+   publicStats.diagnosticCode='HISTORIAL_RECIBIDO';
    // Conservar cualquier tick posterior recibido mientras llegaba el historial.
    const future=m.ticks.filter(x=>rows.length&&x.epoch>rows.at(-1).epoch);
    m.ticks=[...rows,...future].slice(-MAX_TICKS);
@@ -222,6 +223,7 @@ function publicSocket(){
    if(!tick){publicStats.diagnosticCode='TICK_INVALIDO';return;}
    const {symbol,price,epoch}=tick;
    publicStats.ticksReceived++;publicStats.lastTickAt=Date.now();
+   publicStats.diagnosticCode='TICKS_RECIBIDOS';
    const watchName=watchSymbols.get(symbol);
    if(watchName){Object.assign(watchlist.get(watchName),{quote:price,epoch});return;}
    const m=market.get(symbol);
