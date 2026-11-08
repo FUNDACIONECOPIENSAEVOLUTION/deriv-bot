@@ -36,6 +36,16 @@ it('never treats a positive result as a loss',()=>{
   pnl_cents:80,payout_cents:180}]);
  expect(csv).toContain('"NO_ES_PERDIDA"');
 });
+it('separates broker-reported payout from amount derived from settled net profit',()=>{
+ const csv=demoTradesCsv([{...row,buy_cents:35,payout_cents:66,pnl_cents:-35}]);
+ const header=csv.split('\r\n')[0];
+ expect(header).toContain('"pago_reportado_por_deriv_usd"');
+ expect(header).toContain('"pago_derivado_de_pnl_usd"');
+ const detail=csv.split('\r\n')[1];
+ expect(detail).toContain('"0.35","0.66","0.00","-0.35"');
+ const winning=demoTradesCsv([{...row,buy_cents:35,payout_cents:66,pnl_cents:31}]);
+ expect(winning).toContain('"0.35","0.66","0.66","0.31"');
+});
 it('neutralizes formula-like text and limits oversized exports',()=>{
  const csv=demoTradesCsv([{...row,decision_json:JSON.stringify({
    runId:'=UNSAFE()',strategy:'@danger',reason:'TREND_AND_MOMENTUM'
