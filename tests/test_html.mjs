@@ -28,7 +28,7 @@ assert.ok(panel.includes('fetchFreshBrowserBotSignal()'), 'El lote requiere señ
 for(const id of ['demo-apply-stake','demo-stake-selection-status','official-demo-sync','browser-tick-status']){
  assert.ok(panel.includes('id="'+id+'"'),'Falta control de actualización o apuesta DEMO '+id);
 }
-assert.ok(panel.includes("ticks:'R_100',subscribe:1"),'El precio público debe actualizarse con cada tick');
+assert.ok(panel.includes("ticks:symbol,subscribe:1"),'El índice elegido debe recibir ticks públicos en vivo');
 assert.ok(panel.includes('syncBrokerBalance()'),'El saldo oficial debe refrescarse automáticamente');
 assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<20000'),'La consulta de saldo debe ser acotada');
 assert.ok(panel.includes('demo-max-concurrent'), 'Se debe informar el límite configurable de contratos');
@@ -56,6 +56,11 @@ assert.ok(panel.includes("signal:'AUTO',stakeCents"),'La tanda debe aceptar señ
 assert.ok(panel.includes("selected.direction")&&panel.includes("selected.symbol"),
   'La decisión CALL/PUT y el símbolo deben elegirse por contrato');
 assert.ok(panel.includes('demo-burst-stake'),'Las tandas deben tener importe elegido por contrato');
+assert.ok(panel.includes('demo-chart-symbol')&&panel.includes('loadDemoSymbolCandles'),
+  'El gráfico debe mostrar los ticks del símbolo de la operación');
+assert.ok(panel.includes("trade.symbol||'R_100'"),'Marcas de contratos deben respetar su mercado');
+assert.ok(panel.includes("demoOtherChart?.symbol===chartSymbol"),'Nunca dibujar velas de un índice bajo otro');
+
 assert.ok(panel.includes('scoreDemoMarketSignal'),'No presentar score SMA/RSI como probabilidad de ganancia');
 
 assert.ok(panel.includes("c.contractId??'SIN CONFIRMAR'"), 'Mostrar los identificadores por contrato devueltos por Deriv');
