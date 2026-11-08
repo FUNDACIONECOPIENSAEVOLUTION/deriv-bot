@@ -227,6 +227,7 @@ export default {
       const classify=(error:unknown):string=>{
         const message=error instanceof Error?error.message:'';
         if(message==='EXPERIMENT_CONFIG_CHANGED')return 'PAPER_CONFIG_MISMATCH';
+        if(message==='DEMO_LEDGER_UNAVAILABLE')return 'DEMO_LEDGER_UNAVAILABLE';
         if(/no such table|no such column|SQLITE|D1_ERROR|database is locked/i.test(message))
           return 'DO_DATABASE_ERROR';
         if(/exceeded|quota|too many|rate limit/i.test(message))return 'DO_QUOTA';
@@ -236,8 +237,9 @@ export default {
           return 'DO_BINDING_ERROR';
         return 'DO_UNKNOWN_ERROR';
       };
+      type ProbeResult={state:'ready'|'unavailable';errorCode:string|null};
       const probe=async(component:'PAPER'|'DERIV_DEMO',
-        check:()=>Promise<unknown>)=>{
+        check:()=>Promise<unknown>):Promise<ProbeResult>=>{
         try{await check();return {state:'ready',errorCode:null};}
         catch(error){
           const errorCode=classify(error);
@@ -249,9 +251,12 @@ export default {
         probe('PAPER',()=>env.PAPER.getByName(EXPERIMENT).status()),
         probe('DERIV_DEMO',()=>env.DERIV_DEMO.getByName('owner-deriv-demo-v1').storageHealth())
       ]);
-      let demoReport={state:'unavailable',errorCode:'DO_STORAGE_UNAVAILABLE'};
+      let demoReport:ProbeResult={state:'unavailable',errorCode:'DO_STORAGE_UNAVAILABLE'};
       if(demoStorage.state==='ready'){
-        const report=await probe('DERIV_DEMO',()=>env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status());
+        const report=await probe('DERIV_DEMO',async()=>{
+          const current=await env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status();
+          if(current.ledgerAvailable===false)throw Error('DEMO_LEDGER_UNAVAILABLE');
+        });
         demoReport=report;
       }
       const demoReady=demoStorage.state==='ready'&&demoReport.state==='ready';
