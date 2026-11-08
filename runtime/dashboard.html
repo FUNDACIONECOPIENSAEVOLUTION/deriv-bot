@@ -1622,126 +1622,157 @@ $('demo-burst-reconcile').onclick=async()=>{
 $('demo-burst-start').onclick=async()=>{
  if(demoBurstRunning||demoBurstSettling||demoBalancedRunning)return;
  const count=Number($('demo-burst-count').value);
- const limit=demoCurrent?.demoBurstPlan?.maxAllowedNow??0;
- if(!Number.isInteger(count)||count<1||count>10||count>limit){
-  $('demo-burst-live').textContent='Tanda no autorizada. Solo '+limit+
-    ' compras disponibles antes del corte de diez. No se envió ninguna orden.';
-  return;
+ const stakeCents=Number($('demo-burst-stake').value);
+ const options=demoCurrent?.demoBurstPlans||[];
+ const limit=options.find(p=>p.stakeCents===stakeCents)?.maxAllowedNow??0;
+ const output=$('demo-burst-live');
+ if(![35,50,75,90,100].includes(stakeCents)||!Number.isInteger(count)||
+   count<1||count>10||count>limit){
+  output.textContent='Tanda no autorizada: stake o cupos fuera de los límites. '+
+    'Cupos disponibles '+limit+'. Ninguna compra enviada.';return;
+ }
+ if(!(await syncBrokerBalance(true))){
+  output.textContent='No hay saldo DEMO actualizado: no se envían compras.';return;
+ }
+ let candidates;
+ try{candidates=await scanDemoMarkets();}
+ catch(error){
+  output.textContent='No se pudo analizar los índices: '+
+    (error instanceof Error?error.message:'ERROR')+'. Ninguna compra enviada.';return;
+ }
+ if(!candidates.length){
+  output.textContent='ESPERAR: no se encontró señal SMA/RSI vigente y válida en los índices permitidos. '+
+    'No se compró nada.';return;
+ }
+ const approved=window.confirm(
+  '¿AUTORIZAS HASTA '+count+' COMPRAS DISTINTAS DE DERIV DEMO?\n\n'+
+  'Apuesta individual: '+money(stakeCents)+' virtuales.\n'+
+  'Exposición bruta máxima de esta autorización: '+money(count*stakeCents)+
+  ', sin superar US$10 de la tanda.\n'+
+  'El bot escogerá independientemente el mercado y CALL/PUT para CADA contrato. '+
+  'Si no hay señal válida o pago aceptable, se detendrá sin completar la cantidad.\n'+
+  'El score técnico NO es una probabilidad de éxito ni garantiza ganancia. '+
+  'Pueden perderse TODAS las apuestas virtuales.\n'+
+  'Nunca cuenta REAL. Sin reintentos de compras con confirmación incierta.\n\n'+
+  '¿Continuar con la tanda DEMO?'
+ );
+ if(!approved){output.textContent='Tanda no autorizada: cero compras.';return;}
+ // Recheck market after human confirmation; prices may have changed.
+ try{candidates=await scanDemoMarkets();}
+ catch{output.textContent='Mercado sin actualización posterior a autorización. No se compró.';return;}
+ if(!candidates.length){
+  output.textContent='ESPERAR tras confirmar: las señales expiraron. No se compró.';return;
  }
  demoBurstRunning=true;demoBurstStopRequested=false;
  $('demo-burst-start').disabled=true;$('demo-burst-stop').disabled=false;
- let ws=null,nonce=null,confirmed=0;
- const status=$('demo-burst-live');
+ let ws=null,nonce=null,confirmed=0,lastPair='',samePairCount=0;
  try{
-  if(!(await syncBrokerBalance(true)))throw Error('DEMO_BALANCE_NOT_REFRESHED');
-  // The algorithm, not the user, must choose CALL/PUT/HOLD.
-  const signal=await updateBrowserBotSignal();
-  if(!signal||!signal.valid||!['UP','DOWN'].includes(signal.direction)||
-     Date.now()-signal.at*1000>9000)
-    throw Error('DEMO_BOT_SIGNAL_HOLD_OR_STALE');
-  const direction=signal.direction;
-  const freshPlan=demoCurrent?.demoBurstPlan||{};
-  if(freshPlan.maxAllowedNow<count||
-     (demoCurrent?.tradeReport?.unknownCount||0)>0||
-     (demoCurrent?.tradeReport?.openCount||0)>0)
-    throw Error('DEMO_BURST_BUDGET_OR_POSITIONS_CHANGED');
-  const decision=direction==='UP'?'CALL · ALZA':'PUT · BAJA';
-  const approved=window.confirm(
-    '¿CONFIRMAS '+count+' COMPRAS DISTINTAS en DERIV DEMO?\n\n'+
-    'Decisión del bot: '+decision+' · R_100 · cinco ticks.\n'+
-    'Apuesta por contrato: US$1 virtual.\n'+
-    'Apuesta TOTAL máxima: '+money(count*100)+' (nunca más de US$10 por tanda).\n'+
-    'Cada compra tendrá un contrato individual y puede ganar o perder.\n'+
-    'Las órdenes se enviarán una por una sin esperar a que termine cada contrato; '+
-    'algunos podrían liquidarse antes de completar la tanda.\n'+
-    'No se usarán fondos reales y no se reintentará una orden incierta.\n'+
-    '¿Autorizas estas '+count+' compras DEMO?'
-  );
-  if(!approved){status.textContent='No se autorizaron compras DEMO.';return;}
-  // A human confirmation can take longer than the ten-second quote window.
-  // Refresh the bot signal but NEVER silently change the approved direction.
-  const renewed=await updateBrowserBotSignal();
-  if(!renewed||!renewed.valid||renewed.direction!==direction||
-      Date.now()-renewed.at*1000>9000)
-    throw Error('DEMO_BURST_APPROVED_DIRECTION_NO_LONGER_CURRENT');
-  status.textContent='Solicitando sesión DEMO autenticada para '+count+
-    ' órdenes independientes. Todavía no se ha comprado ningún contrato.';
-  const session=await demoBurstPost('begin',{count,signal:direction});
-  if(session.mode!=='DEMO_BROWSER_BURST'||session.accountType!=='demo'||
-    session.count!==count||session.stakeCents!==100||session.autoRetry!==false)
+  const batch=await demoBurstPost('begin',{count,signal:'AUTO',stakeCents});
+  if(batch.mode!=='DEMO_BROWSER_BURST'||batch.accountType!=='demo'||
+     batch.count!==count||batch.stakeCents!==stakeCents||
+     batch.signal!=='AUTO'||batch.autoRetry!==false)
     throw Error('DEMO_BURST_SESSION_INVALID');
-  nonce=session.nonce;
-  ws=await browserSocket(session.wsUrl,'demo');
+  nonce=batch.nonce;
+  ws=await browserSocket(batch.wsUrl,'demo');
   for(let i=0;i<count;i++){
-   if(demoBurstStopRequested||document.hidden){
-    status.textContent='Pausado antes de la orden '+(i+1)+'. '+confirmed+
-      ' contratos confirmados; no se enviarán compras adicionales.';
+   if(demoBurstStopRequested||document.hidden)break;
+   output.textContent='Evaluando mercado, señal y pago para la compra '+(i+1)+
+     '/'+count+'. Confirmadas: '+confirmed+'.';
+   let ranked;
+   try{ranked=await scanDemoMarkets();}
+   catch{ranked=[];}
+   if(!ranked.length){
+    output.textContent='ESPERAR: ninguna señal válida para el contrato '+(i+1)+
+      '. Se mantiene el saldo y no se fuerza la compra.';break;
+   }
+   let selected=null,quote=null;
+   for(const candidate of ranked){
+    if(demoBurstStopRequested||document.hidden)break;
+    const key=candidate.symbol+':'+candidate.direction;
+    if(key===lastPair&&samePairCount>=3)continue;
+    let fresh;
+    try{fresh=await fetchFreshBrowserBotSignal(candidate.symbol);}
+    catch{continue;}
+    if(!fresh||fresh.valid!==true||fresh.direction!==candidate.direction||
+       fresh.quoteAgeSeconds>5||!['UP','DOWN'].includes(fresh.direction))continue;
+    if(scoreDemoMarketSignal(fresh)<35)continue;
+    let proposed;
+    try{proposed=await brokerMessage(ws,
+      proposalRequest(fresh.direction,stakeCents,candidate.symbol),8500);}
+    catch{continue;}
+    const p=proposed.proposal||{},ask=Number(p.ask_price),
+      payout=Number(p.payout);
+    if(proposed.msg_type!=='proposal'||proposed.error||proposed.errors||
+       typeof p.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(p.id)||
+       !Number.isFinite(ask)||Math.abs(ask-stakeCents/100)>0.000001||
+       !Number.isFinite(payout)||payout<ask||payout/ask<1.65)continue;
+    // Payout ratio is quoted; true win probability is UNKNOWN.
+    selected={symbol:candidate.symbol,direction:fresh.direction,
+      lastPrice:candidate.lastPrice,indicator:fresh.indicator,
+      quoteAgeSeconds:fresh.quoteAgeSeconds,reason:fresh.reason,
+      score:scoreDemoMarketSignal(fresh),breakEvenWinPct:Math.round(10000*ask/payout)/100};
+    quote=proposed;
     break;
    }
-   status.textContent='Recalculando SMA/RSI antes de la compra '+(i+1)+
-      '/'+count+'. Confirmadas: '+confirmed+'.';
-   // Every contract requires fresh public ticks, not a recycled first signal.
-   const currentSignal=await fetchFreshBrowserBotSignal();
-   if(!currentSignal||currentSignal.valid!==true||
-      currentSignal.direction!==direction||!Number.isInteger(currentSignal.at)||
-      Date.now()-currentSignal.at*1000>8000||
-      currentSignal.quoteAgeSeconds>5)
-     throw Error('DEMO_BURST_SIGNAL_CHANGED_OR_STALE_NO_NEW_BUYS');
-   const eachEvidence=currentSignal.indicator||{};
-   status.textContent='Señal actual '+decision+' · compra '+(i+1)+'/'+count+
-     ' · RSI '+(eachEvidence.rsi??'—')+' · US$1 virtual · confirmadas '+confirmed+'.';
-   const quote=await brokerMessage(ws,proposalRequest(direction,100),8500);
-   const p=quote.proposal||{},ask=Number(p.ask_price),payout=Number(p.payout);
-   if(quote.msg_type!=='proposal'||quote.error||quote.errors||
-      typeof p.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(p.id)||
-      !Number.isFinite(ask)||Math.abs(ask-1)>0.000001||
-      !Number.isFinite(payout)||payout<ask)
-    throw Error('DEMO_BURST_PROPOSAL_REJECTED_STOP');
-   // Durable UNKNOWN reservation commits before any buy message leaves browser.
-   const reservation=await demoBurstPost('reserve',{
-    nonce,proposalId:p.id,askPrice:ask,payout,
-    evidence:{fast:eachEvidence.fast,slow:eachEvidence.slow,rsi:eachEvidence.rsi,
-     volatility:eachEvidence.volatility,
-     entryQuote:liveTick?.quote??null,
-     quoteAgeSeconds:currentSignal.quoteAgeSeconds,reason:currentSignal.reason}
+   if(!selected||!quote){
+    output.textContent='ESPERAR: ninguna cotización cumplió señal, pago mínimo y '+
+      'límite de concentración. Confirmadas: '+confirmed+'.';break;
+   }
+   const p=quote.proposal,e=selected.indicator||{};
+   output.textContent='Bot eligió '+selected.symbol+' '+(selected.direction==='UP'?'CALL':'PUT')+
+     ' · índice técnico '+selected.score+'/100 (no probabilidad) · '+
+     'acierto necesario para equilibrar el pago: '+selected.breakEvenWinPct+
+     '% (no hay estimación fiable de acierto real). Reservando '+(i+1)+'/'+count+'.';
+   // Durable UNKNOWN row is written BEFORE a single broker buy is transmitted.
+   const reserved=await demoBurstPost('reserve',{
+    nonce,direction:selected.direction,symbol:selected.symbol,
+    proposalId:p.id,askPrice:Number(p.ask_price),payout:Number(p.payout),
+    evidence:{fast:e.fast,slow:e.slow,rsi:e.rsi,volatility:e.volatility,
+      entryQuote:selected.lastPrice,quoteAgeSeconds:selected.quoteAgeSeconds,
+      reason:selected.reason}
    });
-   if(reservation.mode!=='DEMO_BURST_RESERVED'||
-      reservation.accountType!=='demo'||
-      !Number.isSafeInteger(reservation.id)||
-      reservation.request?.price!==1||
-      typeof reservation.request?.buy!=='string')
+   if(reserved.mode!=='DEMO_BURST_RESERVED'||reserved.accountType!=='demo'||
+      reserved.chosenSymbol!==selected.symbol||
+      reserved.chosenDirection!==selected.direction||
+      !Number.isSafeInteger(reserved.id)||
+      Math.abs(reserved.request?.price-stakeCents/100)>0.000001||
+      typeof reserved.request?.buy!=='string')
     throw Error('DEMO_BURST_RESERVATION_INVALID');
-   // EXACTLY ONE broker buy for THIS reservation. Never retry a missing ACK.
-   const brokerAck=await brokerMessage(ws,reservation.request,10000);
-   const result=await demoBurstPost('ack',{
-     nonce,id:reservation.id,response:brokerAck
+   const brokerAck=await brokerMessage(ws,reserved.request,10000);
+   const registered=await demoBurstPost('ack',{
+     nonce,id:reserved.id,response:brokerAck
    });
-   if(result.mode!=='DEMO_BURST_ACK'||result.accepted!==true||
-      !Number.isSafeInteger(result.contractId))
-    throw Error('DEMO_BURST_BUY_REJECTED_STOP');
+   if(registered.mode!=='DEMO_BURST_ACK'||registered.accepted!==true||
+      !Number.isSafeInteger(registered.contractId))
+     throw Error('DEMO_BURST_BUY_REJECTED_STOP');
    confirmed++;
-   status.textContent='Compra '+confirmed+'/'+count+' confirmada por Deriv. '+
-      'Contrato '+result.contractId+' · compra virtual '+money(100)+
-      ' · compromiso confirmado del lote '+money(confirmed*100)+
-      '. Actualizando saldo oficial sin esperar la liquidación.';
-   // Refresh immediately on every accepted broker buy, rather than only on settlement.
+   const pair=selected.symbol+':'+selected.direction;
+   samePairCount=pair===lastPair?samePairCount+1:1;
+   lastPair=pair;
+   output.textContent=confirmed+'/'+count+' compras DEMO confirmadas. '+
+      'Último contrato '+registered.contractId+' · '+selected.symbol+' '+
+      (selected.direction==='UP'?'CALL':'PUT')+' · apuesta '+money(stakeCents)+
+      ' · apuestas confirmadas en esta tanda '+money(confirmed*stakeCents)+
+      '. Consultando saldo oficial sin esperar el vencimiento.';
    void syncBrokerBalance(true);
    await demoBurstCurrent();
   }
   if(demoBurstStopRequested||confirmed<count){
-    await demoBurstPost('halt',{});
+   await demoBurstPost('halt',{});
   }
   if(ws&&confirmed>0){
-    const after=await settleBurstKnownContracts(ws,nonce);
-    status.textContent='Compra DEMO terminada: '+burstSummary(after)+
-      (after.opened>0?' · contratos abiertos pendientes de liquidar.':'')+
-      (after.uncertain?' · al menos una orden sin confirmación; no volver a comprar.':'')+
-      '. Consulta la lista por número de contrato.';
-  }else if(confirmed===0)status.textContent='No se confirmó ninguna compra DEMO.';
+   const after=await settleBurstKnownContracts(ws,nonce);
+   output.textContent='Tanda DEMO · '+burstSummary(after)+
+     (after.opened>0?' · contratos sin liquidación comprobada.':'')+
+     (after.uncertain?' · posible compra sin confirmación: NO repetir.':'')+
+     '. Ninguna de las señales garantiza ganancias.';
+  }else if(confirmed===0){
+   output.textContent='Sin compras confirmadas. El bot decidió ESPERAR o no hubo propuestas aceptables.';
+  }
  }catch(error){
-  status.textContent='DETENIDO: '+(error instanceof Error?error.message:'DEMO_BURST_UNKNOWN_ERROR')+
-   '. Confirmaciones recibidas: '+confirmed+
-   '. Si falta un acuse, NO repitas órdenes: consulta el historial de contratos.';
+  output.textContent='Tanda detenida: '+(error instanceof Error?error.message:'ERROR')+
+    '. Compras confirmadas: '+confirmed+
+    '. Comprueba el historial antes de repetir; una aceptación incierta nunca se reintenta.';
   try{await demoBurstPost('halt',{});}catch{}
   try{await demoBurstCurrent();}catch{}
  }finally{
