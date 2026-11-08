@@ -62,6 +62,21 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.2 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:09:20.667Z (UTC).
+- **Commit de origen:** `fb808eb14d1b`.
+- Esperar RPC async del Durable Object antes de analizar señal MCP y compilar TS
+- Prohibir cola MCP de compra DEMO sin señal fresca o dirección opuesta al bot
+- Probar protocolo MCP, solicitudes DEMO sin compras, señales HOLD y rechazo de funciones reales
+- No permitir reintentos MCP después de reclamar orden con posible compra DEMO pendiente
+- Alinear handlers MCP síncronos de DurableObject con firmas Promise del protocolo
+- Conectar cola MCP del Worker al botón de compra DEMO del navegador con consentimiento y liquidación
+- Añadir panel de aprobación explícita para solicitudes MCP de una compra DEMO
+- Caducar órdenes MCP DEMO tras 45 segundos para evitar señales obsoletas
+- Integrar gateway MCP privado en Cloudflare y comandos DEMO pendientes de aprobación por navegador
+
 ## v7.1 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:06:19.073Z (UTC).
