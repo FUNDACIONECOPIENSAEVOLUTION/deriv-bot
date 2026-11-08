@@ -873,7 +873,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const known=this.demoBurstStatus();
     return {mode:'DEMO_BURST_SETTLEMENT',accountType:'demo',
       wsUrl:url,nonce:b.nonce,runId:b.id,noOrders:true,
-      contracts:known.contracts.filter(t=>t.state==='OPEN'&&t.contractId)};
+      contracts:(known.contracts||[]).filter(t=>t.state==='OPEN'&&t.contractId)};
   }
   settleDemoBurst(input:{nonce:string;id:number;response:unknown}){
     const b=this.burstState();
