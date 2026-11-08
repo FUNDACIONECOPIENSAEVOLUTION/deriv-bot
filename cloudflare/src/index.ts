@@ -286,7 +286,7 @@ export default {
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback','/api/deriv/demo/mcp-intent'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal','/api/deriv/demo/manual-stake'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -296,6 +296,18 @@ export default {
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
         if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
+        if(url.pathname==='/api/deriv/demo/manual-stake'&&request.method==='POST'){
+          const raw=await request.text();
+          if(raw.length>100)return json({code:'DEMO_STAKE_REQUEST_TOO_LARGE'},413);
+          let value:unknown;
+          try{value=JSON.parse(raw);}catch{return json({code:'DEMO_STAKE_REQUEST_INVALID'},400);}
+          const n=value&&typeof value==='object'&&!Array.isArray(value)
+            ?(value as {stakeCents?:unknown}).stakeCents:null;
+          if(typeof n!=='number'||!Number.isSafeInteger(n)
+            ||!DEMO_STAKES_CENTS.some(x=>x===n))
+            return json({code:'DEMO_STAKE_NOT_ALLOWED'},400);
+          return json(await demo.setNextManualStakeCents(n));
+        }
         if(url.pathname==='/api/deriv/demo/signal'&&request.method==='POST'){
           const raw=await request.text();
           if(raw.length>24000)return json({code:'DEMO_BROWSER_PRICES_TOO_LARGE'},413);
