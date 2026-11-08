@@ -66,6 +66,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.6 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:12:43.459Z (UTC).
+- **Commit de origen:** `ed33c6682566`.
+- Verificar análisis CALL/PUT por navegador y que MCP no se abre sin secreto ni autenticación
+
 ## v7.5 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:12:04.865Z (UTC).

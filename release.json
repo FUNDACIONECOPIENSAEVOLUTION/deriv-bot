@@ -1,11 +1,10 @@
 {
-  "version": "7.5",
-  "updatedAt": "2026-11-08T00:12:04.865Z",
-  "summary": "Implementar decisión CALL/PUT/ESPERAR con ticks Deriv en navegador y una compra DEMO explícitamente autorizada",
+  "version": "7.6",
+  "updatedAt": "2026-11-08T00:12:43.459Z",
+  "summary": "Verificar análisis CALL/PUT por navegador y que MCP no se abre sin secreto ni autenticación",
   "changes": [
-    "Implementar decisión CALL/PUT/ESPERAR con ticks Deriv en navegador y una compra DEMO explícitamente autorizada",
-    "Incorporar botón de análisis CALL/PUT y compra DEMO autorizada decidida por el bot"
+    "Verificar análisis CALL/PUT por navegador y que MCP no se abre sin secreto ni autenticación"
   ],
-  "sourceCommit": "00c288708f584bf1d5f1780b72d4964fa5b4b646",
+  "sourceCommit": "ed33c66825666944a8088209f0f700bb572201d0",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
