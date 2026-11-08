@@ -8,6 +8,7 @@ import { PublicSocket } from './public-socket';
 import { DEMO_STAKES_CENTS } from './demo-risk-policy';
 import { checkPublicContractCompatibility } from './deriv-contracts';
 import { handleMcpRequest, type McpSignal } from './mcp-gateway';
+import {DEMO_SUPPORTED_SYMBOLS} from './demo-symbols';
 import { readPublicArbitrageSnapshot } from '../../runtime/cross-exchange.mjs';
 export { DerivDemoConnection } from './deriv-demo';
 
@@ -316,9 +317,13 @@ export default {
           const d=parsed as Record<string,unknown>,action=url.pathname.split('/').at(-1);
           if(action==='begin'){
             if(typeof d.count!=='number'||!Number.isSafeInteger(d.count)
-              ||d.count<1||d.count>10||(d.signal!=='UP'&&d.signal!=='DOWN'))
+              ||d.count<1||d.count>10||!['UP','DOWN','AUTO'].includes(String(d.signal))
+              ||typeof d.stakeCents!=='number'||!DEMO_STAKES_CENTS.some(x=>x===d.stakeCents))
               return json({code:'DEMO_BURST_REQUEST_INVALID'},400);
-            return json(await demo.beginDemoBurst({count:d.count,signal:d.signal}));
+            return json(await demo.beginDemoBurst({
+              count:d.count,signal:d.signal as 'UP'|'DOWN'|'AUTO',
+              stakeCents:d.stakeCents
+            }));
           }
           if(action==='halt')return json(await demo.haltDemoBurst());
           if(action==='reconcile')return json(await demo.beginDemoBurstSettlement());
@@ -336,6 +341,8 @@ export default {
               ?e[key] as number:null;
             return json(await demo.reserveDemoBurst({
               nonce,proposalId:d.proposalId,askPrice:d.askPrice,payout:d.payout,
+              direction:d.direction==='UP'||d.direction==='DOWN'?d.direction:undefined,
+              symbol:DEMO_SUPPORTED_SYMBOLS.find(x=>x===d.symbol),
               evidence:{fast:num('fast'),slow:num('slow'),rsi:num('rsi'),
                 volatility:num('volatility'),entryQuote:num('entryQuote'),
                 quoteAgeSeconds:num('quoteAgeSeconds'),
