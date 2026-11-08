@@ -49,12 +49,24 @@
 <div class="tools">
   <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
   <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
-  <label>Contratos simultáneos solicitados <input id="demo-max-concurrent" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" style="width:92px"></label><small>Admite escribir 1 a 100 para planificación. Límite aprobado del servidor: 10; compras por navegador: 1 cada vez. Las cantidades 11–100 permanecen bloqueadas hasta validar concurrencia y riesgo.</small>
+  <label>Máximo paralelo (automatización anterior) <input id="demo-max-concurrent" type="number" min="1" max="10" step="1" value="10" inputmode="numeric" style="width:92px"></label><small>Máximo permitido 10. Para enviar N órdenes DEMO reales ahora usa «Tanda DEMO»; este control antiguo por sí solo no compra contratos.</small>
   <button id="demo-auto-start" disabled>Activar evaluación automática DEMO</button>
   <button id="demo-auto-stop" disabled>Pausar evaluación automática</button>
 </div>
 <div class="divider"></div>
-<h3>Ensayo controlado · 10 contratos DEMO balanceados</h3>
+<h3>Tanda DEMO · compras independientes, hasta 10 contratos</h3>
+<p class="note">Una tanda de hasta diez compras auténticas en cuenta DEMO, cada una por US$1 virtual, R_100, duración 5 ticks. Presupuesto bruto máximo US$10 por tanda. El bot analiza CALL / PUT / ESPERAR y, si hay señal vigente, la conserva para esta tanda. NO es una compra de US$10 ni una simulación PAPER. Solo cuentan las compras cuyo contrato haya sido confirmado por Deriv. Si ya existen operaciones en la tanda, se respeta el presupuesto y los cupos restantes.</p>
+<div class="tools">
+ <label>Compras DEMO a solicitar <input id="demo-burst-count" type="number" min="1" max="10" step="1" value="10" inputmode="numeric" style="width:82px"></label>
+ <button id="demo-burst-start" disabled>Bot decide y compra hasta 10 contratos DEMO</button>
+ <button id="demo-burst-stop" disabled>Detener siguientes compras</button>
+ <button id="demo-burst-reconcile" disabled>Verificar liquidaciones de la tanda</button>
+</div>
+<p id="demo-burst-plan" class="note" role="status">Tanda no preparada. Se comprobarán la cantidad disponible y los US$10 de límite.</p>
+<p id="demo-burst-live" class="note" role="status">Órdenes confirmadas: 0. Ninguna compra se genera al cargar el panel.</p>
+<div class="table-scroll"><table><thead><tr><th>Contrato DEMO confirmado</th><th>Dirección</th><th>Importe</th><th>Estado</th><th>Resultado neto</th></tr></thead><tbody id="demo-burst-rows"></tbody></table></div>
+<div class="divider"></div>
+<h3>Ensayo secuencial comparativo · 5 CALL / 5 PUT</h3>
 <p class="note">Cinco CALL y cinco PUT, alternados, de 5 ticks, uno tras otro. Máximo US$10 de apuestas virtuales en esta prueba. Detener ante 3 pérdidas consecutivas, resultado acumulado de -US$3, un contrato sin confirmar, falta de saldo verificado o si se oculta la pestaña. Requiere confirmación expresa y mantener abierto este navegador. No demuestra ventaja predictiva ni activa operaciones reales.</p>
 <div class="tools">
   <button id="demo-balanced-start" disabled>Iniciar prueba 10 DEMO · 5 CALL / 5 PUT</button>
