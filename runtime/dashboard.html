@@ -461,10 +461,11 @@ function paintLiveTick(){
   return;
  }
  $('quote').textContent=price(liveTick.quote);
- $('quoteTime').textContent=time(liveTick.epoch)+' · tick público directo · recibido hace '+
-   Math.max(0,Math.floor((Date.now()-liveTick.receivedAt)/1000))+' s';
- $('browser-tick-status').textContent='Fuente '+liveTick.symbol+': WebSocket público Deriv; actualiza en cada tick, '+
-  'no es saldo ni valor de contrato DEMO abierto.';
+ const marketAge=Math.max(0,Math.floor(Date.now()/1000)-liveTick.epoch);
+ const localAge=Math.max(0,Math.floor((Date.now()-liveTick.receivedAt)/1000));
+ $('quoteTime').textContent=time(liveTick.epoch)+' · antigüedad del mercado '+marketAge+' s · desde recepción '+localAge+' s';
+ $('browser-tick-status').textContent='Fuente '+liveTick.symbol+' · época '+liveTick.epoch+' · edad mercado '+marketAge+' s · edad local '+localAge+' s'+
+  (marketAge>3?' · AVISO: cotización retrasada':'')+'. No es saldo ni valor de contrato DEMO abierto.';
 }
 function stopLiveTicks(){
  if(liveTickRetry!==null){clearTimeout(liveTickRetry);liveTickRetry=null;}
@@ -2172,8 +2173,8 @@ document.addEventListener('visibilitychange',()=>{
  else{ensureLiveTicks();lastBrokerSyncAt=0;void refresh();}
 });
 // A WebSocket may stall without closing: age and reconnect when ticks go stale.
-window.setInterval(()=>{if(!document.hidden){paintLiveTick();if(liveTick&&Date.now()-liveTick.receivedAt>5000){
- $('browser-tick-status').textContent='ALERTA: sin ticks nuevos por más de 5 s; no operar con esta lectura. Reconectando…';
+window.setInterval(()=>{if(!document.hidden){paintLiveTick();if(liveTick&&(Date.now()-liveTick.receivedAt>5000||Math.floor(Date.now()/1000)-liveTick.epoch>5)){
+ $('browser-tick-status').textContent='ALERTA: cotización con más de 5 s de antigüedad; no operar con esta lectura. Reconectando…';
  if(liveTickSocket){try{liveTickSocket.close();}catch{}}
  }}},1000);
 ensureLiveTicks();refresh();
