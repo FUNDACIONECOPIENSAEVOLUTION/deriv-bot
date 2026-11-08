@@ -1,12 +1,11 @@
 {
-  "version": "6.8",
-  "updatedAt": "2026-11-08T00:00:39.362Z",
-  "summary": "Documentar diez compras PAPER mediante bot y herramienta MCP sin acceso a cuentas Deriv",
+  "version": "6.9",
+  "updatedAt": "2026-11-08T00:01:15.324Z",
+  "summary": "Actualizar estado del MCP con herramienta PAPER 10 sin permisos de broker",
   "changes": [
-    "Documentar diez compras PAPER mediante bot y herramienta MCP sin acceso a cuentas Deriv",
-    "Integrar ensayos PAPER y validación de nueva página en pruebas del repositorio",
-    "Integrar ensayos PAPER y validación de nueva página en pruebas del repositorio"
+    "Actualizar estado del MCP con herramienta PAPER 10 sin permisos de broker",
+    "Añadir comando MCP paper-ten al listado y pruebas sin broker"
   ],
-  "sourceCommit": "4d80ed2f43283d6ac661a12c91dc69a9d46fe617",
+  "sourceCommit": "126f76b55362e61d451821cc326d5e3714ecd6c6",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

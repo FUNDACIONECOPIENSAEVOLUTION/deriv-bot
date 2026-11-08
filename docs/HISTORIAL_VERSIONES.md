@@ -59,6 +59,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.9 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:01:15.324Z (UTC).
+- **Commit de origen:** `126f76b55362`.
+- Actualizar estado del MCP con herramienta PAPER 10 sin permisos de broker
+- Añadir comando MCP paper-ten al listado y pruebas sin broker
+
 ## v6.8 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:00:39.362Z (UTC).
