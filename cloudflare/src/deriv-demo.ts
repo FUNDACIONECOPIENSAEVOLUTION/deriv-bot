@@ -594,6 +594,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const record={direction,reason:a.reason,quoteAgeSeconds:n-times[149],
       at:n,symbol:h.symbol,source:'OWNER_BROWSER_REPORTED_PUBLIC_'+h.symbol,
       verifiedIndependently:false,valid:direction!=='HOLD',
+      lastPrice:prices[prices.length-1],
       indicator:{fast:a.fast,slow:a.slow,rsi:a.rsi,volatility:a.volatility}};
     this.write('demo-browser-signal:'+h.symbol,record);
     if(h.symbol==='R_100')this.write('demo-browser-signal',record);
