@@ -619,6 +619,91 @@ async function loadDemo(){demoFetched=Date.now();try{const r=await fetch('/api/d
   $('chart-demo-pnl').textContent='P&L DEMO: sin datos fiables';
   $('chart-demo-last-trades').textContent='Historial DEMO del broker: sin verificar';
 }}
+
+async function loadMcpIntent(){
+ if(mcpIntentBusy)return;
+ const label=$('mcp-intent-status');
+ try{
+  const r=await fetch('/api/deriv/demo/mcp-intent',{signal:AbortSignal.timeout(7000)});
+  if(!r.ok)throw Error('MCP_GATEWAY_NOT_AVAILABLE');
+  const command=await r.json();
+  mcpIntentCurrent=command?.state==='PENDING'&&Number(command.expiresAt)*1000>Date.now()?command:null;
+  $('mcp-approve').disabled=!mcpIntentCurrent;
+  $('mcp-reject').disabled=!mcpIntentCurrent;
+  if(mcpIntentCurrent){
+   const side=mcpIntentCurrent.signal==='UP'?'CALL · ALZA':'PUT · BAJA';
+   label.textContent='MCP solicita UNA compra DEMO: '+side+
+     ' · '+money(mcpIntentCurrent.stakeCents)+
+     ' virtuales · caduca '+date(mcpIntentCurrent.expiresAt)+
+     '. NO se ha comprado ningún contrato; revisa y aprueba expresamente.';
+  }else{
+   label.textContent=command?.state==='CLAIMED'
+     ?'Solicitud MCP reclamada. Verifica liquidación antes de cualquier nueva compra.'
+     :command?.state==='SETTLED'
+     ?'Solicitud MCP terminada. Confirma el resultado del contrato en el historial DEMO.'
+     :'No hay ninguna solicitud MCP vigente esperando tu aprobación.';
+  }
+ }catch{
+  mcpIntentCurrent=null;
+  $('mcp-approve').disabled=true;$('mcp-reject').disabled=true;
+  label.textContent='No se pudo comprobar la cola MCP privada; ninguna orden nueva.';
+ }
+}
+async function sendMcpOwnerAction(action,payload){
+ const r=await fetch('/api/deriv/demo/mcp-intent/'+action,{
+  method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+  body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});
+ if(!r.ok){const e=await demoResponseError(r);throw Error(e.code);}
+ return r.json();
+}
+$('mcp-review').onclick=()=>void loadMcpIntent();
+$('mcp-reject').onclick=async()=>{
+ const current=mcpIntentCurrent;
+ if(!current||mcpIntentBusy)return;
+ mcpIntentBusy=true;$('mcp-approve').disabled=true;$('mcp-reject').disabled=true;
+ try{
+  await sendMcpOwnerAction('cancel',{id:current.id});
+  $('mcp-intent-status').textContent='Solicitud MCP rechazada. No se compró nada.';
+ }catch{
+  $('mcp-intent-status').textContent='Rechazo no confirmado. Consulta de nuevo el estado.';
+ }finally{mcpIntentBusy=false;await loadMcpIntent();}
+};
+$('mcp-approve').onclick=async()=>{
+ const current=mcpIntentCurrent;
+ if(!current||mcpIntentBusy||current.state!=='PENDING'
+  ||Date.now()>current.expiresAt*1000)return;
+ const side=current.signal==='UP'?'CALL (alza)':'PUT (baja)';
+ if(!window.confirm('¿AUTORIZAS UNA SOLA COMPRA DEMO '+side+
+  ' por '+money(current.stakeCents)+' virtuales?\\n'+
+  'La orden se realizará desde esta pestaña autenticada, nunca desde la cuenta real.'))return;
+ mcpIntentBusy=true;$('mcp-approve').disabled=true;$('mcp-reject').disabled=true;
+ const info=$('mcp-intent-status');
+ try{
+  const claim=await sendMcpOwnerAction('claim',{id:current.id});
+  if(claim.state!=='CLAIMED'||claim.accountType!=='demo'
+    ||claim.stakeCents!==current.stakeCents||claim.signal!==current.signal)
+    throw Error('DEMO_MCP_CLAIM_INVALID');
+  info.textContent='Solicitud aprobada, adquiriendo UNA compra DEMO de '+money(claim.stakeCents)+'.';
+  const outcome=await oneBrowserDemoBuy({
+   direction:claim.signal,stakeCents:claim.stakeCents,pilot:'mcp-owner'
+  },info);
+  if(outcome?.state==='SETTLED'){
+   const saved=await sendMcpOwnerAction('complete',{
+    id:current.id,contractId:outcome.contractId
+   });
+   info.textContent='Compra DEMO '+saved.contractId+' liquidada, resultado '+money(saved.pnlCents)+
+     ' virtuales, observada en navegador. Sin verificación independiente del servidor.';
+  }else{
+   info.textContent='Operación sin resultado final confirmado. NO reintentes: revisa el contrato en Deriv.';
+  }
+ }catch(error){
+  info.textContent='Compra DEMO no confirmada: '+(error instanceof Error?error.message:'ERROR')+
+   '. No repetir la orden ni iniciar otra sin verificar el historial de contratos.';
+ }finally{mcpIntentBusy=false;await loadDemo();}
+};
+void loadMcpIntent();
+window.setInterval(()=>{if(!document.hidden&&!mcpIntentBusy)void loadMcpIntent();},12000);
+
 $('deriv-callback').textContent=location.origin+'/api/deriv/callback';
 $('deriv-connect').onclick=async()=>{
   const clientId=$('deriv-client').value.trim(),out=$('demo-feedback');if(!/^[A-Za-z0-9_-]{1,128}$/.test(clientId)){out.textContent='Escribe el identificador público de tu aplicación de Deriv.';return;}
