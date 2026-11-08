@@ -1,4 +1,4 @@
-// ECOPIENSA · Deriv DEMO local — read-only broker connection, no BUY/SELL/REAL.
+// ECOPIENSA · Deriv DEMO local — single manual broker DEMO approval; REAL strictly blocked.
 import http from 'node:http';
 import {DatabaseSync} from 'node:sqlite';
 import {createHash, createCipheriv, createDecipheriv, randomBytes, timingSafeEqual} from 'node:crypto';
@@ -7,6 +7,8 @@ import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {performance} from 'node:perf_hooks';
 import {readTraining} from './training.mjs';
+import {dispatchMcp} from './mcp-local.mjs';
+import {createDemoTrading} from './demo-trading.mjs';
 
 const HOME=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ECOPIENSA_DATA_DIR||join(HOME,'data');
@@ -71,7 +73,7 @@ function status(){
   appId:get('app_id')||'',
   account:account?{label:'DEMO · …'+account.accountId.slice(-4),balance:account.balance,checkedAt:account.checkedAt,currency:'USD'}:null,
   brokerBalanceVerifiedRecently:connected&&now()-account.checkedAt<=60,
-  realEnabled:false,buyEnabled:false,source:'Deriv oficial, no PAPER'};
+  realEnabled:false,buyEnabled:connected,manualDemoOnly:true,mcpLocalOnly:true,source:'Deriv oficial, no PAPER'};
 }
 function brokerHeaders(c){
  const headers={Authorization:'Bearer '+c.token};
@@ -113,6 +115,32 @@ function publicSocket(){const ws=new WebSocket(PUBLIC_WS);let wasOpen=false;ws.a
  }catch{publicLastError='MENSAJE_MERCADO_INVALIDO';}});
  function lost(){if(ws._disconnected)return;ws._disconnected=true;publicConnected=false;publicLastError=wasOpen?'CONEXION_PUBLICA_CERRADA':'NO_PUDO_CONECTAR';setTimeout(publicSocket,backoff);backoff=Math.min(30000,backoff*2);}ws.addEventListener('close',lost);ws.addEventListener('error',()=>{try{ws.close();}catch{}lost();});}
 if(process.env.ECOPIENSA_NO_MARKET!=='1')publicSocket();
+// Local-only SQLite DEMO execution; every pending/unknown purchase blocks any further BUY.
+const trading=createDemoTrading({
+ db,getAccount:()=>get('account'),getCredentials:credentials,brokerHeaders,
+ accountLookup:async(c,id)=>selectAccount(await boundedFetch(API,{headers:brokerHeaders(c)}),id),
+ otpLookup:async c=>otpUrl(await boundedFetch(API+'/'+encodeURIComponent(c.accountId)+'/otp',
+  {method:'POST',headers:brokerHeaders(c)})),
+ marketSnapshot:symbol=>{const entry=market.get(symbol);return entry?snapshot(entry):null;},audit
+});
+// A dedicated MCP access key is generated on the PC, never in the public repo.
+const mcpKeyPath=join(DATA,'.mcp-local-secret');
+if(!existsSync(mcpKeyPath)){
+ try{writeFileSync(mcpKeyPath,randomBytes(32).toString('hex'),{flag:'wx',mode:0o600});}
+ catch(error){if(error.code!=='EEXIST')throw error;}
+}
+const mcpKey=readFileSync(mcpKeyPath,'utf8').trim();
+if(!/^[a-f0-9]{64}$/.test(mcpKey))throw Error('MCP_KEY_INVALID');
+const mcpAuthPath=join(DATA,'.mcp-local-authorization');
+if(!existsSync(mcpAuthPath)){writeFileSync(mcpAuthPath,'Bearer '+mcpKey,{mode:0o600,flag:'wx'});}
+const mcpHandlers={
+ version:()=>localVersion(),
+ status:()=>({...status(),orders:trading.getSummary()}),
+ signals:()=>[...market.values()].map(snapshot),
+ training:()=>readTraining(trainingFile),
+ orders:()=>trading.getSummary(),
+ request:args=>trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'})
+};
 let server;
 server=http.createServer(async(req,res)=>{
  const origin=req.headers.origin;const host=req.headers.host;
@@ -123,7 +151,21 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/app.js'){return html(res,readFileSync(join(publicPath,'app.js')),'text/javascript; charset=utf-8');}
   if(req.method==='GET'&&path==='/style.css'){return html(res,readFileSync(join(publicPath,'style.css')),'text/css; charset=utf-8');}
   if(req.method==='GET'&&path==='/api/training')return answer(res,200,readTraining(trainingFile));
-  if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local'});
+   if(req.method==='GET'&&path==='/api/demo/orders')return answer(res,200,trading.getSummary());
+   if(req.method==='GET'&&path==='/api/mcp/info')return answer(res,200,{
+    endpoint:'http://127.0.0.1:'+PORT+'/mcp',connectedToChatGPT:false,
+    localOnly:true,authentication:'Bearer local + Secure MCP Tunnel',realEnabled:false
+   });
+   if(path==='/mcp'&&req.method==='POST'){
+    const auth=String(req.headers.authorization||'');
+    if(!auth.startsWith('Bearer ')||!safeEq(auth.slice(7),mcpKey))return answer(res,401,{error:'MCP_AUTH_REQUIRED'});
+    if(origin&&origin!==BASE&&origin!=='http://127.0.0.1:'+PORT)return answer(res,403,{error:'MCP_ORIGIN_DENIED'});
+    if(req.headers['content-type']?.split(';')[0]!=='application/json')return answer(res,415,{error:'MCP_JSON_REQUIRED'});
+    const rpc=await dispatchMcp(await readBody(req),mcpHandlers);
+    if(rpc===null){res.writeHead(202,{'Cache-Control':'no-store'});res.end();return;}
+    return answer(res,200,rpc);
+   }
+  if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate(),demoManualPilot:true,mcpLocal:true});
   if(req.method==='GET'&&path==='/api/status')return answer(res,200,{...status(),marketConnected:publicConnected,marketError:publicLastError});
   if(req.method==='GET'&&path==='/api/markets')return answer(res,200,{connected:publicConnected,markets:[...market.values()].map(snapshot)});
   if(req.method==='GET'&&path==='/api/market-events'){
@@ -170,6 +212,11 @@ server=http.createServer(async(req,res)=>{
   if(path==='/api/demo/refresh')return answer(res,200,await refreshBalance());
   if(path==='/api/demo/quote')return answer(res,200,await quoteDemo(b));
   if(path==='/api/demo/profit')return answer(res,200,await recentProfit());
+   if(path==='/api/demo/intent')return answer(res,200,trading.requestIntent({
+    symbol:String(b.symbol||''),direction:String(b.direction||''),stakeCents:Number(b.stakeCents),source:'LOCAL_OWNER'}));
+   if(path==='/api/demo/confirm')return answer(res,200,await trading.approve(String(b.id||''),String(b.confirmation||'')));
+   if(path==='/api/demo/cancel')return answer(res,200,trading.cancel(String(b.id||'')));
+   if(path==='/api/demo/reconcile')return answer(res,200,await trading.reconcile(String(b.id||'')));
   return answer(res,404,{error:'RUTA_DESCONOCIDA'});
  }catch(e){console.warn('Petición rechazada:',errorCode(e));return answer(res,400,{error:errorCode(e),readOnly:true});}
 });
