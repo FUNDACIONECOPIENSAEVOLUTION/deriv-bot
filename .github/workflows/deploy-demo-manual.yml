@@ -81,6 +81,15 @@ jobs:
           grep -F 'syncBrokerBalance' ../runtime/dashboard.html
           grep -F "ticks:'R_100',subscribe:1" ../runtime/dashboard.html
           grep -F 'demo-max-concurrent' ../runtime/dashboard.html
+          grep -F "DEMO_BURST_STAKE_CENTS=100" src/demo-burst-policy.ts
+          grep -F 'beginDemoBurst' src/deriv-demo.ts
+          grep -F 'reserveDemoBurst' src/deriv-demo.ts
+          grep -F 'acknowledgeDemoBurst' src/deriv-demo.ts
+          grep -F 'settleDemoBurst' src/deriv-demo.ts
+          grep -F 'demo-burst-start' ../runtime/dashboard.html
+          grep -F 'demo-burst-count' ../runtime/dashboard.html
+          grep -F 'demo-burst-reconcile' ../runtime/dashboard.html
+          grep -F 'demo-burst-rows' ../runtime/dashboard.html
           grep -F "browser-bot-buy" ../runtime/dashboard.html
           grep -F "completeMcpDemoIntent" src/deriv-demo.ts
       - name: Validar acceso seguro y publicar panel sin operaciones
