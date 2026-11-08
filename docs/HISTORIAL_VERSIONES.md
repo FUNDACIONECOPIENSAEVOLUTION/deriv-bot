@@ -89,6 +89,24 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.9 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:19:37.584Z (UTC).
+- **Commit de origen:** `1cedd458d79b`.
+- Actualizar pruebas HTML para bot AUTO multiíndice, stake dinámico, métricas DEMO y acuse de compra independiente
+- Contadores superiores reflejan confirmaciones auténticas, excluyen UNKNOWN, y velas R_100 no mezclan índices
+- Separar en reporte DEMO confirmados del broker y reservas UNKNOWN de seguridad
+- Eliminar propiedad duplicada de stake en los planes de tanda DEMO TypeScript
+- Tanda DEMO AUTO: comparar cuatro mercados y escoger CALL/PUT por compra, payout mínimo, guardas y stake configurable
+- Visualizar stake elegido en tandas 1–10, presupuesto US$10 y mercado original en filas de contratos
+- Comparar cuatro índices con 150 ticks públicos, score heurístico sin falsas probabilidades y señal broker validada
+- Añadir scanner técnico de cuatro índices Deriv y selector de importe DEMO por contrato
+- Permitir lote AUTO con dirección y símbolo elegidos por el bot en cada contrato, y stake de usuario validado
+- Incluir mercado ejecutado en CSV privado de contratos DEMO para auditar señales multiíndice
+- Conciliar contratos DEMO en su mercado original, preservar símbolo por cada compra y comprobar liquidación
+- Elegir CALL/PUT y símbolo por cada compra de tanda AUTO con señal fresca, aprobación original y registros separados
+
 ## v9.8 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:13:39.578Z (UTC).
