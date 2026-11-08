@@ -11,6 +11,9 @@ const paperWorker = defineWorker({
 		env: {
 			ADMIN_TOKEN: bindings.secret(),
 			PAPER_ENABLED: bindings.text("true"),
+            // Keep previous PAPER configuration fingerprint and history intact,
+            // but pause background feed to prevent exhausting Durable Object quotas.
+            PAPER_BACKGROUND_ENABLED: bindings.text("false"),
 			// Solo compras virtuales DEMO bajo solicitud manual y autenticación privada.
 			// Automatización queda bloqueada hasta validar una compra y liquidación.
 			DEMO_BUY_ENABLED: bindings.text("true"),
@@ -21,7 +24,7 @@ const paperWorker = defineWorker({
 			STAKE_USD: bindings.text("0.10"),
 			DAILY_LOSS_USD: bindings.text("0.30"),
 		},
-		triggers: [triggers.scheduled({ schedule: "* * * * *" })],
+		triggers: [triggers.scheduled({ schedule: "*/5 * * * *" })],
 		observability: {
 			enabled: true,
 			issues: { enabled: false },
