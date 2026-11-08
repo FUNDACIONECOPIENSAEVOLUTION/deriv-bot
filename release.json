@@ -1,10 +1,10 @@
 {
-  "version": "10.9",
-  "updatedAt": "2026-11-08T02:36:53.749Z",
-  "summary": "fix(demo): tandas independientes de hasta 10 contratos con límites acumulados seguros",
+  "version": "11.0",
+  "updatedAt": "2026-11-08T02:54:58.103Z",
+  "summary": "fix(demo): cotizaciones frescas por contrato y trazabilidad de recargas",
   "changes": [
-    "fix(demo): tandas independientes de hasta 10 contratos con límites acumulados seguros"
+    "fix(demo): cotizaciones frescas por contrato y trazabilidad de recargas"
   ],
-  "sourceCommit": "b70ddd2d141a8948566b573b2e2ce67743fb85fb",
+  "sourceCommit": "7299803feb14bbe1df96d563198d539b51441d7b",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

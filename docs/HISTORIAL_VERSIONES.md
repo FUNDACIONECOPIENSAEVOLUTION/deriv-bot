@@ -100,6 +100,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v11.0 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T02:54:58.103Z (UTC).
+- **Commit de origen:** `7299803feb14`.
+- fix(demo): cotizaciones frescas por contrato y trazabilidad de recargas
+
 ## v10.9 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T02:36:53.749Z (UTC).
