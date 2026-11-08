@@ -2,6 +2,7 @@
 const $=id=>document.getElementById(id);
 const fmt=x=>Number.isFinite(x)?Number(x).toLocaleString('es-CO',{maximumFractionDigits:3}):'—';
 const usd=x=>Number.isFinite(x)?'US$'+Number(x).toFixed(2):'—';
+const signedCents=x=>Number.isFinite(x)?(x>0?'+':x<0?'−':'')+usd(Math.abs(x)/100):'—';
 const markets=new Map();let chosen='R_100',loadedVersion=null,lastAutoBalance=0;
 const versionTenths=v=>{const m=/^v?(\d+)\.(\d)$/.exec(String(v||''));return m?Number(m[1])*10+Number(m[2]):null;};
 const escapeText=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -97,25 +98,49 @@ async function updateBurstPanel(){
   const last=b.batches?.[0]||null;latestBatchId=last?.id||null;
   const selection=last?latestOrders.filter(x=>x.batchId===last.id):latestOrders;
   const closed=selection.filter(x=>x.state==='SETTLED'&&Number.isFinite(x.pnlCents));
-  const wins=closed.filter(x=>x.pnlCents>0).length,losses=closed.filter(x=>x.pnlCents<0).length;
-  const net=closed.reduce((sum,x)=>sum+x.pnlCents,0);
+  // Totales de todas las órdenes SQLite, no solo de las últimas 60 filas visibles.
+  const net=last?.netCents??0,wins=last?.wins??0,losses=last?.losses??0;
+  const settled=last?.settled??0,executed=last?.executed??0;
   const latencies=selection.map(x=>x.buyLatencyMs).filter(Number.isFinite);
-  $('burst-net').textContent=usd(net/100);
-  const executed=selection.filter(x=>['OPEN','SETTLED'].includes(x.state)).length;
-  $('burst-settled').textContent=executed+' ejecutadas / '+closed.length+' liquidadas (de '+(last?.requested||selection.length)+')';
-  $('burst-winloss').textContent=wins+' / '+losses+(closed.length?' ('+(100*wins/closed.length).toFixed(1)+'%)':'');
+  $('burst-net').textContent=signedCents(net);
+  $('burst-net').className=net>0?'up':net<0?'down':'';
+  $('burst-net-label').textContent=settled===0?'Sin contratos liquidados':
+   net>0?'GANANCIA NETA':net<0?'PÉRDIDA NETA':'RESULTADO NETO CERO';
+  $('burst-settled').textContent=executed+' ejecutadas / '+settled+' liquidadas (de '+(last?.requested||0)+')';
+  $('burst-winloss').textContent=wins+' / '+losses+(settled?' ('+(100*wins/settled).toFixed(1)+'%)':'');
+  $('burst-breakdown').textContent=last?
+   'Tanda '+last.id.slice(0,8)+': ganancias '+signedCents(last.grossWinCents||0)+
+   ' ('+wins+' operaciones), pérdidas '+signedCents(-(last.grossLossCents||0))+
+   ' ('+losses+' operaciones), neto '+signedCents(net)+
+   '. Rechazadas sin compra: '+(last.rejected||0)+'.':
+   'Aún no hay ninguna tanda registrada.';
   $('burst-latency').textContent=latencies.length?(latencies.reduce((a,v)=>a+v,0)/latencies.length/1000).toFixed(3)+' s':'—';
   $('burst-start').disabled=!!b.running||d.pendingOrOpen>0;
   $('burst-stop').disabled=!b.running;
   if(last){
    $('burst-message').textContent='Tanda '+last.id.slice(0,8)+' · '+last.state+
-    ' · '+executed+'/'+last.requested+' ejecutadas · '+closed.length+' liquidadas'+
+    ' · '+executed+'/'+last.requested+' ejecutadas · '+settled+' liquidadas · neto '+signedCents(net)+
      (b.inFlight?' · '+b.inFlight+' simultáneas en curso':'')+
     (last.stopReason?' · '+last.stopReason:'')+
     (b.running?' · Comprando solo si hay señal nueva y saldo DEMO verificado.':'');
   }
+  const history=$('burst-history');history.replaceChildren();
+  for(const batch of b.batches||[]){
+   const tr=document.createElement('tr');
+   const values=[batch.id.slice(0,8),batch.state,
+    batch.executed+' / '+batch.requested,batch.wins,batch.losses,batch.rejected,
+    signedCents(batch.grossWinCents),signedCents(-batch.grossLossCents),
+    signedCents(batch.netCents)];
+   values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=value;
+    if(i===8&&Number.isFinite(batch.netCents))td.className=batch.netCents>0?'up':batch.netCents<0?'down':'';
+    tr.appendChild(td);});history.appendChild(tr);
+  }
+  if(!history.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=9;td.textContent='Sin tandas registradas.';tr.appendChild(td);history.appendChild(tr);
+  }
   const tbody=$('burst-rows');tbody.replaceChildren();
-  if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=11;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
+  if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=12;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
   for(const row of selection.slice(0,25)){
    const tr=document.createElement('tr');
    const values=[printableTime(row.createdAtMs),row.symbol,row.direction+' / '+row.state,
@@ -123,9 +148,12 @@ async function updateBurstPanel(){
     printableTime(row.boughtAtMs),printableTime(row.settledAtMs),
     Number.isFinite(row.buyLatencyMs)?(row.buyLatencyMs/1000).toFixed(3)+' s':'—',
     fmt(row.entryTick),fmt(row.exitTick),
-     Number.isFinite(row.pnlCents)?usd(row.pnlCents/100):'Pendiente'];
+    Number.isFinite(row.pnlCents)?signedCents(row.pnlCents):
+     row.state==='REJECTED'?'NO EJECUTADA':row.state==='CANCELLED'?'CANCELADA':'Pendiente',
+    row.diagnosis?.code||'SIN_DATOS'];
    values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=value;
     if(i===10&&Number.isFinite(row.pnlCents))td.className=row.pnlCents>=0?'up':'down';
+    if(i===11)td.title=row.diagnosis?.detail||row.errorCode||'';
     tr.appendChild(td);
    });tbody.appendChild(tr);
   }

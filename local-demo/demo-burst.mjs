@@ -15,7 +15,21 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  if(!fields.has('concurrent'))db.exec('ALTER TABLE demo_bursts ADD COLUMN concurrent INTEGER NOT NULL DEFAULT 1');
  const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent) VALUES(?,?,?,?,?,?,?,?)');
  const update=db.prepare('UPDATE demo_bursts SET state=?,updated_at=?,completed=?,stop_reason=? WHERE id=?');
- const latest=db.prepare('SELECT id,created_at AS createdAt,state,count_requested AS requested,stake_cents AS stakeCents,symbol,concurrent,completed,stop_reason AS stopReason FROM demo_bursts ORDER BY created_at DESC LIMIT 12');
+ // Totales durables desde TODAS las órdenes SQLite de cada tanda (sin límite de 60 filas UI).
+ const latest=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.state,
+ b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,b.concurrent,
+ b.completed,b.stop_reason AS stopReason,
+ COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
+ COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
+ COUNT(CASE WHEN o.state='REJECTED' THEN 1 END) AS rejected,
+ COUNT(CASE WHEN o.state='UNKNOWN' THEN 1 END) AS unknown,
+ COUNT(CASE WHEN o.state='SETTLED' AND o.pnl_cents>0 THEN 1 END) AS wins,
+ COUNT(CASE WHEN o.state='SETTLED' AND o.pnl_cents<0 THEN 1 END) AS losses,
+ COALESCE(SUM(CASE WHEN o.state='SETTLED' AND o.pnl_cents>0 THEN o.pnl_cents ELSE 0 END),0) AS grossWinCents,
+ COALESCE(SUM(CASE WHEN o.state='SETTLED' AND o.pnl_cents<0 THEN -o.pnl_cents ELSE 0 END),0) AS grossLossCents,
+ COALESCE(SUM(CASE WHEN o.state='SETTLED' THEN o.pnl_cents ELSE 0 END),0) AS netCents
+ FROM demo_bursts AS b LEFT JOIN demo_local_orders AS o ON o.batch_id=b.id
+ GROUP BY b.id ORDER BY b.created_at DESC,b.id DESC LIMIT 12`);
  let active=null;
  function status(){return {running:!!active,stopRequested:!!active?.stopRequested,
   inFlight:active?.inFlight||0,liveId:active?.id||null,batches:latest.all(),
@@ -97,6 +111,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     if(executed<batch.count)await pause(350);
    }
    if(state==='RUNNING')state=executed===batch.count?'COMPLETED':'PAUSED';
+   if(state==='COMPLETED')reason=null; // Rechazos previos se reportan en 'rejected'; no son un fallo de tanda completada.
    if(state==='PAUSED'&&!reason)reason='SAFE_MAX_ATTEMPTS_REACHED';
   }catch(e){
    state='HALTED';

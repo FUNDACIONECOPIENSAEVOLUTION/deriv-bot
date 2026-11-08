@@ -2,6 +2,7 @@
 // Jamás conectar /ws/real, jamás reintentar BUY ambiguo. Persistencia SQLite local.
 import {randomUUID} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
+import {diagnoseTrade} from './trade-analysis.mjs';
 
 const SYMBOLS=new Set(['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500']);
@@ -16,8 +17,11 @@ const epoch=()=>Math.floor(Date.now()/1000);
 const cents=value=>Math.round(Number(value)*100);
 const cleanError=error=>String(error?.message||'DEMO_BROKER_ERROR').replace(/[^A-Za-z0-9_]/g,'').slice(0,80);
 const optionalNumber=x=>x===undefined||x===null||x===''?null:Number.isFinite(Number(x))?Number(x):null;
-const settlementFields=c=>[optionalNumber(c?.entry_tick),optionalNumber(c?.exit_tick),
- optionalNumber(c?.entry_tick_time),optionalNumber(c?.exit_tick_time)];
+// Deriv v2 renamed entry_tick/exit_tick -> entry_spot/exit_spot.
+const settlementFields=c=>[optionalNumber(c?.entry_spot??c?.entry_tick),
+ optionalNumber(c?.exit_spot??c?.exit_tick),
+ optionalNumber(c?.entry_spot_time??c?.entry_tick_time),
+ optionalNumber(c?.exit_spot_time??c?.exit_tick_time)];
 
 export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,accountLookup,otpLookup,marketSnapshot,audit}) {
  db.exec("CREATE TABLE IF NOT EXISTS demo_local_orders (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, state TEXT NOT NULL, source TEXT NOT NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL, stake_cents INTEGER NOT NULL, contract_id TEXT, buy_cents INTEGER, pnl_cents INTEGER, error_code TEXT)");
@@ -57,7 +61,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=?,settled_at_ms=?,entry_tick=COALESCE(?,entry_tick),exit_tick=COALESCE(?,exit_tick),entry_tick_epoch=COALESCE(?,entry_tick_epoch),exit_tick_epoch=COALESCE(?,exit_tick_epoch) WHERE id=?");
 
  function getSummary(){
-  const stats=summary.get(),rows=list.all(),closed=rows.filter(x=>x.state==='SETTLED');
+  const stats=summary.get(),rows=list.all().map(row=>({...row,diagnosis:diagnoseTrade(row)})),closed=rows.filter(x=>x.state==='SETTLED');
   const group=new Map();
   for(const row of rows){
    if(!row.batchId)continue;
@@ -267,9 +271,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const rows=list.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
-  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','errorCode'];
+  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','errorCode','diagnosisCode'];
    const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
-  return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(x[h])).join(',')).join('\r\n')+'\r\n';
+  return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(x).code:x[h])).join(',')).join('\r\n')+'\r\n';
  }
  return {getSummary,requestIntent,cancel,approve,reconcile,markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
   canUpdate:()=>active.get().n===0};
