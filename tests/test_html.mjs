@@ -18,6 +18,16 @@ assert.ok(panel.includes('consecutiveLosses>=3'),'Se exige parada por pérdidas 
 assert.ok(panel.includes("net<=-300"),'Se exige parada por pérdida virtual de US$3 en el ensayo');
 assert.ok(panel.includes('if(demoBalancedStop||document.hidden)'), 'El navegador debe dejar de abrir posiciones al detener u ocultar la pestaña');
 assert.ok(panel.includes('BROWSER_OBSERVED_NOT_INDEPENDENTLY_VERIFIED'),'El CSV debe etiquetar operaciones de navegador sin verificación independiente');
+for(const id of ['demo-apply-stake','demo-stake-selection-status','official-demo-sync','browser-tick-status']){
+ assert.ok(panel.includes('id="'+id+'"'),'Falta control de actualización o apuesta DEMO '+id);
+}
+assert.ok(panel.includes("ticks:'R_100',subscribe:1"),'El precio público debe actualizarse con cada tick');
+assert.ok(panel.includes('syncBrokerBalance()'),'El saldo oficial debe refrescarse automáticamente');
+assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<20000'),'La consulta de saldo debe ser acotada');
+assert.ok(panel.includes('demo-max-concurrent'), 'Se debe informar el límite configurable de contratos');
+assert.ok(panel.includes('n>10'), 'Las solicitudes de más de 10 contratos deben quedar bloqueadas');
+assert.ok(panel.includes('DEMO_MANUAL_STAKE_SET'), 'El importe elegido requiere validación del servidor');
+
 
 
 for(const script of panel.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(script[1]);
