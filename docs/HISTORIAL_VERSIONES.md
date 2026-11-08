@@ -74,6 +74,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.4 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:49:42.574Z (UTC).
+- **Commit de origen:** `ab6a540c54e3`.
+- Documentar diez contratos DEMO reales distintos, máximo US$10 por tanda, saldo por ACK y límites de ejecución
+
 ## v8.3 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:48:48.281Z (UTC).

@@ -1,14 +1,10 @@
 {
-  "version": "8.3",
-  "updatedAt": "2026-11-08T00:48:48.281Z",
-  "summary": "Probar tanda DEMO completa en fixture con autorización local sin habilitar compra en configuración global",
+  "version": "8.4",
+  "updatedAt": "2026-11-08T00:49:42.574Z",
+  "summary": "Documentar diez contratos DEMO reales distintos, máximo US$10 por tanda, saldo por ACK y límites de ejecución",
   "changes": [
-    "Probar tanda DEMO completa en fixture con autorización local sin habilitar compra en configuración global",
-    "Alinear prueba HTML con renderización individual de identificadores de contrato DEMO",
-    "Probar escenario íntegro de 10 órdenes DEMO reservadas, 10 acuses independientes y 10 liquidaciones con proveedor simulado",
-    "Comprobar UI de diez contratos: órdenes distintas con ACK, saldo al comprar y no esperar liquidación para siguiente",
-    "Pruebas de lote DEMO requieren señal nueva, dueño autenticado, máximo 10 y cero órdenes al consultar"
+    "Documentar diez contratos DEMO reales distintos, máximo US$10 por tanda, saldo por ACK y límites de ejecución"
   ],
-  "sourceCommit": "d2b84f4094bfa14f09d6e65faa12764db620b5fe",
+  "sourceCommit": "ab6a540c54e3dbfcbfa3932074a368c314a1a22b",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
