@@ -126,7 +126,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS demo_quote_checks (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, stake_cents INTEGER NOT NULL, contract_type TEXT NOT NULL, accepted INTEGER NOT NULL, code TEXT)");
 
     const cols=new Set(ctx.storage.sql.exec<{name:string}>('PRAGMA table_info(demo_trades)').toArray().map(r=>r.name));
-    for(const [name,kind] of [['decision_json','TEXT'],['entry_spot','REAL'],['exit_spot','REAL'],['contract_type','TEXT']]){
+    for(const [name,kind] of [['decision_json','TEXT'],['entry_spot','REAL'],['exit_spot','REAL'],['contract_type','TEXT'],['bought_at','INTEGER'],['settled_at','INTEGER']]){
       if(!cols.has(name))ctx.storage.sql.exec('ALTER TABLE demo_trades ADD COLUMN '+name+' '+kind);
     }
 
@@ -265,7 +265,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
   private reportDemo() {
     type Row={id:number;date:string;created_at:number;state:string;contract_id:number|null;
       buy_cents:number|null;payout_cents:number|null;pnl_cents:number|null;code:string|null;
-      decision_json:string|null;entry_spot:number|null;exit_spot:number|null;contract_type:string|null};
+      decision_json:string|null;entry_spot:number|null;exit_spot:number|null;contract_type:string|null;bought_at:number|null;settled_at:number|null};
     const sql=this.ctx.storage.sql;
     const stats=sql.exec<{settled:number;wins:number;losses:number;net:number}>(
       "SELECT COUNT(*) AS settled, COALESCE(SUM(CASE WHEN pnl_cents>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pnl_cents<0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pnl_cents),0) AS net FROM demo_trades WHERE state='SETTLED'"
@@ -346,7 +346,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       unresolved:this.ctx.storage.sql.exec<Row>("SELECT * FROM demo_trades WHERE state='UNKNOWN' ORDER BY id ASC LIMIT 1").toArray()[0]||open[0]||null,
       history:history.map(r=>({id:r.id,date:r.date,state:r.state,contractId:r.contract_id,
         buyCents:r.buy_cents,payoutCents:r.payout_cents,pnlCents:r.pnl_cents,
-        code:r.code,createdAt:r.created_at,entrySpot:r.entry_spot??null,exitSpot:r.exit_spot??null,
+        code:r.code,createdAt:r.created_at,boughtAt:r.bought_at??null,settledAt:r.settled_at??null,entrySpot:r.entry_spot??null,exitSpot:r.exit_spot??null,
         contractType:r.contract_type==='PUT'?'PUT':r.contract_type==='CALL'?'CALL':null,
         decision:r.decision_json?JSON.parse(r.decision_json):null}))
     };
@@ -843,8 +843,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
         this.write('demo-burst',{...b,state:'HALTED',pendingId:null});
       }else{
         this.ctx.storage.sql.exec(
-          "UPDATE demo_trades SET state='OPEN',contract_id=?,buy_cents=?,code='CLIENT_ACK' WHERE id=? AND state='UNKNOWN'",
-          ack.contractId,ack.buyCents,input.id);
+          "UPDATE demo_trades SET state='OPEN',contract_id=?,buy_cents=?,bought_at=?,code='CLIENT_ACK' WHERE id=? AND state='UNKNOWN'",
+          ack.contractId,ack.buyCents,ack.purchaseTime,input.id);
         const ids=[...b.ids,input.id];
         this.write('demo-burst',{...b,ids,pendingId:null,
           state:ids.length===b.count?'RECONCILING':'BUYING'});
@@ -888,9 +888,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(!settlement)return {state:'OPEN',independentlyVerified:false};
     this.ctx.storage.transactionSync(()=>{
       this.ctx.storage.sql.exec(
-        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=?,code='CLIENT_OBSERVED' WHERE id=? AND state='OPEN'",
+        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=?,settled_at=?,code='CLIENT_OBSERVED' WHERE id=? AND state='OPEN'",
         settlement.profitCents,settlement.payoutCents,
-        settlement.entrySpot??null,settlement.exitSpot??null,input.id);
+        settlement.entrySpot??null,settlement.exitSpot??null,epoch(),input.id);
       const status=this.demoBurstStatus();
       if(status.settled===b.count&&status.uncertain===false)
         this.write('demo-burst',{...b,state:'COMPLETE'});
@@ -1000,8 +1000,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
     this.ctx.storage.transactionSync(()=>{
       if(ack.accepted){
         this.ctx.storage.sql.exec(
-          "UPDATE demo_trades SET state='OPEN',contract_id=?,code='CLIENT_ACK' WHERE id=? AND state='UNKNOWN'",
-          ack.contractId,input.id);
+          "UPDATE demo_trades SET state='OPEN',contract_id=?,bought_at=?,code='CLIENT_ACK' WHERE id=? AND state='UNKNOWN'",
+          ack.contractId,ack.purchaseTime,input.id);
       }else{
         this.ctx.storage.sql.exec(
           "UPDATE demo_trades SET state='REJECTED',code=? WHERE id=? AND state='UNKNOWN'",
@@ -1047,9 +1047,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(!settlement)return {state:'OPEN',independentlyVerified:false};
     this.ctx.storage.transactionSync(()=>{
       this.ctx.storage.sql.exec(
-        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=?,code='CLIENT_OBSERVED' WHERE id=? AND state='OPEN'",
+        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=?,settled_at=?,code='CLIENT_OBSERVED' WHERE id=? AND state='OPEN'",
         settlement.profitCents,settlement.payoutCents,
-        settlement.entrySpot??null,settlement.exitSpot??null,input.id);
+        settlement.entrySpot??null,settlement.exitSpot??null,epoch(),input.id);
       this.write('demo-browser-reservation',{...reservation,state:'SETTLED'});
     });
     return {state:'CLIENT_OBSERVED_SETTLEMENT',independentlyVerified:false,
@@ -1152,8 +1152,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
         );
       }else{
         this.ctx.storage.sql.exec(
-          "UPDATE demo_trades SET state='OPEN',contract_id=?,buy_cents=? WHERE id=? AND state='UNKNOWN'",
-          ack.contractId,ack.buyCents,id
+          "UPDATE demo_trades SET state='OPEN',contract_id=?,buy_cents=?,bought_at=? WHERE id=? AND state='UNKNOWN'",
+          ack.contractId,ack.buyCents,ack.purchaseTime,id
         );
       }
     };
@@ -1204,8 +1204,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const result=await readDemoSettlement(url,pending.contractId,pending.contractType,pending.buyCents);
     if(result){
       this.ctx.storage.sql.exec(
-        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=? WHERE id=? AND contract_id=? AND state='OPEN'",
-        result.profitCents,result.payoutCents,result.entrySpot??null,result.exitSpot??null,
+        "UPDATE demo_trades SET state='SETTLED',pnl_cents=?,payout_cents=?,entry_spot=?,exit_spot=?,settled_at=? WHERE id=? AND contract_id=? AND state='OPEN'",
+        result.profitCents,result.payoutCents,result.entrySpot??null,result.exitSpot??null,epoch(),
         pending.id,pending.contractId
       );
       const batchState=this.getRiskSnapshot();
