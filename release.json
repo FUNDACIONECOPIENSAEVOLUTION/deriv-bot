@@ -1,10 +1,10 @@
 {
-  "version": "10.8",
-  "updatedAt": "2026-11-08T02:21:35.723Z",
-  "summary": "fix(demo): sincronización, trazabilidad y versionado verificable",
+  "version": "10.9",
+  "updatedAt": "2026-11-08T02:36:53.749Z",
+  "summary": "fix(demo): tandas independientes de hasta 10 contratos con límites acumulados seguros",
   "changes": [
-    "fix(demo): sincronización, trazabilidad y versionado verificable"
+    "fix(demo): tandas independientes de hasta 10 contratos con límites acumulados seguros"
   ],
-  "sourceCommit": "536af35cb139af343e396a795ab71d9cce3b738d",
+  "sourceCommit": "b70ddd2d141a8948566b573b2e2ce67743fb85fb",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

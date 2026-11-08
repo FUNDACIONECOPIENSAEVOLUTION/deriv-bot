@@ -99,6 +99,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.9 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T02:36:53.749Z (UTC).
+- **Commit de origen:** `b70ddd2d141a`.
+- fix(demo): tandas independientes de hasta 10 contratos con límites acumulados seguros
+
 ## v10.8 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T02:21:35.723Z (UTC).
