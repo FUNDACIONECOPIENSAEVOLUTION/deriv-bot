@@ -1,10 +1,10 @@
 {
-  "version": "11.0",
-  "updatedAt": "2026-11-08T02:54:58.103Z",
-  "summary": "fix(demo): cotizaciones frescas por contrato y trazabilidad de recargas",
+  "version": "11.1",
+  "updatedAt": "2026-11-08T18:00:22.661Z",
+  "summary": "fix(DEMO): conexión independiente, tick vivo y cancelación de señal 1 s",
   "changes": [
-    "fix(demo): cotizaciones frescas por contrato y trazabilidad de recargas"
+    "fix(DEMO): conexión independiente, tick vivo y cancelación de señal 1 s"
   ],
-  "sourceCommit": "7299803feb14bbe1df96d563198d539b51441d7b",
+  "sourceCommit": "f9a9be9ce9202b2d39475398e41120509dc4ac4d",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

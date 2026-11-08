@@ -101,6 +101,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v11.1 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T18:00:22.661Z (UTC).
+- **Commit de origen:** `f9a9be9ce920`.
+- fix(DEMO): conexión independiente, tick vivo y cancelación de señal 1 s
+
 ## v11.0 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T02:54:58.103Z (UTC).
