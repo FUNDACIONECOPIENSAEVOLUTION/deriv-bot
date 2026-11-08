@@ -17,7 +17,14 @@ assert.ok(panel.includes("gross+stakeCents>1000"),'El piloto no debe superar US$
 assert.ok(panel.includes('consecutiveLosses>=3'),'Se exige parada por pérdidas repetidas');
 assert.ok(panel.includes("net<=-300"),'Se exige parada por pérdida virtual de US$3 en el ensayo');
 assert.ok(panel.includes('if(demoBalancedStop||document.hidden)'), 'El navegador debe dejar de abrir posiciones al detener u ocultar la pestaña');
-assert.ok(panel.includes('BROWSER_OBSERVED_NOT_INDEPENDENTLY_VERIFIED'),'El CSV debe etiquetar operaciones de navegador sin verificación independiente');
+const privateCsv=readFileSync('cloudflare/src/demo-csv.ts','utf8');
+assert.ok(privateCsv.includes('OBSERVADO_NAVEGADOR_NO_VERIFICADO_INDEPENDIENTEMENTE'),
+  'El CSV privado debe etiquetar operaciones de navegador sin verificación independiente');
+assert.ok(panel.includes('/api/deriv/demo/trades.csv')&&panel.includes('/api/deriv/demo/burst.csv'),
+  'El panel debe mostrar descarga de todo DEMO y de la última tanda');
+assert.ok(panel.includes("historyMode='DEMO'"),'La tabla superior debe mostrar DEMO por defecto');
+assert.ok(panel.includes('renderDemoTopTrades'), 'Las compras DEMO deben aparecer en tabla superior');
+assert.ok(panel.includes('fetchFreshBrowserBotSignal()'), 'El lote requiere señales individuales recientes');
 for(const id of ['demo-apply-stake','demo-stake-selection-status','official-demo-sync','browser-tick-status']){
  assert.ok(panel.includes('id="'+id+'"'),'Falta control de actualización o apuesta DEMO '+id);
 }
