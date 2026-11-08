@@ -1918,7 +1918,7 @@ $('demo-burst-start').onclick=async()=>{
     output.textContent='ESPERAR: ninguna señal válida para el contrato '+(i+1)+
       '. Se mantiene el saldo y no se fuerza la compra.';break;
    }
-   let selected=null,quote=null;
+   let selected=null,quote=null,staleSkipped=0;
    for(const candidate of ranked){
     if(demoBurstStopRequested||document.hidden)break;
     const key=candidate.symbol+':'+candidate.direction;
@@ -1929,8 +1929,10 @@ $('demo-burst-start').onclick=async()=>{
     catch{continue;}
     if(!fresh||fresh.valid!==true||fresh.direction!==candidate.direction||
        !Number.isSafeInteger(fresh.at)||!Number.isFinite(fresh.quoteAgeSeconds)||
-       demoAgeSinceSignal(fresh,signalReceivedAtMs)>DEMO_BURST_FRESHNESS_SECONDS||
        !['UP','DOWN'].includes(fresh.direction))continue;
+    if(demoAgeSinceSignal(fresh,signalReceivedAtMs)>DEMO_BURST_FRESHNESS_SECONDS){
+      staleSkipped++;continue;
+    }
     if(scoreDemoMarketSignal(fresh)<35)continue;
     let proposed;
     const proposalStartedAtMs=performance.now();
@@ -1939,7 +1941,9 @@ $('demo-burst-start').onclick=async()=>{
     catch{continue;}
     const proposalRttMs=Math.max(0,Math.round(performance.now()-proposalStartedAtMs));
     const signalAgeAtProposalSec=demoAgeSinceSignal(fresh,signalReceivedAtMs);
-    if(signalAgeAtProposalSec>DEMO_BURST_FRESHNESS_SECONDS)continue;
+    if(signalAgeAtProposalSec>DEMO_BURST_FRESHNESS_SECONDS){
+      staleSkipped++;continue;
+    }
     const p=proposed.proposal||{},ask=Number(p.ask_price),
       payout=Number(p.payout);
     if(proposed.msg_type!=='proposal'||proposed.error||proposed.errors||
@@ -1957,8 +1961,9 @@ $('demo-burst-start').onclick=async()=>{
     break;
    }
    if(!selected||!quote){
-    output.textContent='ESPERAR: ninguna cotización cumplió señal, pago mínimo y '+
-      'límite de concentración. Confirmadas: '+confirmed+'.';break;
+    output.textContent='ESPERAR: no hubo cotización con señal, pago, frescura y '+
+      'límite de concentración aceptables. Descartes por señal vieja (>3 s): '+
+      staleSkipped+'. Confirmadas: '+confirmed+'.';break;
    }
    const p=quote.proposal,e=selected.indicator||{};
    output.textContent='Bot eligió '+selected.symbol+' '+(selected.direction==='UP'?'CALL':'PUT')+
