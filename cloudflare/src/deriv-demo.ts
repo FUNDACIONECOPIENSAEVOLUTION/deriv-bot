@@ -294,6 +294,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
       "SELECT COUNT(*) AS n FROM demo_trades WHERE state='SETTLED' AND code='CLIENT_OBSERVED'"
     ).one().n;
     const raw=this.getRiskSnapshot();
+    const confirmed=sql.exec<{n:number;spent:number}>(
+      "SELECT COUNT(*) AS n, COALESCE(SUM(buy_cents),0) AS spent FROM demo_trades WHERE state IN ('OPEN','SETTLED')"
+    ).one();
     const history=sql.exec<Row>(
       'SELECT * FROM demo_trades ORDER BY id DESC LIMIT 50'
     ).toArray();
@@ -349,6 +352,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
       batchCommittedCents:raw.batchCommittedCents,
       batches,
       pilotPurchases:raw.pilotPurchases,
+      confirmedPurchases:confirmed.n,
+      confirmedCommittedCents:confirmed.spent,
       pilotRemainingPurchases:Math.max(0,DEMO_PILOT_MAX_PURCHASES-raw.pilotPurchases),
       pilotCommittedCents:raw.pilotCommittedCents,
       pilotRemainingBudgetCents:Math.max(0,DEMO_PILOT_BUDGET_CENTS-raw.pilotCommittedCents),
