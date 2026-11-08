@@ -12,6 +12,7 @@ import {dispatchMcp} from './mcp-local.mjs';
 import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS} from './market-analysis.mjs';
+import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
 
 const HOME=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ECOPIENSA_DATA_DIR||join(HOME,'data');
@@ -78,6 +79,7 @@ function status(){
   ...githubReleaseStatus(),
   appId:get('app_id')||'',
   account:account?{label:'DEMO · …'+account.accountId.slice(-4),balance:account.balance,checkedAt:account.checkedAt,currency:'USD'}:null,
+  accountAgeSeconds:account?Math.max(0,now()-account.checkedAt):null,
   brokerBalanceVerifiedRecently:connected&&now()-account.checkedAt<=60,
   realEnabled:false,buyEnabled:connected,manualDemoOnly:true,mcpLocalOnly:true,source:'Deriv oficial, no PAPER'};
 }
@@ -106,6 +108,13 @@ const market=new Map(SYMBOLS.map(symbol=>[symbol,{symbol,ticks:[],epoch:0,quote:
 const watchSymbols=new Map(); // Precios externos de SOLO LECTURA, nunca fuente de BUY sintético.
 const watchlist=new Map(EXTERNAL_NAMES.map(name=>[name,{name,symbol:null,quote:null,epoch:null,available:false,source:'Deriv public'}]));
 let publicConnected=false,publicLastError='SIN_CONECTAR',backoff=1000;
+const publicStats={connections:0,reconnects:0,symbolsReceived:0,activeMarkets:0,historyLoaded:0,
+ ticksReceived:0,lastMessageAt:null,lastTickAt:null,diagnosticCode:'SIN_CONECTAR'};
+const marketDiagnosis=()=>({connected:publicConnected,error:publicLastError,
+ ...publicStats,secondsSinceMessage:publicStats.lastMessageAt?Math.round((Date.now()-publicStats.lastMessageAt)/1000):null,
+ secondsSinceTick:publicStats.lastTickAt?Math.round((Date.now()-publicStats.lastTickAt)/1000):null,
+ readyMarkets:[...market.values()].filter(x=>x.available&&x.ticks.length>=600).length,
+ realEnabled:false});
 const streams=new Set();
 const MAX_STREAMS=4;
 // Heartbeats are local SSE comments; they do NOT contact the broker.
@@ -131,12 +140,17 @@ function externalSnapshot(){
  }));
 }
 function configureSymbols(ws,records){
- const available=new Set(records.map(x=>x?.symbol).filter(Boolean));
+ const active=normalizeActiveSymbols(records); // Nueva API: underlying_symbol.
+ const available=new Set(active.map(x=>x.symbol));
+ publicStats.symbolsReceived=active.length;
+ publicStats.activeMarkets=SYMBOLS.filter(x=>available.has(x)).length;
+ publicStats.diagnosticCode=publicStats.activeMarkets?'SIMBOLOS_RECONOCIDOS':'NO_SE_RECONOCEN_INDICES';
  SYMBOLS.forEach((symbol,i)=>{
   const m=market.get(symbol);m.available=available.has(symbol);
-  if(!m.available)return;
+  if(!m.available){pushMarket(m);return;}
   ws.send(JSON.stringify({ticks_history:symbol,count:HISTORY_TICKS,end:'latest',style:'ticks',req_id:400+i}));
   ws.send(JSON.stringify({ticks:symbol,subscribe:1,req_id:500+i}));
+  pushMarket(m);
  });
  const groups=[
   [new RegExp('^USD/COP$','i'),'USD/COP'],
@@ -147,8 +161,7 @@ function configureSymbols(ws,records){
  ];
  let idx=0;
  for(const [expression,name] of groups){
-  const record=records.find(x=>typeof x?.symbol==='string'&&
-    expression.test(String(x.display_name||x.symbol)));
+  const record=findWatchSymbol(active,expression);
   const entry=watchlist.get(name);
   if(!record){entry.available=false;continue;}
   entry.symbol=record.symbol;entry.available=true;
@@ -157,28 +170,46 @@ function configureSymbols(ws,records){
  }
 }
 function publicSocket(){
- const ws=new WebSocket(PUBLIC_WS);let wasOpen=false;
+ const ws=new WebSocket(PUBLIC_WS);let wasOpen=false,receivedSymbols=false;
+ publicStats.connections++;publicLastError='CONEXION_PUBLICA_PENDIENTE';
+ const symbolsTimer=setTimeout(()=>{
+  if(!receivedSymbols){publicLastError='TIMEOUT_ACTIVE_SYMBOLS';
+   publicStats.diagnosticCode=publicLastError;try{ws.close();}catch{}}
+ },15000);
+ symbolsTimer.unref?.();
+ const tickTimer=setInterval(()=>{
+  if(receivedSymbols&&publicStats.activeMarkets>0&&publicStats.lastTickAt&&
+     Date.now()-publicStats.lastTickAt>30000){
+   publicLastError='TICKS_SIN_ACTUALIZAR_30S';publicStats.diagnosticCode=publicLastError;
+   try{ws.close();}catch{}
+  }
+ },5000);
+ tickTimer.unref?.();
  ws.addEventListener('open',()=>{
-  wasOpen=true;publicConnected=true;publicLastError='';backoff=1000;
+  wasOpen=true;publicConnected=true;publicLastError='ESPERANDO_SIMBOLOS';backoff=1000;
   ws.send(JSON.stringify({active_symbols:'brief',req_id:200}));
  });
  ws.addEventListener('message',ev=>{try{
-  if(typeof ev.data!=='string'||ev.data.length>400000)return;
+  if(typeof ev.data!=='string'||ev.data.length>2000000){
+   publicStats.diagnosticCode='MENSAJE_MUY_GRANDE_O_NO_TEXTO';return;
+  }
+  publicStats.lastMessageAt=Date.now();
   const o=JSON.parse(ev.data);
-  if(o.error||o.errors){publicLastError='DERIV_PUBLIC_RECHAZADO';return;}
+  if(o.error||o.errors){
+   const code=o.error?.code??o.errors?.[0]?.code;
+   const safe=typeof code==='string'&&/^[A-Za-z0-9_-]{1,40}$/.test(code)?code:'RECHAZADO';
+   publicLastError='DERIV_'+safe;publicStats.diagnosticCode=publicLastError;return;
+  }
   if(o.msg_type==='active_symbols'&&Array.isArray(o.active_symbols)){
-   configureSymbols(ws,o.active_symbols);return;
+   receivedSymbols=true;clearTimeout(symbolsTimer);
+   configureSymbols(ws,o.active_symbols);publicLastError='';return;
   }
   if(o.msg_type==='history'){
-   const symbol=o.echo_req?.ticks_history||SYMBOLS[o.req_id-400];
-   const m=market.get(symbol);if(!m||!m.available)return;
-   const prices=o.history?.prices||[],times=o.history?.times||[];
-   if(prices.length!==times.length||prices.length>HISTORY_TICKS)return;
-   const rows=[];
-   for(let i=0;i<prices.length;i++){
-    const price=Number(prices[i]),epoch=Number(times[i]);
-    if(Number.isFinite(price)&&price>0&&Number.isSafeInteger(epoch))rows.push({price,epoch});
-   }
+   const parsed=decodePublicHistory(o,Number.isInteger(o.req_id)?SYMBOLS[o.req_id-400]:null);
+   const m=market.get(parsed.symbol);if(!m||!m.available)return;
+   if(!parsed.valid){publicStats.diagnosticCode='HISTORIAL_INVALIDO';return;}
+   const rows=parsed.rows;
+   if(m.ticks.length===0)publicStats.historyLoaded++;
    // Conservar cualquier tick posterior recibido mientras llegaba el historial.
    const future=m.ticks.filter(x=>rows.length&&x.epoch>rows.at(-1).epoch);
    m.ticks=[...rows,...future].slice(-MAX_TICKS);
@@ -187,9 +218,10 @@ function publicSocket(){
    pushMarket(m);
   }
   if(o.msg_type==='tick'){
-   const t=o.tick||{},symbol=t.symbol||o.echo_req?.ticks;
-   const price=Number(t.quote),epoch=Number(t.epoch);
-   if(!Number.isFinite(price)||price<=0||!Number.isSafeInteger(epoch))return;
+   const tick=decodePublicTick(o);
+   if(!tick){publicStats.diagnosticCode='TICK_INVALIDO';return;}
+   const {symbol,price,epoch}=tick;
+   publicStats.ticksReceived++;publicStats.lastTickAt=Date.now();
    const watchName=watchSymbols.get(symbol);
    if(watchName){Object.assign(watchlist.get(watchName),{quote:price,epoch});return;}
    const m=market.get(symbol);
@@ -198,11 +230,12 @@ function publicSocket(){
    m.ticks.push({price,epoch});if(m.ticks.length>MAX_TICKS)m.ticks.shift();
    pushMarket(m);
   }
- }catch{publicLastError='MENSAJE_MERCADO_INVALIDO';}});
+ }catch{publicLastError='MENSAJE_MERCADO_INVALIDO';publicStats.diagnosticCode=publicLastError;}});
  function lost(){
   if(ws._disconnected)return;ws._disconnected=true;publicConnected=false;
+  clearTimeout(symbolsTimer);clearInterval(tickTimer);publicStats.reconnects++;
   publicLastError=wasOpen?'CONEXION_PUBLICA_CERRADA':'NO_PUDO_CONECTAR';
-  for(const m of market.values())m.available=false;
+  for(const m of market.values()){m.available=false;pushMarket(m);}
   for(const w of watchlist.values()){w.available=false;w.epoch=null;w.quote=null;}
   watchSymbols.clear();
   setTimeout(publicSocket,backoff);backoff=Math.min(30000,backoff*2);
@@ -280,7 +313,8 @@ server=http.createServer(async(req,res)=>{
    }
   if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
   if(req.method==='GET'&&path==='/api/status')return answer(res,200,{...status(),marketConnected:publicConnected,marketError:publicLastError});
-  if(req.method==='GET'&&path==='/api/markets')return answer(res,200,{connected:publicConnected,
+   if(req.method==='GET'&&path==='/api/market/diagnostic')return answer(res,200,marketDiagnosis());
+  if(req.method==='GET'&&path==='/api/markets')return answer(res,200,{connected:publicConnected,error:publicLastError,
   markets:[...market.values()].map(snapshot)});
    if(req.method==='GET'&&path==='/api/watchlist')return answer(res,200,{
     source:'Deriv public read-only; these quotes do not predict synthetic indices',
