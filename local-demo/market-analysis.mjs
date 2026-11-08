@@ -1,0 +1,64 @@
+// Indicadores de investigación sobre ticks oficiales. NO son probabilidad de éxito ni BUY.
+export const TICKS_PER_CANDLE=10;
+export const CANDLES_VISIBLE=60;
+export const HISTORY_TICKS=660;
+export const MAX_TICKS=700;
+const mean=x=>x.reduce((a,b)=>a+b,0)/x.length;
+function ema(values,span){
+ if(values.length<span)return null;
+ const k=2/(span+1);let value=mean(values.slice(0,span));
+ for(let i=span;i<values.length;i++)value=values[i]*k+value*(1-k);
+ return value;
+}
+function rsi(values,n=14){
+ if(values.length<n+1)return null;
+ let up=0,down=0;
+ for(let i=values.length-n;i<values.length;i++){
+  const change=values[i]-values[i-1];up+=Math.max(0,change);down+=Math.max(0,-change);
+ }
+ if(down===0)return up===0?50:100;
+ return 100-100/(1+up/down);
+}
+export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}={}){
+ const valid=ticks.filter(x=>Number.isFinite(x?.price)&&x.price>0&&Number.isInteger(x?.epoch));
+ const prices=valid.map(x=>x.price);
+ const all=[];
+ const whole=Math.floor(prices.length/TICKS_PER_CANDLE);
+ for(let i=0;i<whole;i++){
+  const p=prices.slice(i*TICKS_PER_CANDLE,(i+1)*TICKS_PER_CANDLE);
+  all.push({open:p[0],high:Math.max(...p),low:Math.min(...p),close:p.at(-1),
+   epoch:valid[(i+1)*TICKS_PER_CANDLE-1].epoch});
+ }
+ const candles=all.slice(-CANDLES_VISIBLE);
+ const closes=candles.map(c=>c.close);
+ const ema20=ema(closes,20),ema50=ema(closes,50),rsi14=rsi(closes);
+ const ranges=candles.map((c,i)=>Math.max(c.high-c.low,
+  i?Math.abs(c.high-candles[i-1].close):0,
+  i?Math.abs(c.low-candles[i-1].close):0));
+ const atr14=ranges.length>=14?mean(ranges.slice(-14)):null;
+ const prev=closes.at(-6),last=closes.at(-1);
+ const momentum5=Number.isFinite(prev)&&prev!==0?(last-prev)/Math.abs(prev):null;
+ const slope10=closes.length>=11?(last-closes.at(-11))/10:null;
+ const ready=candles.length>=CANDLES_VISIBLE;
+ const fresh=Boolean(connected&&ageReceivedMs!==null&&ageReceivedMs<=1500&&
+  valid.length&&Math.abs(Date.now()-valid.at(-1).epoch*1000)<=2500);
+ let direction='ESPERAR',reason=ready?'SIN_CONSENSO':'HISTORIAL_INSUFICIENTE';
+ if(!fresh)reason='PRECIOS_NO_FRESCOS';
+ else if(ready&&ema20!==null&&ema50!==null&&rsi14!==null&&atr14!==null&&
+    Number.isFinite(momentum5)&&Number.isFinite(slope10)&&atr14>0){
+  if(ema20>ema50&&rsi14>=52&&rsi14<=68&&slope10>0&&momentum5>0){
+   direction='CALL';reason='TENDENCIA_ALCISTA_MULTIFACTOR';
+  }else if(ema20<ema50&&rsi14<=48&&rsi14>=32&&slope10<0&&momentum5<0){
+   direction='PUT';reason='TENDENCIA_BAJISTA_MULTIFACTOR';
+  }
+ }
+ // Intensidad descriptiva 0-100, NO estimación calibrada de acierto.
+ const strength=ready&&ema20!==null&&ema50!==null&&atr14>0?
+  Math.min(100,Math.round(Math.abs(ema20-ema50)/atr14*40)):null;
+ return {candles,candleCount:candles.length,requiredCandles:CANDLES_VISIBLE,
+  ticksAnalyzed:prices.length,ema20,ema50,rsi14,atr14,momentum5,slope10,
+  sma8:prices.length>=8?mean(prices.slice(-8)):null,
+  sma21:prices.length>=21?mean(prices.slice(-21)):null,
+  direction,reason,signalStrength:strength,ready,fresh,
+  lastPrices:prices.slice(-90),trend:direction==='CALL'?'ALCISTA':direction==='PUT'?'BAJISTA':'INDEFINIDA'};
+}
