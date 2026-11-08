@@ -30,3 +30,11 @@ jobs:
           node --check local-demo/market-analysis.mjs
           node --check local-demo/public/app.js
           node --test local-demo/test/*.test.mjs
+      - name: Simular instalador sin scripts del repositorio
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/ecopiensa-standalone-package"
+          mkdir -p "$stage/local-demo"
+          cp -R local-demo/. "$stage/local-demo/"
+          (cd "$stage" && node --test local-demo/test/*.test.mjs)
