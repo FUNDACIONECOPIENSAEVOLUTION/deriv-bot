@@ -7,11 +7,11 @@
 <div class="banner">Experimento de USD 10 virtuales. Las marcas de entrada y salida pertenecen a la simulación del proyecto; no son órdenes de una cuenta Deriv. El motor actual aplica reglas SMA y RSI, sin un modelo de IA conectado.</div>
 <div id="error" class="error" role="status" aria-live="polite"></div>
 <div class="metrics">
-<section class="card"><div class="metric-label">Saldo oficial · Deriv DEMO</div><div id="official-demo-balance" class="value">Sin conectar</div><div id="official-demo-time" class="metric-foot">No es el saldo PAPER</div></section>
+<section class="card"><div class="metric-label">Saldo oficial · Deriv DEMO</div><div id="official-demo-balance" class="value">Sin conectar</div><div id="official-demo-time" class="metric-foot">No es el saldo PAPER</div><div id="official-demo-sync" class="metric-foot">Actualización automática al estar visible: cada ~20 s; no cambia en cada tick.</div></section>
 <section class="card"><div class="metric-label">Saldo de simulación PAPER</div><div id="balance" class="value">—</div><div id="capital" class="metric-foot">Simulación independiente · USD 10</div></section>
 <section class="card"><div class="metric-label">Ganancia o pérdida virtual</div><div id="profit" class="value">—</div><div class="metric-foot">Resultado neto · pago y costos hipotéticos</div></section>
 <section class="card"><div class="metric-label">Simulaciones terminadas</div><div id="completed" class="value">—</div><div id="voided" class="metric-foot">Sin operaciones recibidas</div></section>
-<section class="card"><div class="metric-label">Cotización del motor · Deriv</div><div id="quote" class="value">—</div><div id="quoteTime" class="metric-foot">Sin precio recibido</div></section>
+<section class="card"><div class="metric-label">Cotización R_100 · Deriv</div><div id="quote" class="value">—</div><div id="quoteTime" class="metric-foot">Sin precio recibido</div><div id="browser-tick-status" class="metric-foot">Ticker público en directo: sin conectar</div></section>
 </div>
 <div class="workspace"><section class="card">
 <header class="chart-head"><div><h2 id="chart-title">Deriv · R_100</h2><p>Velas de 1 minuto · Hora de Colombia (UTC−5)</p></div><span id="chart-status" class="chip">Esperando datos</span></header>
@@ -39,7 +39,7 @@
 <p>El saldo oficial proviene de Deriv y se muestra por separado de la simulación PAPER de USD 10. La versión del panel no demuestra que haya compras: para realizar contratos DEMO debe existir autorización vigente y estar habilitada expresamente la ejecución DEMO en el servidor. La cuenta real continúa excluida.</p>
 <div class="tools"><label>Identificador público de la aplicación <input id="deriv-client" maxlength="128" autocomplete="off" spellcheck="false" placeholder="App ID de Deriv"></label><button id="deriv-connect">Autorizar conexión con Deriv</button><button id="deriv-refresh" disabled>Actualizar saldo demo</button></div>
 <p id="demo-balance">Saldo demo oficial: pendiente de conexión.</p>
-<div class="tools"><label>Dirección a cotizar <select id="demo-quote-direction"><option value="UP">Sube (CALL)</option><option value="DOWN">Baja (PUT)</option></select></label><label>Importe virtual <select id="demo-quote-stake"><option value="35">US$0,35</option><option value="50">US$0,50</option><option value="75">US$0,75</option><option value="100">US$1</option></select></label><button id="deriv-quote" disabled>Consultar precio DEMO · 5 ticks</button><button id="deriv-market-check">Verificar contratos disponibles</button></div>
+<div class="tools"><label>Dirección a cotizar <select id="demo-quote-direction"><option value="UP">Sube (CALL)</option><option value="DOWN">Baja (PUT)</option></select></label><label>Apuesta de la próxima compra DEMO <select id="demo-quote-stake"><option value="35">US$0,35</option><option value="50">US$0,50</option><option value="75">US$0,75</option><option value="90">US$0,90</option><option value="100">US$1,00</option></select></label><button id="demo-apply-stake" disabled>Fijar importe para UNA compra DEMO</button><button id="deriv-quote" disabled>Consultar precio DEMO · 5 ticks</button><button id="deriv-market-check">Verificar contratos disponibles</button></div><p id="demo-stake-selection-status" class="note" role="status">Importes permitidos: US$0,35 · US$0,50 · US$0,75 · US$0,90 · US$1. El importe elegido se aplica a una sola compra manual después de verificar el saldo oficial; las compras automáticas mantienen su secuencia.</p>
 <p id="demo-market-check" class="note" role="status">Compatibilidad de R_100 y 1HZ100V aún sin verificar. Esta consulta es pública y no compra contratos.</p>
 <p id="demo-next-stake" class="note">El siguiente importe programado se consultará al actualizar la cuenta DEMO.</p>
 <p id="demo-quote" class="note" role="status">Solo se consultará un precio al broker. No se comprará ningún contrato y no se incrementará el importe si Deriv lo rechaza.</p>
@@ -49,7 +49,7 @@
 <div class="tools">
   <button id="demo-buy-once" disabled>Ejecutar UNA compra DEMO con saldo virtual</button>
   <button id="demo-check" disabled>Verificar liquidación de contrato DEMO</button>
-  <label>Máximo de contratos DEMO simultáneos <select id="demo-max-concurrent"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10" selected>10</option></select></label>
+  <label>Contratos simultáneos solicitados <input id="demo-max-concurrent" type="number" min="1" max="100" step="1" value="1" inputmode="numeric" style="width:92px"></label><small>Admite escribir 1 a 100 para planificación. Límite aprobado del servidor: 10; compras por navegador: 1 cada vez. Las cantidades 11–100 permanecen bloqueadas hasta validar concurrencia y riesgo.</small>
   <button id="demo-auto-start" disabled>Activar evaluación automática DEMO</button>
   <button id="demo-auto-stop" disabled>Pausar evaluación automática</button>
 </div>
