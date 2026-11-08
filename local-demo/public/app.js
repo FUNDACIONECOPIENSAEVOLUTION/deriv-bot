@@ -3,12 +3,27 @@ const $=id=>document.getElementById(id);
 const fmt=x=>Number.isFinite(x)?Number(x).toLocaleString('es-CO',{maximumFractionDigits:3}):'—';
 const usd=x=>Number.isFinite(x)?'US$'+Number(x).toFixed(2):'—';
 const markets=new Map();let chosen='R_100',lastNetwork=0,loadedVersion=null;
+const versionTenths=v=>{const m=/^v?(\d+)\.(\d)$/.exec(String(v||''));return m?Number(m[1])*10+Number(m[2]):null;};
 const escapeText=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function get(url){const r=await fetch(url,{cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error||'HTTP '+r.status);return data;}
 async function post(path,data){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1'},body:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw Error(result.error||'HTTP '+r.status);return result;}
-async function poll(){try{const s=await get('/api/status');if(loadedVersion&&loadedVersion!==s.version){location.reload();return;}loadedVersion=s.version;$('online').textContent='SERVIDOR LOCAL ACTIVO';$('pending-update').hidden=!s.updatePending;$('version').textContent=s.version;$('version-title').textContent='Deriv DEMO · aplicación local '+s.version;
+async function poll(){try{const s=await get('/api/status');if(loadedVersion&&loadedVersion!==s.version){location.reload();return;}loadedVersion=s.version;$('online').textContent='SERVIDOR LOCAL ACTIVO';
+const localNumber=versionTenths(s.version),githubNumber=versionTenths(s.githubVersion);
+const outdated=githubNumber!==null&&localNumber!==null&&githubNumber>localNumber;
+$('pending-update').hidden=!(s.updatePending||outdated);
+$('update-now').textContent=outdated?'Actualizar a v'+s.githubVersion:'Buscar actualizaciones';
+$('update-now').classList.toggle('available-update',outdated);$('version').textContent=s.version;$('version-title').textContent='Deriv DEMO · aplicación local '+s.version;
 $('github-version').textContent='GitHub pc-local: '+(s.githubVersion?'v'+s.githubVersion:'sin comprobar')+
 (s.githubStatus==='offline'?' (sin red)':'');$('connection').textContent=s.connected?'DEMO conectada ('+(s.authorizationMethod||'autenticada')+')':s.authorizationExpired?'Autorización vencida':s.authorizationCorrupt?'Credenciales ilegibles':'Sin conectar';$('feed').textContent=s.marketConnected?'Deriv en vivo':s.marketError||'Reconectando';$('balance').textContent=s.brokerBalanceVerifiedRecently?usd(s.account.balance):'Sin verificar';if(s.appId)$('app-id').value=s.appId;lastNetwork=Date.now();}catch(e){$('online').textContent='SIN SERVIDOR · '+e.message;}}
+$('update-now').onclick=async()=>{
+ const button=$('update-now');
+ button.disabled=true;$('update-message').textContent='Buscando e instalando actualización en segundo plano...';
+ try{
+  const response=await post('/api/system/update-now',{});
+  $('update-message').textContent=response.note||'Actualización iniciada. Espera a que el servidor vuelva a responder.';
+ }catch(e){$('update-message').textContent='No se pudo iniciar: '+e.message;}
+ finally{setTimeout(()=>{button.disabled=false;void poll();},3500);}
+};
 function marketCard(m){let c=$('market-'+m.symbol);if(!c){c=document.createElement('button');c.className='market';c.id='market-'+m.symbol;c.addEventListener('click',()=>{chosen=m.symbol;draw();});$('markets').appendChild(c);}c.classList.toggle('active',chosen===m.symbol);const direction=m.fresh?m.direction:'ESPERAR';c.innerHTML='<span>'+escapeText(m.symbol)+'</span><b>'+fmt(m.quote)+'</b><div class="'+(direction==='CALL'?'up':direction==='PUT'?'down':'hold')+'">'+direction+'</div><small>RSI '+fmt(m.rsi14)+' · Edad '+(m.ageReceivedMs??'—')+' ms · '+(m.fresh?'FRESCO':'OBSOLETO')+'</small>';}
 function draw(){const m=markets.get(chosen),cv=$('chart'),ctx=cv.getContext('2d');const w=cv.width,h=cv.height;ctx.clearRect(0,0,w,h);const points=m?.lastPrices||[];if(points.length<2)return;const lo=Math.min(...points),hi=Math.max(...points),range=hi-lo||1;ctx.strokeStyle='#3ed6bd';ctx.lineWidth=2;ctx.beginPath();points.forEach((v,i)=>{const x=10+i*(w-20)/(points.length-1),y=h-10-(v-lo)/range*(h-20);if(!i)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();ctx.fillStyle='#a8c7d4';ctx.font='12px Arial';ctx.fillText(chosen+' · '+points.length+' ticks · '+fmt(points.at(-1)),12,17);drawCandles(points);}
 function drawCandles(points){

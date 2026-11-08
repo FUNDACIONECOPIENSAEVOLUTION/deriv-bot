@@ -55,6 +55,17 @@ test('Reject invalid PAT without storing authorization; preserve data directory'
  assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/window\.open\('about:blank','_blank'\)/);
 }));
 
+test('Update button is visible; Linux CI cannot run Windows updater or send orders',async()=>boot(async({base})=>{
+ const page=await (await fetch(base+'/')).text();
+ assert.match(page,/id="update-now"/);
+ const r=await fetch(base+'/api/system/update-now',{method:'POST',
+  headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1',Origin:base},body:'{}'});
+ assert.equal(r.status,400);
+ assert.equal((await r.json()).error,'UPDATE_ONLY_WINDOWS');
+ const health=await (await fetch(base+'/api/health')).json();
+ assert.equal(health.realEnabled,undefined);
+ assert.equal(health.safeToUpdate,true);
+}));
 test('Local and GitHub pc-local version displayed without sending an order',async()=>boot(async({base,data})=>{
  const m=JSON.parse(readFileSync(new URL('../local-release.json',import.meta.url),'utf8'));
  const html=await (await fetch(base+'/')).text();

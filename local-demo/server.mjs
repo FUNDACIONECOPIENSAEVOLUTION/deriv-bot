@@ -7,6 +7,7 @@ import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {performance} from 'node:perf_hooks';
 import {readTraining} from './training.mjs';
+import {spawn} from 'node:child_process';
 import {dispatchMcp} from './mcp-local.mjs';
 import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
@@ -240,6 +241,21 @@ server=http.createServer(async(req,res)=>{
     count:b.count,stakeCents:b.stakeCents,symbol:b.symbol,confirmation:b.confirmation
    }));
    if(path==='/api/demo/burst/stop')return answer(res,200,bursts.stop());
+   if(path==='/api/system/update-now'){
+    // Solo una acción local, sin comandos arbitrarios; no interrumpir contratos DEMO.
+    if(!trading.canUpdate()||!bursts.canUpdate())throw Error('DEMO_OPERATIONS_PENDING');
+    if(process.platform!=='win32')throw Error('UPDATE_ONLY_WINDOWS');
+    const helper=join(HOME,'Tarea-Oculta.vbs'),root=dirname(HOME);
+    const wscript=join(process.env.WINDIR||'C:\\Windows','System32','wscript.exe');
+    if(!existsSync(helper)||!existsSync(wscript))throw Error('WINDOWS_UPDATER_NOT_INSTALLED');
+    const processUpdate=spawn(wscript,['//B',helper,'actualizar',root],
+      {cwd:HOME,windowsHide:true,detached:true,stdio:'ignore'});
+    processUpdate.on('error',()=>console.warn('WINDOWS_UPDATER_FAILED'));
+    processUpdate.unref();
+    audit('MANUAL_UPDATE_REQUEST','Actualización local aprobada, sin operaciones DEMO');
+    return answer(res,202,{started:true,mode:'BACKGROUND_HIDDEN',
+      note:'GitHub se comprueba en segundo plano. El PC reiniciará el servicio solo si está sin compras pendientes.'});
+   }
   return answer(res,404,{error:'RUTA_DESCONOCIDA'});
  }catch(e){console.warn('Petición rechazada:',errorCode(e));return answer(res,400,{error:errorCode(e),readOnly:true});}
 });
