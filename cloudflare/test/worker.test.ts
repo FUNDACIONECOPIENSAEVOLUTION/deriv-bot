@@ -74,7 +74,8 @@ it('public dependency health checks both PAPER and broker DEMO without exposing 
 it('dependency health reports unavailable PAPER without hiding healthy DEMO storage',async()=>{
  const broken={...env,PAPER:{getByName(){throw Error('TEST_PAPER_UNAVAILABLE');}}};
  const {response,body}=await request('/api/health/dependencies',{},broken as unknown as typeof env);
- expect(response.status).toBe(503);
+ // DEMO remains available when optional PAPER storage fails.
+ expect(response.status).toBe(200);
  expect(JSON.parse(body)).toMatchObject({paper:'unavailable',demo:'ready',
    brokerAuthorization:'not_checked'});
 });
