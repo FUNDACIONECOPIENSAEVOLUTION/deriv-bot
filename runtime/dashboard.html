@@ -1408,6 +1408,43 @@ void loadMcpIntent();
 window.setInterval(()=>{if(!document.hidden&&!mcpIntentBusy)void loadMcpIntent();},12000);
 
 
+/** Independent public market stream used only for a manually authorized DEMO batch.
+ * A more recent tick than the SMA/RSI sample invalidates that signal.
+ */
+async function openDemoBurstMarketTicks(){
+ const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public');
+ const observations=new Map();
+ ws.addEventListener('message',event=>{
+  try{
+   if(typeof event.data!=='string'||event.data.length>32768)return;
+   const frame=JSON.parse(event.data),tick=frame.tick||{};
+   if(frame.msg_type!=='tick'||frame.error||frame.errors)return;
+   const symbol=typeof tick.symbol==='string'?tick.symbol:frame.echo_req?.ticks;
+   const epoch=Number(tick.epoch),quote=Number(tick.quote);
+   if(!demoScanSymbols.includes(symbol)||!Number.isSafeInteger(epoch)||
+      !Number.isFinite(quote)||quote<=0||
+      Math.abs(Math.floor(Date.now()/1000)-epoch)>5)return;
+   observations.set(symbol,{epoch,quote,receivedAt:performance.now()});
+  }catch{/* invalid market message cannot permit a trade */}
+ });
+ try{
+  for(const [i,symbol] of demoScanSymbols.entries())
+   ws.send(JSON.stringify({ticks:symbol,subscribe:1,req_id:9700+i}));
+ }catch(error){try{ws.close();}catch{}throw Error('DEMO_TICK_SUBSCRIBE_FAILED');}
+ return {ws,latest(symbol){
+  if(ws.readyState!==WebSocket.OPEN)return null;
+  const tick=observations.get(symbol);
+  if(!tick||performance.now()-tick.receivedAt>1500||
+     Math.abs(Math.floor(Date.now()/1000)-tick.epoch)>2)return null;
+  return tick;
+ }};
+}
+function demoTickMatchesSignal(tick,signal){
+ return !!tick&&Number.isSafeInteger(signal?.lastTickEpoch)&&
+  Number.isFinite(signal?.lastPrice)&&tick.epoch===signal.lastTickEpoch&&
+  Math.abs(tick.quote-signal.lastPrice)<=Math.max(0.00000001,Math.abs(signal.lastPrice)*1e-9);
+}
+
 async function fetchFreshBrowserBotSignal(symbol='R_100'){
  if(!demoScanSymbols.includes(symbol))throw Error('DEMO_SYMBOL_UNSUPPORTED');
  const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public');
@@ -1914,7 +1951,7 @@ $('demo-burst-start').onclick=async()=>{
  }
  demoBurstRunning=true;demoBurstStopRequested=false;
  $('demo-burst-start').disabled=true;$('demo-burst-stop').disabled=false;
- let ws=null,nonce=null,confirmed=0;
+ let ws=null,marketFeed=null,nonce=null,confirmed=0;
  const pairCounts=new Map(); // Max 2 correlated bets in same market and side per batch.
  try{
   const batch=await demoBurstPost('begin',{count,signal:'AUTO',stakeCents});
@@ -1924,6 +1961,7 @@ $('demo-burst-start').onclick=async()=>{
     throw Error('DEMO_BURST_SESSION_INVALID');
   nonce=batch.nonce;
   ws=await browserSocket(batch.wsUrl,'demo');
+  marketFeed=await openDemoBurstMarketTicks();
   for(let i=0;i<count;i++){
    if(demoBurstStopRequested||document.hidden)break;
    output.textContent='Evaluando mercado, señal y pago para la compra '+(i+1)+
@@ -1958,7 +1996,8 @@ $('demo-burst-start').onclick=async()=>{
     catch{continue;}
     const proposalRttMs=Math.max(0,Math.round(performance.now()-proposalStartedAtMs));
     const signalAgeAtProposalSec=demoAgeSinceSignal(fresh,signalReceivedAtMs);
-    if(signalAgeAtProposalSec>DEMO_BURST_FRESHNESS_SECONDS){
+    if(signalAgeAtProposalSec>DEMO_BURST_FRESHNESS_SECONDS||
+       !demoTickMatchesSignal(marketFeed?.latest(candidate.symbol),fresh)){
       staleSkipped++;continue;
     }
     const p=proposed.proposal||{},ask=Number(p.ask_price),
@@ -1972,7 +2011,8 @@ $('demo-burst-start').onclick=async()=>{
       lastPrice:Number.isFinite(fresh.lastPrice)?fresh.lastPrice:null,
       indicator:fresh.indicator,
       quoteAgeSeconds:fresh.quoteAgeSeconds,reason:fresh.reason,
-      signalAgeAtProposalSec,proposalRttMs,
+      signalAgeAtProposalSec,proposalRttMs,signalReceivedAtMs,
+      lastTickEpoch:fresh.lastTickEpoch,
       score:scoreDemoMarketSignal(fresh),breakEvenWinPct:Math.round(10000*ask/payout)/100};
     quote=proposed;
     break;
@@ -1988,7 +2028,12 @@ $('demo-burst-start').onclick=async()=>{
      'acierto necesario para equilibrar el pago: '+selected.breakEvenWinPct+
      '% (no hay estimación fiable de acierto real). Reservando '+(i+1)+'/'+count+'.';
    // Durable UNKNOWN row is written BEFORE a single broker buy is transmitted.
-   const reserved=await demoBurstPost('reserve',{
+   if(document.hidden||!demoTickMatchesSignal(marketFeed?.latest(selected.symbol),selected)){
+   output.textContent='Un tick nuevo invalidó la señal antes de reservar. Se omite esta entrada.';
+   staleSkipped++;continue;
+  }
+  const reserveStartedAtMs=performance.now();
+  const reserved=await demoBurstPost('reserve',{
     nonce,direction:selected.direction,symbol:selected.symbol,
     proposalId:p.id,askPrice:Number(p.ask_price),payout:Number(p.payout),
     evidence:{fast:e.fast,slow:e.slow,rsi:e.rsi,volatility:e.volatility,
@@ -2005,7 +2050,20 @@ $('demo-burst-start').onclick=async()=>{
       Math.abs(reserved.request?.price-stakeCents/100)>0.000001||
       typeof reserved.request?.buy!=='string')
     throw Error('DEMO_BURST_RESERVATION_INVALID');
-   const brokerAck=await brokerMessage(ws,reserved.request,10000);
+   // The server reservation itself may take seconds. If fresh data moved,
+  // cancel the UNSENT reservation before writing a BUY to the socket.
+  const reserveRttMs=Math.max(0,Math.round(performance.now()-reserveStartedAtMs));
+  const preBuyAgeSec=demoAgeSinceSignal(selected,selected.signalReceivedAtMs);
+  if(document.hidden||demoBurstStopRequested||preBuyAgeSec>2||reserveRttMs>1000||
+     !demoTickMatchesSignal(marketFeed?.latest(selected.symbol),selected)){
+   const cancelled=await demoBurstPost('cancel',{nonce,id:reserved.id});
+   if(cancelled.mode!=='DEMO_BURST_PREBUY_CANCELLED'||cancelled.brokerOrders!==0)
+    throw Error('DEMO_PREBUY_CANCEL_UNVERIFIED');
+   output.textContent='Entrada omitida ANTES de BUY: tick cambiado o señal antigua. '+
+     'Reserva '+reserveRttMs+' ms; edad '+preBuyAgeSec.toFixed(2)+' s. Cero órdenes enviadas.';
+   staleSkipped++;continue;
+  }
+  const brokerAck=await brokerMessage(ws,reserved.request,10000);
    const registered=await demoBurstPost('ack',{
      nonce,id:reserved.id,response:brokerAck
    });
@@ -2043,6 +2101,7 @@ $('demo-burst-start').onclick=async()=>{
   try{await demoBurstCurrent();}catch{}
  }finally{
   if(ws)try{ws.close();}catch{}
+  if(marketFeed?.ws)try{marketFeed.ws.close();}catch{}
   demoBurstRunning=false;demoBurstStopRequested=false;
   $('demo-burst-stop').disabled=true;
   await loadDemo();
