@@ -8,7 +8,8 @@ export type DemoCsvRow={
 export const DEMO_CSV_COLUMNS=[
  'fuente','tanda_id','id_registro','contrato_deriv','fecha_colombia',
  'reserva_epoch','compra_deriv_epoch','liquidacion_observada_epoch',
- 'estado','mercado','direccion','apuesta_usd','pago_usd','ganancia_neta_usd',
+ 'estado','mercado','direccion','apuesta_usd','pago_reportado_por_deriv_usd',
+ 'pago_derivado_de_pnl_usd','ganancia_neta_usd',
  'precio_entrada','precio_salida','estrategia','senal','sma_8','sma_21',
  'rsi','volatilidad','edad_cotizacion_seg','precio_senal',
  'razon_senal','diagnostico','verificacion'
@@ -56,7 +57,10 @@ export function demoTradesCsv(rows:DemoCsvRow[]):string{
    'DERIV_DEMO',typeof d.runId==='string'?d.runId:'',
    row.id,row.contract_id,colombia(row.created_at),row.created_at,
    row.bought_at,row.settled_at,row.state,row.symbol||'R_100',direction(row),
-   asUsd(row.buy_cents),asUsd(row.payout_cents),asUsd(row.pnl_cents),
+   asUsd(row.buy_cents),asUsd(row.payout_cents),
+   asUsd(row.state==='SETTLED'&&row.buy_cents!==null&&row.pnl_cents!==null
+      ?Math.max(0,row.buy_cents+row.pnl_cents):null),
+   asUsd(row.pnl_cents),
    row.entry_spot,row.exit_spot,d.strategy,d.direction,nums('fast'),
    nums('slow'),nums('rsi'),nums('volatility'),nums('quoteAgeSeconds'),
    nums('entryQuote'),d.reason,reason(row),verification
