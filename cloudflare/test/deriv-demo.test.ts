@@ -371,3 +371,69 @@ it('broker DEMO burst cannot be started without an up-to-date real bot CALL or P
  expect((await stub.demoBurstStatus()).confirmed).toBe(0);
  expect(calls).not.toContain('buy');
 });
+
+it('records ten distinct confirmed broker DEMO contract IDs, one buy reservation per contract, and all ten settlements',async()=>{
+ const stub=env.DERIV_DEMO.getByName('demo-burst-ten-confirmed-fixture');
+ const oauth=await stub.begin('app-123','https://paper.example');
+ await stub.complete(oauth.state,'fixture-code');
+ await stub.refresh();
+ const now=Math.floor(Date.now()/1000);
+ await runInDurableObject(stub,(_instance,ctx)=>{
+  ctx.storage.sql.exec(
+   "INSERT INTO demo_connection(slot,data) VALUES(?,?)",
+   'demo-browser-signal',JSON.stringify({
+    direction:'UP',reason:'TREND_AND_MOMENTUM',quoteAgeSeconds:0,
+    at:now,source:'OWNER_BROWSER_REPORTED_PUBLIC_R_100',
+    verifiedIndependently:false,valid:true,
+    indicator:{fast:551,slow:550,rsi:59,volatility:0.02}
+   }));
+ });
+ network.use(http.post('https://api.derivws.com/trading/v1/options/accounts/DOT12345/otp',
+  ()=>{calls.push('otp');return HttpResponse.json({
+    data:{url:'wss://api.derivws.com/trading/v1/options/ws/demo?otp=fixture-only'}});}));
+ const session=await stub.beginDemoBurst({count:10,signal:'UP'});
+ expect(session.mode).toBe('DEMO_BROWSER_BURST');
+ expect(session.accountType).toBe('demo');
+ expect(session.stakeCents).toBe(100);
+ expect(session.autoRetry).toBe(false);
+ expect(session.wsUrl).toContain('/ws/demo?otp=');
+ for(let i=0;i<10;i++){
+  const reservation=await stub.reserveDemoBurst({
+   nonce:session.nonce,proposalId:String(i+1).padStart(36,'0'),
+   askPrice:1,payout:1.80,
+   evidence:{reason:'TREND_AND_MOMENTUM',fast:551,slow:550,rsi:59,volatility:0.02}
+  });
+  expect(reservation).toMatchObject({mode:'DEMO_BURST_RESERVED',accountType:'demo',
+    request:{price:1,req_id:2}});
+  const ack=await stub.acknowledgeDemoBurst({
+   nonce:session.nonce,id:reservation.id,
+   response:{msg_type:'buy',req_id:2,buy:{contract_id:900000+i,
+     buy_price:1,purchase_time:now}}
+  });
+  expect(ack).toMatchObject({accepted:true,confirmed:i+1,
+    contractId:900000+i,accountType:'demo'});
+ }
+ const status=await stub.demoBurstStatus();
+ expect(status).toMatchObject({requested:10,confirmed:10,opened:10,
+  settled:0,commitmentCents:1000,status:'RECONCILING'});
+ expect(new Set(status.contracts?.map(x=>x.contractId)).size).toBe(10);
+ const risk=(await stub.status()).tradeReport;
+ expect(risk.openCount).toBe(10);
+ expect(risk.activeExposureCents).toBe(1000);
+ expect(risk.batchSettlementPending).toBe(true);
+ expect(await errorFrom(stub,instance=>instance.beginBrowserPilot('UP',100)))
+  .toBe('DEMO_BURST_ALREADY_ACTIVE');
+ for(let i=0;i<10;i++){
+  const row=status.contracts![i];
+  const reply=await stub.settleDemoBurst({nonce:session.nonce,id:row.id,
+   response:{msg_type:'proposal_open_contract',req_id:3,
+    proposal_open_contract:{contract_id:row.contractId,is_sold:true,
+     contract_type:'CALL',currency:'USD',underlying_symbol:'R_100',
+     buy_price:1,payout:1.80,profit:0.80,entry_spot:550,exit_spot:551}}});
+  expect(reply.state).toBe('SETTLED');
+ }
+ const final=await stub.demoBurstStatus();
+ expect(final).toMatchObject({status:'COMPLETE',confirmed:10,opened:0,
+  settled:10,commitmentCents:1000,realizedPnlCents:800});
+ expect(calls).not.toContain('buy');
+});
