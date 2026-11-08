@@ -58,6 +58,15 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v6.8 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:00:39.362Z (UTC).
+- **Commit de origen:** `4d80ed2f4328`.
+- Documentar diez compras PAPER mediante bot y herramienta MCP sin acceso a cuentas Deriv
+- Integrar ensayos PAPER y validación de nueva página en pruebas del repositorio
+- Integrar ensayos PAPER y validación de nueva página en pruebas del repositorio
+
 ## v6.7 — 2026-11-07
 
 - **Actualizado:** 2026-11-07T23:59:57.335Z (UTC).

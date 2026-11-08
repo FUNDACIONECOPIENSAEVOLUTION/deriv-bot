@@ -1,12 +1,12 @@
 {
-  "version": "6.7",
-  "updatedAt": "2026-11-07T23:59:57.335Z",
-  "summary": "Probar acceso a página PAPER 10, validación de ticks y bloqueo de canales autenticados",
+  "version": "6.8",
+  "updatedAt": "2026-11-08T00:00:39.362Z",
+  "summary": "Documentar diez compras PAPER mediante bot y herramienta MCP sin acceso a cuentas Deriv",
   "changes": [
-    "Probar acceso a página PAPER 10, validación de ticks y bloqueo de canales autenticados",
-    "Conectar ensayo PAPER 10 con navegación y acceso visible desde la portada del bot",
-    "Implementar botón PAPER 10 en navegador con señales SMA/RSI idénticas al núcleo del bot"
+    "Documentar diez compras PAPER mediante bot y herramienta MCP sin acceso a cuentas Deriv",
+    "Integrar ensayos PAPER y validación de nueva página en pruebas del repositorio",
+    "Integrar ensayos PAPER y validación de nueva página en pruebas del repositorio"
   ],
-  "sourceCommit": "0b4f7dca3b5f200e127d11e05e9a28625200acb2",
+  "sourceCommit": "4d80ed2f43283d6ac661a12c91dc69a9d46fe617",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
