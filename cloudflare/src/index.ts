@@ -266,9 +266,9 @@ export default {
             directBrokerOrdersFromMcp:0};
         },
         getSignal:signal,
-        getIntent:()=>demo.getMcpDemoIntent(),
-        requestIntent:args=>demo.queueMcpDemoIntent(args),
-        cancelIntent:id=>demo.cancelMcpDemoIntent(id)
+        getIntent:async()=>demo.getMcpDemoIntent(),
+        requestIntent:async args=>demo.queueMcpDemoIntent(args),
+        cancelIntent:async id=>demo.cancelMcpDemoIntent(id)
       });
     }
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
