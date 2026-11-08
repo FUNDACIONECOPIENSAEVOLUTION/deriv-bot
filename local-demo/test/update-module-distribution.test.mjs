@@ -37,7 +37,16 @@ test('Recovery installer requires market-analysis.mjs and preserves private data
  assert.match(installer,/DATA_EN_PAQUETE_PROHIBIDA/);
 });
 
-test('Publisher and CI list market-analysis.mjs as a mandatory runtime dependency',()=>{
+test('Publisher and CI list market-analysis.mjs as a mandatory runtime dependency',t=>{
+ const builderPath=resolve(repo,'scripts/build_pc_local_release.py');
+ const workflowPath=resolve(repo,'.github/workflows/pc-local-release.yml');
+ // El ZIP instalado incluye SOLO local-demo/. Estas fuentes solo existen
+ // durante la validación del repositorio; no deben bloquear la instalación.
+ if(!existsSync(builderPath)||!existsSync(workflowPath)){
+  assert.ok(existsSync(resolve(app,'market-analysis.mjs')));
+  t.diagnostic('Prueba de publisher exclusiva de GitHub; ZIP portátil verificado.');
+  return;
+ }
  const builder=read('scripts/build_pc_local_release.py');
  const workflow=read('.github/workflows/pc-local-release.yml');
  assert.match(builder,/assert \(app \/ "market-analysis\.mjs"\) in paths/);
