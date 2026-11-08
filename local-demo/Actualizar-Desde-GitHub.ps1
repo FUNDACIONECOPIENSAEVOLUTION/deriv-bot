@@ -136,24 +136,39 @@ try {
   New-Item -ItemType Directory -Path $backup -Force | Out-Null
   Get-ChildItem -LiteralPath $app -Force | Where-Object {$_.Name -notin @('data','node_modules')} |
     ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $backup -Recurse -Force}
-  # Only copy whitelisted code and scripts. Never touch data, tokens, private CSV or .git.
-  $names=@('server.mjs','training.mjs','package.json','local-release.json','CHANGELOG-LOCAL.md',
-   'Abrir-Ecopiensa.ps1','Cerrar-Ecopiensa.ps1','Vigilar-Ecopiensa.ps1',
-   'Crear-AccesosDirectos.ps1','Actualizar-Desde-GitHub.ps1','Actualizar-Codigo.ps1',
-   'Respaldo-GitHub.ps1','Respaldo-Privado.ps1','Diagnosticar-Ecopiensa.ps1',
-   'Arrancar-Bot.ps1','bump-local.mjs','Verificar-Version.ps1',
-   'demo-trading.mjs','demo-burst.mjs','mcp-local.mjs',
-   'Tarea-Oculta.vbs','Instalar-TareasOcultas.ps1')
-  foreach($name in $names){
-   $from=Join-Path $source $name
-   if(Test-Path $from){Copy-Item -LiteralPath $from -Destination (Join-Path $app $name) -Force}
+  # Copiar TODAS las fuentes verificadas dentro de local-demo, no solo una lista
+  # fija. En v12.6 la lista fija omitía market-analysis.mjs y provocaba
+  # ERR_MODULE_NOT_FOUND aunque las 17 pruebas de GitHub habían aprobado.
+  # Ya se comprobó el SHA-256 del ZIP y sus rutas antes de llegar aquí.
+  $required=@('server.mjs','market-analysis.mjs','demo-trading.mjs','demo-burst.mjs',
+    'mcp-local.mjs','public\app.js','public\index.html','local-release.json')
+  foreach($name in $required){
+   if(-not(Test-Path -LiteralPath (Join-Path $source $name) -PathType Leaf)){
+    throw ('PAQUETE_MODULO_OBLIGATORIO_AUSENTE: '+$name)
+   }
   }
-  foreach($name in @('public','test')){
-   $dest=Join-Path $app $name
-   New-Item -ItemType Directory -Path $dest -Force | Out-Null
-   Get-ChildItem -LiteralPath (Join-Path $source $name) -File |
-     ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dest $_.Name) -Force}
+  $sourceRoot=[System.IO.Path]::GetFullPath($source).TrimEnd('\')+'\'
+  $filesToCopy=@(Get-ChildItem -LiteralPath $source -Recurse -File -Force)
+  foreach($file in $filesToCopy){
+   $full=[System.IO.Path]::GetFullPath($file.FullName)
+   if(-not $full.StartsWith($sourceRoot,[System.StringComparison]::OrdinalIgnoreCase)){
+    throw 'ARCHIVO_FUERA_DE_ORIGEN'
+   }
+   $relative=$full.Substring($sourceRoot.Length)
+   if($relative -match '(^|\\)(data|node_modules|\.git)(\\|$)' -or
+      $relative -match '(\.key|\.db|\.sqlite|\.csv|\.env)$'){
+    throw 'ARCHIVO_PRIVADO_EN_PAQUETE_PROHIBIDO'
+   }
+   $target=Join-Path $app $relative
+   New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+   Copy-Item -LiteralPath $file.FullName -Destination $target -Force
   }
+  foreach($name in $required){
+   if(-not(Test-Path -LiteralPath (Join-Path $app $name) -PathType Leaf)){
+    throw ('MODULO_NO_COPIADO: '+$name)
+   }
+  }
+  Registrar ('Módulos verificados y copiados: '+$filesToCopy.Count+'. Datos privados intactos.')
   # Tras copiar los módulos nuevos, impedir que las tareas muestren consola.
   try { & (Join-Path $app 'Instalar-TareasOcultas.ps1') -Ruta $Ruta | Out-Null }
   catch {
