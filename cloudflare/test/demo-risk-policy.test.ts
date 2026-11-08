@@ -21,8 +21,8 @@ describe('Deriv DEMO only: controlled variation and loss stop',()=>{
    expect(()=>requireFirstDemoSettlement(NaN)).toThrow('DEMO_FIRST_SETTLEMENT_REQUIRED');
    expect(requireFirstDemoSettlement(1)).toBeUndefined();
  });
- it('uses the four fixed experimental amounts with no doubling after a loss',()=>{
-   expect(DEMO_STAKES_CENTS).toEqual([35,50,75,100]);
+ it('keeps four fixed automatic amounts while allowing an optional manual US$0.90',()=>{
+   expect(DEMO_STAKES_CENTS).toEqual([35,50,75,90,100]);
    expect([0,1,2,3,4,5].map(pickDemoStakeCents)).toEqual([35,50,75,100,35,50]);
    expect(()=>pickDemoStakeCents(-1)).toThrow();
  });
