@@ -76,6 +76,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.6 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:00:50.368Z (UTC).
+- **Commit de origen:** `4107178a8a8b`.
+- Crear exportador auditado de contratos DEMO con hora de compra/liquidación, indicadores y diagnóstico de pérdidas
+- Registrar fechas reales de compra y de liquidación para tablas y CSV DEMO con migración conservadora
+
 ## v8.5 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:50:36.196Z (UTC).
