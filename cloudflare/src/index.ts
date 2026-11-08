@@ -285,8 +285,8 @@ export default {
     }
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
-    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback','/api/deriv/demo/mcp-intent'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal','/api/deriv/demo/manual-stake'].includes(url.pathname);
+    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback','/api/deriv/demo/mcp-intent','/api/deriv/demo/burst/status'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal','/api/deriv/demo/manual-stake','/api/deriv/demo/burst/begin','/api/deriv/demo/burst/reserve','/api/deriv/demo/burst/ack','/api/deriv/demo/burst/halt','/api/deriv/demo/burst/reconcile','/api/deriv/demo/burst/settle'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -295,6 +295,54 @@ export default {
       if(url.pathname.startsWith('/api/deriv/')){
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
+        if(url.pathname==='/api/deriv/demo/burst/status')
+          return json(await demo.demoBurstStatus());
+        if(url.pathname.startsWith('/api/deriv/demo/burst/')&&request.method==='POST'){
+          const raw=await request.text();
+          if(raw.length>8192)return json({code:'DEMO_BURST_BODY_TOO_LARGE'},413);
+          let parsed:unknown;
+          try{parsed=JSON.parse(raw);}catch{return json({code:'DEMO_BURST_INPUT_INVALID'},400);}
+          if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))
+            return json({code:'DEMO_BURST_INPUT_INVALID'},400);
+          const d=parsed as Record<string,unknown>,action=url.pathname.split('/').at(-1);
+          if(action==='begin'){
+            if(typeof d.count!=='number'||!Number.isSafeInteger(d.count)
+              ||d.count<1||d.count>10||(d.signal!=='UP'&&d.signal!=='DOWN'))
+              return json({code:'DEMO_BURST_REQUEST_INVALID'},400);
+            return json(await demo.beginDemoBurst({count:d.count,signal:d.signal}));
+          }
+          if(action==='halt')return json(await demo.haltDemoBurst());
+          if(action==='reconcile')return json(await demo.beginDemoBurstSettlement());
+          const nonce=typeof d.nonce==='string'&&/^[A-Za-z0-9_-]{43}$/.test(d.nonce)
+            ?d.nonce:null;
+          if(!nonce)return json({code:'DEMO_BURST_NONCE_INVALID'},400);
+          if(action==='reserve'){
+            if(typeof d.proposalId!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(d.proposalId)
+              ||typeof d.askPrice!=='number'||typeof d.payout!=='number'
+              ||!Number.isFinite(d.askPrice)||!Number.isFinite(d.payout))
+              return json({code:'DEMO_BURST_PROPOSAL_INVALID'},400);
+            const e=d.evidence&&typeof d.evidence==='object'&&!Array.isArray(d.evidence)
+              ?d.evidence as Record<string,unknown>:{};
+            const num=(key:string)=>typeof e[key]==='number'&&Number.isFinite(e[key])
+              ?e[key] as number:null;
+            return json(await demo.reserveDemoBurst({
+              nonce,proposalId:d.proposalId,askPrice:d.askPrice,payout:d.payout,
+              evidence:{fast:num('fast'),slow:num('slow'),rsi:num('rsi'),
+                volatility:num('volatility'),entryQuote:num('entryQuote'),
+                quoteAgeSeconds:num('quoteAgeSeconds'),
+                reason:typeof e.reason==='string'?e.reason:'UNVERIFIED'}
+            }));
+          }
+          if(typeof d.id!=='number'||!Number.isSafeInteger(d.id)||d.id<=0
+             ||!d.response||typeof d.response!=='object'||Array.isArray(d.response))
+             return json({code:'DEMO_BURST_RESULT_INVALID'},400);
+          if(action==='ack')return json(await demo.acknowledgeDemoBurst({
+            nonce,id:d.id,response:d.response}));
+          if(action==='settle')return json(await demo.settleDemoBurst({
+            nonce,id:d.id,response:d.response}));
+          return json({code:'DEMO_BURST_ACTION_INVALID'},404);
+        }
+
         if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
         if(url.pathname==='/api/deriv/demo/manual-stake'&&request.method==='POST'){
           const raw=await request.text();
