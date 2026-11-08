@@ -1,11 +1,10 @@
 {
-  "version": "9.4",
-  "updatedAt": "2026-11-08T01:10:51.614Z",
-  "summary": "Alimentar tarjetas principales con P&L, contratos abiertos, comprados y liquidados del libro Deriv DEMO",
+  "version": "9.5",
+  "updatedAt": "2026-11-08T01:11:29.994Z",
+  "summary": "Dibujar entradas/salidas DEMO solo con spot y hora confirmados; curva de P&L de contratos DEMO, PAPER separado",
   "changes": [
-    "Alimentar tarjetas principales con P&L, contratos abiertos, comprados y liquidados del libro Deriv DEMO",
-    "Priorizar saldo, P&L, compras y exposición del broker DEMO; mover PAPER a laboratorio plegable"
+    "Dibujar entradas/salidas DEMO solo con spot y hora confirmados; curva de P&L de contratos DEMO, PAPER separado"
   ],
-  "sourceCommit": "205edae8c7ef7511cd98428c2c48ab22a82a48c6",
+  "sourceCommit": "35bf403d38de68033430e19b88a117455d1d06a0",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

@@ -85,6 +85,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.5 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:11:29.994Z (UTC).
+- **Commit de origen:** `35bf403d38de`.
+- Dibujar entradas/salidas DEMO solo con spot y hora confirmados; curva de P&L de contratos DEMO, PAPER separado
+
 ## v9.4 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:10:51.614Z (UTC).
