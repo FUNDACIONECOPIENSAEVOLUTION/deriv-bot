@@ -90,3 +90,18 @@ test('Local and GitHub pc-local version displayed without sending an order',asyn
  assert.equal(state.realEnabled,false);
  assert.equal(state.githubVersion,null);
 }));
+
+// La simulación de arranque nunca necesita tokens ni acceso a mercados externos.
+test('Market watchlist and new UI remain read-only without any public connection',async()=>boot(async({base})=>{
+ const markets=await (await fetch(base+'/api/markets')).json();
+ assert.ok(markets.markets.length>=10);
+ assert.ok(markets.markets.every(x=>x.direction==='ESPERAR'));
+ const external=await (await fetch(base+'/api/watchlist')).json();
+ assert.equal(external.assets.length,4);
+ assert.equal(external.realEnabled,false);
+ assert.ok(external.assets.every(x=>x.tradableFromThisPanel===false));
+ const html=await (await fetch(base+'/')).text();
+ assert.match(html,/id="burst-concurrency"/);
+ assert.match(html,/id="market-analysis"/);
+ assert.match(html,/id="watchlist"/);
+}));
