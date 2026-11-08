@@ -17,3 +17,12 @@ Estas instrucciones aplican a **toda conversación, agente y contribución** que
 - No registrar secretos en GitHub. Las credenciales Cloudflare se usan exclusivamente desde GitHub Actions Secrets.
 - La versión publicada no representa rentabilidad ni fiabilidad de una estrategia.
 - Los ticks, las velas, el cálculo de señales y las compras deben conservar marcas temporales verificables; detener órdenes si los datos están obsoletos.
+
+## Distribución exclusiva para Windows (`pc-local`) — v11.7
+- La **rama `pc-local` es la única fuente de actualizaciones del computador**. No convertir cambios de `main`/Cloudflare directamente en el programa Windows.
+- Cada nueva versión funcional incrementa exactamente **+0,1** y actualiza, en la misma publicación, `pc-release.json`, `local-demo/local-release.json`, `local-demo/package.json`, el título del panel y el archivo de distribución de código con SHA-256.
+- Crear un único lanzamiento para varios commits que conformen la misma corrección. No afirmar que la versión del PC cambió hasta que Windows haya ejecutado el actualizador y `/api/health` confirme la versión.
+- **Preservar siempre `local-demo/data/`**: claves, OAuth, SQLite, CSV y contratos privados nunca se suben a GitHub ni se reemplazan al actualizar.
+- La actualización se descarga de GitHub por HTTPS de solo lectura; el fallo de `git push` (403) en el PC no bloquea `git pull`/descargas.
+- Antes de cualquier actualización, ejecutar pruebas y comprobar SHA-256 del paquete. Si el servidor sigue abierto, señalar versión pendiente y esperar al siguiente inicio; nunca interrumpir una compra.
+- El bot local v11.7 es **solo lectura**. BUY/SELL/REAL deshabilitados hasta validar saldo oficial, autorización y gestión de contratos.
