@@ -506,6 +506,85 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * independently attested by our Worker. Such trades remain excluded
    * from eligibility for unattended automation.
    */
+  /**
+   * MCP does not buy Deriv contracts. It may queue ONE strictly DEMO intent.
+   * The owner must click an explicit confirmation in the private browser.
+   */
+  getMcpDemoIntent(){
+    const x=this.read<{id:string;createdAt:number;expiresAt:number;
+      state:'PENDING'|'CLAIMED'|'SETTLED'|'CANCELLED';signal:'UP'|'DOWN';
+      stakeCents:number;contractId?:number}>('demo-mcp-intent');
+    if(!x)return {status:'EMPTY',brokerOrders:0};
+    if((x.state==='PENDING'||x.state==='CLAIMED')&&x.expiresAt<epoch())
+      return {...x,state:'EXPIRED',brokerOrders:0};
+    return {...x,brokerOrders:0,requiresOwnerApproval:x.state==='PENDING'};
+  }
+
+  queueMcpDemoIntent(input:{signal:'UP'|'DOWN';stakeCents:number;source:'MCP_OWNER_REVIEW'}){
+    if(input.source!=='MCP_OWNER_REVIEW'||(input.signal!=='UP'&&input.signal!=='DOWN')
+      ||!DEMO_STAKES_CENTS.some(n=>n===input.stakeCents))
+      throw Error('DEMO_MCP_INTENT_INVALID');
+    if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
+    const status=this.status();
+    if(!status.connected)throw Error('DERIV_DEMO_REQUIRED');
+    if(status.demoAutomationRequested)throw Error('DEMO_AUTOMATION_ALREADY_ACTIVE');
+    if(status.nextManualStakeCents!==input.stakeCents)throw Error('DEMO_STAKE_WRONG_NEXT');
+    const risk=this.riskFor(input.stakeCents);
+    if(!risk.allowed)throw Error(risk.reason);
+    const previous=this.getMcpDemoIntent();
+    if((previous as {state?:string}).state==='PENDING'
+      ||(previous as {state?:string}).state==='CLAIMED')
+      throw Error('DEMO_MCP_INTENT_PENDING');
+    const intent={id:crypto.randomUUID(),state:'PENDING' as const,
+      signal:input.signal,stakeCents:input.stakeCents,createdAt:epoch(),
+      expiresAt:epoch()+120};
+    this.write('demo-mcp-intent',intent);
+    return {status:'PENDING_OWNER_CONFIRMATION',intentId:intent.id,
+      signal:intent.signal,stakeCents:intent.stakeCents,expiresAt:intent.expiresAt,
+      brokerOrders:0,requiresOwnerApproval:true,
+      note:'El comando fue colocado en cola. Abrir el panel privado y aprobar UNA compra DEMO.'};
+  }
+
+  claimMcpDemoIntent(id:string){
+    const intent=this.read<{id:string;state:string;signal:'UP'|'DOWN';
+      stakeCents:number;expiresAt:number;createdAt:number}>('demo-mcp-intent');
+    if(!intent||intent.id!==id||intent.state!=='PENDING'||intent.expiresAt<epoch())
+      throw Error('DEMO_MCP_INTENT_EXPIRED');
+    if(this.status().nextManualStakeCents!==intent.stakeCents)
+      throw Error('DEMO_STAKE_WRONG_NEXT');
+    const risk=this.riskFor(intent.stakeCents);
+    if(!risk.allowed)throw Error(risk.reason);
+    this.write('demo-mcp-intent',{...intent,state:'CLAIMED'});
+    return {state:'CLAIMED',intentId:intent.id,signal:intent.signal,
+      stakeCents:intent.stakeCents,accountType:'demo',brokerOrders:0};
+  }
+
+  completeMcpDemoIntent(id:string,contractId:number){
+    const intent=this.read<{id:string;state:string;signal:'UP'|'DOWN';
+      stakeCents:number;expiresAt:number;createdAt:number}>('demo-mcp-intent');
+    if(!intent||intent.id!==id||intent.state!=='CLAIMED'
+      ||!Number.isSafeInteger(contractId)||contractId<=0)throw Error('DEMO_MCP_INTENT_INVALID');
+    const row=this.ctx.storage.sql.exec<{state:string;code:string;pnl_cents:number}>(
+      'SELECT state,code,pnl_cents FROM demo_trades WHERE contract_id=? ORDER BY id DESC LIMIT 1',contractId
+    ).toArray()[0];
+    if(!row||row.state!=='SETTLED'||row.code!=='CLIENT_OBSERVED')
+      throw Error('DEMO_MCP_SETTLEMENT_NOT_OBSERVED');
+    this.write('demo-mcp-intent',{...intent,state:'SETTLED',contractId});
+    return {state:'SETTLED',accountType:'demo',contractId,
+      pnlCents:row.pnl_cents,independentlyVerified:false,
+      outcome:row.pnl_cents>0?'WIN':row.pnl_cents<0?'LOSS':'FLAT'};
+  }
+
+  cancelMcpDemoIntent(id:string){
+    const intent=this.read<{id:string;state:string;signal:'UP'|'DOWN';
+      stakeCents:number;expiresAt:number;createdAt:number}>('demo-mcp-intent');
+    if(!intent||intent.id!==id)throw Error('DEMO_MCP_INTENT_INVALID');
+    if(intent.state==='CLAIMED')throw Error('DEMO_MCP_IN_FLIGHT_CHECK_BROKER');
+    if(intent.state!=='PENDING')return {state:intent.state,brokerOrders:0};
+    this.write('demo-mcp-intent',{...intent,state:'CANCELLED'});
+    return {state:'CANCELLED',brokerOrders:0};
+  }
+
   async beginBrowserPilot(signal:'UP'|'DOWN',stakeCents:number) {
     if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
     if((signal!=='UP'&&signal!=='DOWN')||!DEMO_STAKES_CENTS.some(s=>s===stakeCents))
