@@ -701,10 +701,10 @@ export class DerivDemoConnection extends DurableObject<Env> {
       opened:0,settled:0,commitmentCents:0,brokerOrders:0};
     const rows=b.ids.map(id=>this.ctx.storage.sql.exec<{
       id:number;contract_id:number|null;state:string;buy_cents:number|null;
-      pnl_cents:number|null;contract_type:string|null
-    }>('SELECT id,contract_id,state,buy_cents,pnl_cents,contract_type FROM demo_trades WHERE id=?',id).toArray()[0])
+      pnl_cents:number|null;contract_type:string|null;symbol:string|null
+    }>('SELECT id,contract_id,state,buy_cents,pnl_cents,contract_type,symbol FROM demo_trades WHERE id=?',id).toArray()[0])
       .filter((r):r is {id:number;contract_id:number|null;state:string;buy_cents:number|null;
-        pnl_cents:number|null;contract_type:string|null}=>!!r);
+        pnl_cents:number|null;contract_type:string|null;symbol:string|null}=>!!r);
     return {status:b.state,accountType:'demo',runId:b.id,
       requested:b.count,confirmed:rows.length,
       opened:rows.filter(r=>r.state==='OPEN').length,
@@ -714,7 +714,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
         .reduce((n,r)=>n+(r.pnl_cents||0),0),
       uncertain:b.pendingId!==null,
       contracts:rows.map(r=>({id:r.id,contractId:r.contract_id,state:r.state,
-        stakeCents:r.buy_cents,pnlCents:r.pnl_cents,direction:r.contract_type})),
+        stakeCents:r.buy_cents,pnlCents:r.pnl_cents,direction:r.contract_type,
+        symbol:isDemoSymbol(r.symbol)?r.symbol:'R_100'})),
       lastUpdatedAt:epoch(),independentlyVerified:false};
   }
   planDemoBurst(requested:number,stakeCents:number=DEMO_BURST_STAKE_CENTS){
@@ -919,11 +920,12 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(!b||b.nonce!==input?.nonce||!b.ids.includes(input.id))
       throw Error('DEMO_BURST_SETTLEMENT_NOT_ALLOWED');
     const row=this.ctx.storage.sql.exec<{
-      contract_id:number;buy_cents:number;contract_type:string
-    }>("SELECT contract_id,buy_cents,contract_type FROM demo_trades WHERE id=? AND state='OPEN'",input.id).toArray()[0];
+      contract_id:number;buy_cents:number;contract_type:string;symbol:string|null
+    }>("SELECT contract_id,buy_cents,contract_type,symbol FROM demo_trades WHERE id=? AND state='OPEN'",input.id).toArray()[0];
     if(!row)throw Error('DEMO_BURST_SETTLEMENT_NOT_ALLOWED');
     const settlement=parseDemoSettlement(input.response,row.contract_id,
-      row.contract_type==='PUT'?'PUT':'CALL',row.buy_cents);
+      row.contract_type==='PUT'?'PUT':'CALL',row.buy_cents,
+      isDemoSymbol(row.symbol)?row.symbol:'R_100');
     if(!settlement)return {state:'OPEN',independentlyVerified:false};
     this.ctx.storage.transactionSync(()=>{
       this.ctx.storage.sql.exec(
