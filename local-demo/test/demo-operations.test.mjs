@@ -38,7 +38,7 @@ test('DEMO intent stores a pending order without sending a broker BUY',()=>{
 test('DEMO risk blocks stale or opposing signals, unverified account, 10,000-to-9,900 stop',()=>{
  const {db,trading,m,account}=setup();
  assert.throws(()=>trading.requestIntent({symbol:'R_100',direction:'PUT',stakeCents:50,source:'LOCAL_OWNER'}),/DEMO_SIGNAL_STALE/);
- m.ageReceivedMs=1200;
+ m.ageReceivedMs=1900;
  assert.throws(()=>trading.requestIntent({symbol:'R_100',direction:'CALL',stakeCents:50,source:'LOCAL_OWNER'}),/DEMO_SIGNAL_STALE/);
  m.ageReceivedMs=150;account.balance=9900.25;
  assert.throws(()=>trading.requestIntent({symbol:'R_100',direction:'CALL',stakeCents:50,source:'LOCAL_OWNER'}),/DEMO_LOSS_STOP/);
