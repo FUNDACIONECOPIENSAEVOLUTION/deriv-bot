@@ -7,7 +7,7 @@
 <div class="banner">Experimento de USD 10 virtuales. Las marcas de entrada y salida pertenecen a la simulación del proyecto; no son órdenes de una cuenta Deriv. El motor actual aplica reglas SMA y RSI, sin un modelo de IA conectado.</div>
 <div id="error" class="error" role="status" aria-live="polite"></div>
 <div class="metrics">
-<section class="card"><div class="metric-label">Saldo oficial · Deriv DEMO</div><div id="official-demo-balance" class="value">Sin conectar</div><div id="official-demo-time" class="metric-foot">No es el saldo PAPER</div><div id="official-demo-sync" class="metric-foot">Actualización automática al estar visible: cada ~20 s; no cambia en cada tick.</div></section>
+<section class="card"><div class="metric-label">Saldo oficial · Deriv DEMO</div><div id="official-demo-balance" class="value">Sin conectar</div><div id="official-demo-time" class="metric-foot">No es el saldo PAPER</div><div id="official-demo-sync" class="metric-foot">Actualización automática al estar visible: cada ~20 s; no cambia en cada tick.</div><div id="demo-account-reconciliation" class="metric-foot">Conciliación del saldo con contratos del bot pendiente.</div></section>
 <section class="card"><div class="metric-label">Saldo de simulación PAPER</div><div id="balance" class="value">—</div><div id="capital" class="metric-foot">Simulación independiente · USD 10</div></section>
 <section class="card"><div class="metric-label">Ganancia o pérdida virtual</div><div id="profit" class="value">—</div><div class="metric-foot">Resultado neto · pago y costos hipotéticos</div></section>
 <section class="card"><div class="metric-label">Simulaciones terminadas</div><div id="completed" class="value">—</div><div id="voided" class="metric-foot">Sin operaciones recibidas</div></section>
@@ -595,6 +595,17 @@ function renderDemo(data){
       +' · hace '+(Number.isFinite(age)?age+' s':'tiempo desconocido')
       +(fresh?'':' · dato desactualizado');
     $('chart-demo-balance').textContent='Saldo DEMO del broker: '+label+(fresh?'':' (desactualizado)');
+    // Only an accounting cross-check against this bot's registered trades:
+    // any mismatch may be external trades, open contracts or account adjustments.
+    const expectedCents=1000000+(report.pnlCents||0)-(report.activeExposureCents||0);
+    const observedCents=Math.round(data.account.balance*100);
+    const difference=observedCents-expectedCents;
+    const note=$('demo-account-reconciliation');
+    note.textContent=Number.isSafeInteger(expectedCents)&&Math.abs(difference)>1
+      ?'Aviso: saldo observado difiere '+money(difference)+
+       ' del teórico basado solo en contratos registrados. Revisa operaciones externas, pendientes o ajustes; el CSV no incluye todos los movimientos de Deriv.'
+      :'Conciliación indicativa del saldo según contratos registrados: sin diferencia mayor a US$0,01.';
+    note.className='metric-foot '+(Math.abs(difference)>1?'negative':'');
     $('official-demo-sync').textContent='Saldo oficial REST · última verificación hace '+
       (Number.isFinite(age)?age+' s':'—')+
       '. Se consulta automáticamente cada ~20 s mientras esta pestaña esté visible; no cambia por cada tick. '+
@@ -616,6 +627,7 @@ function renderDemo(data){
     $('official-demo-balance').textContent='Sin conexión';
     $('official-demo-time').textContent='Autoriza la cuenta DEMO; el saldo PAPER es independiente';
     $('chart-demo-balance').textContent='Deriv DEMO: saldo no conectado';
+    $('demo-account-reconciliation').textContent='Conciliación no disponible hasta conectar la cuenta DEMO.';
     $('chart-demo-locked').textContent='Comprometido: sin verificar';
     $('chart-demo-pnl').textContent='P&L bot: sin operaciones verificadas';
     $('chart-demo-last-trades').textContent='Historial DEMO del broker: no conectado.';
