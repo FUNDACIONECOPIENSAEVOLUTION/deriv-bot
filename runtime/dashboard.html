@@ -116,7 +116,8 @@ const $=id=>document.getElementById(id),ns='http://www.w3.org/2000/svg';
 let demoManualApproval=null,demoCurrent=null;
 let mcpIntentCurrent=null,mcpIntentBusy=false;
 let browserBotSignal=null,browserBotBusy=false;
-let demoBalancedRunning=false,demoBalancedStop=false; // Never persists across reloads; server verifies a one-use approval too.
+let demoBalancedRunning=false,demoBalancedStop=false;
+let demoBurstRunning=false,demoBurstStopRequested=false,demoBurstSettling=false; // Never persists across reloads; server verifies a one-use approval too.
 const money=c=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'USD'}).format(c/100);
 const price=v=>Number.isFinite(v)?new Intl.NumberFormat('es-CO',{maximumFractionDigits:5}).format(v):'—';
 const time=t=>new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(t*1000));
@@ -605,6 +606,30 @@ function renderDemo(data){
   $('deriv-quote').disabled=!data.connected;
   $('demo-apply-stake').disabled=!data.connected||!data.demoTradingEnabled;
   const report=data.tradeReport||{},pending=report.unresolved;
+  const burst=data.demoBurst||{},plan=data.demoBurstPlan||{};
+  const activeBurst=['PREPARING','BUYING','RECONCILING','REVIEW'].includes(burst.status);
+  const countField=$('demo-burst-count');
+  if(!countField.dataset.userEdited&&Number.isInteger(plan.maxAllowedNow)){
+    countField.value=String(Math.min(10,Math.max(1,plan.maxAllowedNow)));
+  }
+  const intended=Number(countField.value);
+  $('demo-burst-start').disabled=demoBurstRunning||activeBurst||demoBalancedRunning||
+    !data.connected||!data.demoTradingEnabled||data.demoAutomationRequested||
+    !Number.isInteger(intended)||intended<1||intended>10||
+    !Number.isInteger(plan.maxAllowedNow)||intended>plan.maxAllowedNow||
+    !['EMPTY','COMPLETE','HALTED'].includes(burst.status||'EMPTY')||
+    (report.unknownCount||0)>0||(report.openCount||0)>0;
+  $('demo-burst-stop').disabled=!demoBurstRunning||demoBurstStopRequested;
+  $('demo-burst-reconcile').disabled=demoBurstRunning||demoBurstSettling||
+    !data.connected||!(burst.confirmed>burst.settled);
+  $('demo-burst-plan').textContent='Compras DEMO por tanda: máximo 10, importe por contrato US$1, '+
+    'presupuesto bruto máximo US$10. Cupos disponibles de esta tanda: '+
+    (plan.maxAllowedNow??0)+' (por compras o presupuesto ya usados). '+
+    (plan.reason?'Estado: '+plan.reason+'. ':'')+
+    'La cantidad del campo es el número de contratos que se enviarán, NO el número máximo permitido. '+
+    'No se envía nada hasta confirmar.';
+  renderBurstContracts(burst);
+
   $('demo-next-stake').textContent='Próxima compra del bot: '
     +money(data.nextManualStakeCents||35)+' · debe cotizarse ese importe en la dirección de la señal actual. '
     +'La cotización no es una compra y puede ser rechazada por Deriv.';
@@ -680,12 +705,12 @@ function renderDemo(data){
   const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&quoteApproved
     &&daily.allowed===true&&(report.openCount||0)<1
     &&Number(report.pilotRemainingPurchases)>0&&Number(report.pilotRemainingBudgetCents)>=35;
-  $('demo-buy-once').disabled=!canBuy;
-  $('demo-auto-start').disabled=!(data.connected&&data.demoAutomationAvailable
+  $('demo-buy-once').disabled=demoBurstRunning||activeBurst||!canBuy;
+  $('demo-auto-start').disabled=demoBurstRunning||activeBurst||!(data.connected&&data.demoAutomationAvailable
     &&data.demoTradingEnabled&&daily.allowed===true&&(report.brokerVerifiedSettled||0)>=1&&
     !data.demoAutomationRequested);
   $('demo-auto-stop').disabled=!(data.connected&&data.demoAutomationRequested);
-  $('demo-balanced-start').disabled=demoBalancedRunning||!data.connected||!data.demoTradingEnabled
+  $('demo-balanced-start').disabled=demoBurstRunning||activeBurst||demoBalancedRunning||!data.connected||!data.demoTradingEnabled
     ||data.demoAutomationRequested||daily.allowed!==true
     ||(report.unknownCount||0)>0||(report.openCount||0)>0
     ||(report.pilotRemainingPurchases||0)<10;
