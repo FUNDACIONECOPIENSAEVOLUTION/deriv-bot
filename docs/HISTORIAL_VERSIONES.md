@@ -67,6 +67,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.7 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:13:22.221Z (UTC).
+- **Commit de origen:** `6efa2539bdd1`.
+- Publicar gateway MCP DEMO, señal de navegador y comprobar que acceso anónimo queda bloqueado
+
 ## v7.6 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:12:43.459Z (UTC).

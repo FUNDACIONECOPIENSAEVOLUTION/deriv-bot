@@ -1,10 +1,10 @@
 {
-  "version": "7.6",
-  "updatedAt": "2026-11-08T00:12:43.459Z",
-  "summary": "Verificar análisis CALL/PUT por navegador y que MCP no se abre sin secreto ni autenticación",
+  "version": "7.7",
+  "updatedAt": "2026-11-08T00:13:22.221Z",
+  "summary": "Publicar gateway MCP DEMO, señal de navegador y comprobar que acceso anónimo queda bloqueado",
   "changes": [
-    "Verificar análisis CALL/PUT por navegador y que MCP no se abre sin secreto ni autenticación"
+    "Publicar gateway MCP DEMO, señal de navegador y comprobar que acceso anónimo queda bloqueado"
   ],
-  "sourceCommit": "ed33c66825666944a8088209f0f700bb572201d0",
+  "sourceCommit": "6efa2539bdd1f9f02044299ded62c1e5d77008b9",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
