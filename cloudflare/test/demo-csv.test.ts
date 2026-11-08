@@ -54,3 +54,24 @@ it('neutralizes formula-like text and limits oversized exports',()=>{
  expect(csv).toContain('"'+"'"+'@danger"');
  expect(()=>demoTradesCsv(Array(1001).fill(row))).toThrow('DEMO_CSV_LIMIT');
 });
+
+it('exports navigation, tick age and proposal latency as observational audit, with old rows blank',()=>{
+ const enhanced=demoTradesCsv([{...row,decision_json:JSON.stringify({
+  runId:'burst-test',strategy:'owner-browser-burst-v1',entryQuote:560,
+  analysisAtEpoch:1794092000,lastSourceTickEpoch:1794091999,
+  quoteAgeAtReserveSeconds:2,signalAgeAtProposalSec:1.8,proposalRttMs:125,
+  browserNavigationType:'reload',pageLoadedEpoch:1794091000,
+  pageSessionId:'95f6c086-0f03-443e-9e29-146232b47b01',
+  sourceIndicators:'150_public_ticks_not_minute_candles'
+ })}]);
+ const [head,line]=enhanced.trim().split(/\\r?\\n/);
+ expect(head).toContain('"latencia_propuesta_ms"');
+ expect(head).toContain('"navegacion_pagina"');
+ expect(head).toContain('"ultimo_tick_epoch"');
+ expect(line).toContain('"reload"');
+ expect(line).toContain('"125"');
+ expect(line).toContain('"150_public_ticks_not_minute_candles"');
+ expect(line).toContain('"560"');
+ const older=demoTradesCsv([row]).trim().split(/\\r?\\n/)[1];
+ expect(older).not.toContain('"reload"');
+});
