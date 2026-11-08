@@ -103,6 +103,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v11.3 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T18:37:48.467Z (UTC).
+- **Commit de origen:** `e1f615947e5f`.
+- fix(DEMO): pausa PAPER de fondo para liberar cuota, mantiene OAuth y restablece velas públicas
+
 ## v11.2 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T18:21:12.115Z (UTC).

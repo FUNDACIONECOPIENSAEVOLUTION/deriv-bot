@@ -1,10 +1,10 @@
 {
-  "version": "11.2",
-  "updatedAt": "2026-11-08T18:21:12.115Z",
-  "summary": "fix(DEMO): recuperar App ID y diagnosticar Durable Objects sin borrar sesiones",
+  "version": "11.3",
+  "updatedAt": "2026-11-08T18:37:48.467Z",
+  "summary": "fix(DEMO): pausa PAPER de fondo para liberar cuota, mantiene OAuth y restablece velas públicas",
   "changes": [
-    "fix(DEMO): recuperar App ID y diagnosticar Durable Objects sin borrar sesiones"
+    "fix(DEMO): pausa PAPER de fondo para liberar cuota, mantiene OAuth y restablece velas públicas"
   ],
-  "sourceCommit": "fbc5db3dbe0641613d35f49e340c07218d9d79eb",
+  "sourceCommit": "e1f615947e5fefe4b8b65f6ed3d25b2966e4b005",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
