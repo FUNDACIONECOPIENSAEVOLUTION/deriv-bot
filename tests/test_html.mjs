@@ -27,6 +27,22 @@ assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<20000'),'La consulta de sa
 assert.ok(panel.includes('demo-max-concurrent'), 'Se debe informar el límite configurable de contratos');
 assert.ok(panel.includes('n>10'), 'Las solicitudes de más de 10 contratos deben quedar bloqueadas');
 assert.ok(panel.includes('DEMO_MANUAL_STAKE_SET'), 'El importe elegido requiere validación del servidor');
+for(const id of ['demo-burst-count','demo-burst-start','demo-burst-stop',
+                  'demo-burst-reconcile','demo-burst-rows','demo-burst-live']){
+ assert.ok(panel.includes('id="'+id+'"'),'Debe existir el control de diez contratos '+id);
+}
+assert.ok(panel.includes('DEMO_BROWSER_BURST'), 'Una tanda debe abrir sesión autenticada exclusivamente DEMO');
+assert.ok(panel.includes('DEMO_BURST_RESERVED'), 'Cada orden debe reservarse individualmente antes de BUY');
+assert.ok(panel.includes('DEMO_BURST_ACK'), 'Solo un acuse de Deriv confirma cada contrato');
+assert.ok(panel.includes('confirmed++'), 'Los contratos se cuentan al recibir confirmación, no al cotizar');
+assert.ok(panel.includes('const brokerAck=await brokerMessage(ws,reservation.request,10000)'),
+  'Cada compra debe esperar un acuse antes de reservar otra, sin esperar liquidación');
+assert.ok(panel.includes('void syncBrokerBalance(true)'), 'Actualizar saldo oficial inmediatamente después del acuse');
+assert.ok(panel.includes('if(demoBurstStopRequested||document.hidden)'),
+  'La pestaña oculta nunca debe enviar más órdenes DEMO');
+assert.ok(panel.includes("for(let i=0;i<count;i++)"),'Abrir hasta N contratos individuales');
+assert.ok(panel.includes('contractId:c.contractId'), 'Guardar los identificadores distintos devueltos por Deriv');
+
 
 
 
