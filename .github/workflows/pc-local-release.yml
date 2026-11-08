@@ -77,7 +77,7 @@ jobs:
           set -euo pipefail
           node --test local-demo/test/*.test.mjs
           python3 - <<'PY'
-          import base64, hashlib, json, pathlib, zipfile, io
+          import base64, hashlib, json, pathlib, zipfile, io, tempfile, subprocess
           manifest=json.loads(pathlib.Path('pc-release.json').read_text())
           local=json.loads(pathlib.Path('local-demo/local-release.json').read_text())
           assert manifest['version']==local['version']
@@ -93,7 +93,19 @@ jobs:
                         'local-demo/Actualizar-Desde-GitHub.ps1'):
                   assert f in files, f
               assert not any('/data/' in f or f.endswith('.sqlite') for f in files)
-          print('PACKAGE_VERIFIED',version,manifest['archiveSha256'])
+          # Repetir pruebas en el ZIP real, no solamente en el checkout de GitHub.
+          # El ZIP no incluye scripts/ ni .github/, justo el error visto en v12.8.
+          with tempfile.TemporaryDirectory(prefix='ecopiensa-zip-test-') as work:
+              with zipfile.ZipFile(io.BytesIO(payload)) as bundle:
+                  bundle.extractall(work)
+              stage=pathlib.Path(work)
+              app=stage/'local-demo'
+              tests=sorted(str(p.resolve()) for p in (app/'test').glob('*.test.mjs'))
+              assert len(tests)>=5, 'ZIP no contiene pruebas suficientes'
+              assert (app/'market-analysis.mjs').is_file(), 'ZIP perdió market-analysis.mjs'
+              subprocess.run(['node','--check',str(app/'server.mjs')],check=True,cwd=stage)
+              subprocess.run(['node','--test',*tests],check=True,cwd=stage)
+          print('PACKAGE_VERIFIED_AND_TESTED',version,manifest['archiveSha256'])
           PY
       - name: Guardar paquete versionado sin tocar main ni Cloudflare
         run: |
