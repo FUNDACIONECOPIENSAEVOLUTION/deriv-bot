@@ -68,6 +68,15 @@ jobs:
           grep -F 'beginBrowserPilot' src/deriv-demo.ts
           grep -F 'requireFirstDemoSettlement(verified)' src/deriv-demo.ts
           grep -F 'DEMO_BROWSER_CHANNEL_FORBIDDEN' ../runtime/dashboard.html
+      - name: Verificar gateway MCP DEMO y aprobación propietaria
+        run: |
+          grep -F "if(url.pathname==='/mcp')" src/index.ts
+          grep -F "MCP_BRIDGE_TOKEN" src/index.ts
+          grep -F "request_demo_buy" src/mcp-gateway.ts
+          grep -F "getBrowserSignal" src/deriv-demo.ts
+          grep -F "mcp-approve" ../runtime/dashboard.html
+          grep -F "browser-bot-buy" ../runtime/dashboard.html
+          grep -F "completeMcpDemoIntent" src/deriv-demo.ts
       - name: Validar acceso seguro y publicar panel sin operaciones
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -102,6 +111,26 @@ jobs:
             if(attempt<6)await new Promise(resolve=>setTimeout(resolve,4000));
           }
           if(!verified)process.exitCode=1;
+          JS
+      - name: Confirmar gateway MCP en producción sin credenciales públicas
+        run: |
+          node --input-type=module <<'JS'
+          const host='https://ecopiensa-paper-10.instructor-andrade-dcc.workers.dev';
+          const response=await fetch(host+'/api/health/mcp',{signal:AbortSignal.timeout(15000)});
+          const data=await response.json();
+          console.log('MCP_GATEWAY_PUBLISHED '+JSON.stringify({
+            mode:data.mode,toolCount:data.toolCount,
+            configured:data.configured,connectedToThisChat:data.connectedToThisChat,
+            orderExecution:data.orderExecution
+          }));
+          if(!response.ok||data.mode!=='MCP_STAGING_DEMO_ONLY'
+            ||data.orderExecution!=='OWNER_BROWSER_APPROVAL_ONLY'
+            ||data.connectedToThisChat!==false)process.exitCode=1;
+          const unauthorized=await fetch(host+'/mcp',{method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});
+          if(![401,503].includes(unauthorized.status))process.exitCode=1;
+          console.log('MCP_UNAUTHENTICATED_ACCESS_BLOCKED '+unauthorized.status);
           JS
       - name: Diagnosticar WebSocket Cloudflare y su fallback manual desde el navegador
         run: |
