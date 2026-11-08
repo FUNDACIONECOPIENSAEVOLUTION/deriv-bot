@@ -54,7 +54,7 @@ export const DEMO_QUOTE_REQUEST = Object.freeze({
   duration:5,duration_unit:'t',underlying_symbol:'R_100',req_id:1
 });
 export function demoQuoteRequest(signal:'UP'|'DOWN'='UP',stakeCents=100){
-  if(![35,50,75,100].includes(stakeCents))throw Error('DEMO_STAKE_INVALID');
+  if(!DEMO_STAKES_CENTS.some(x=>x===stakeCents))throw Error('DEMO_STAKE_INVALID');
   return {...DEMO_QUOTE_REQUEST,amount:stakeCents/100,contract_type:signal==='UP'?'CALL':signal==='DOWN'?'PUT':(()=>{throw Error('DEMO_SIGNAL_INVALID')})()};
 }
 
