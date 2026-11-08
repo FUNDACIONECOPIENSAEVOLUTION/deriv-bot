@@ -1,14 +1,10 @@
 {
-  "version": "9.1",
-  "updatedAt": "2026-11-08T01:05:08.526Z",
-  "summary": "Conservar pérdidas negativas como valores numéricos en Excel sin permitir inyección de fórmulas CSV",
+  "version": "9.2",
+  "updatedAt": "2026-11-08T01:05:45.663Z",
+  "summary": "Explicar pérdida de última tanda DEMO, concentraciones CALL y muestra insuficiente en el panel",
   "changes": [
-    "Conservar pérdidas negativas como valores numéricos en Excel sin permitir inyección de fórmulas CSV",
-    "Actualizar pruebas para exportador CSV server-side y tabla superior DEMO en lugar del botón cliente antiguo",
-    "Eliminar comprobación trivial del CSV y mantener pruebas de timestamps faltantes",
-    "Probar CSV del historial broker DEMO con precio, tiempos reales, análisis y sanitización de fórmulas",
-    "Hacer que el botón anterior también descargue el historial completo DEMO, no solo 50 filas de vista previa"
+    "Explicar pérdida de última tanda DEMO, concentraciones CALL y muestra insuficiente en el panel"
   ],
-  "sourceCommit": "ab0a3e7a7a314745460426ac6f474d6342e8d3b3",
+  "sourceCommit": "7a4108e859528214100a6217b83f4f80bfbc1ffd",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

@@ -82,6 +82,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.2 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:05:45.663Z (UTC).
+- **Commit de origen:** `7a4108e85952`.
+- Explicar pérdida de última tanda DEMO, concentraciones CALL y muestra insuficiente en el panel
+
 ## v9.1 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:05:08.526Z (UTC).
