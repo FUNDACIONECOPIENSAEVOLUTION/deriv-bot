@@ -868,9 +868,15 @@ async function loadMarket(force=false){
 }
 async function refresh(){
   clearTimeout(timer);if(busy)return;if(document.hidden){timer=setTimeout(refresh,5000);return;}busy=true;
-  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500)}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();$('demo-connection').hidden=!state.serverManaged;if(state.serverManaged&&Date.now()-lastDemoLoadAttempt>(demoBurstActive()?2000:5000))await loadDemo();if(demoCurrent?.connected)void syncBrokerBalance();if(Date.now()-arbFetched>60000)await loadArbitrage();}
-  catch{$('error').textContent='No se pudo actualizar. Los valores visibles pueden estar desactualizados.';chip('engine-status','Deriv · estado sin confirmar','offline');chip('chart-status','Sin actualización verificada','offline');$('paper-start').disabled=true;}
-  finally{busy=false;timer=setTimeout(refresh,demoBurstActive()?2000:5000);}
+  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500),cache:'no-store'}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();if(Date.now()-arbFetched>60000)await loadArbitrage();}
+  catch{$('error').textContent='No se pudo actualizar PAPER; Deriv DEMO se verifica por separado.';chip('engine-status','PAPER · sin confirmar','offline');chip('chart-status','Sin actualización verificada','offline');$('paper-start').disabled=true;}
+  finally{
+   // The private DEMO connection must never depend on the PAPER endpoint.
+   $('demo-connection').hidden=false;
+   if(!document.hidden&&Date.now()-lastDemoLoadAttempt>(demoBurstActive()?2000:5000))await loadDemo();
+   if(demoCurrent?.connected)void syncBrokerBalance();
+   busy=false;timer=setTimeout(refresh,demoBurstActive()?2000:5000);
+  }
 }
 $('provider').onchange=async()=>{marketView=null;marketError='';marketFetched=0;render();await loadMarket(true);render();};$('window').onchange=drawCandles;
 for(const action of ['start','stop'])$('paper-'+action).onclick=async()=>{const out=$('paper-control-status');$('paper-start').disabled=true;$('paper-stop').disabled=true;try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();out.textContent=action==='start'?'Deriv: simulación iniciada.':'Deriv: simulación pausada.';await refresh();}catch{out.textContent='No se pudo confirmar el cambio. Comprueba el estado antes de reintentar.';}};
@@ -1290,13 +1296,24 @@ function renderDemo(data){
   }
   if(document.activeElement!==$('deriv-client')&&data.clientId)$('deriv-client').value=data.clientId;
   $('demo-balance').textContent=data.account?'Saldo demo oficial: '+money(Math.round(data.account.balance*100))+' · '+data.account.label+' · Consultado '+date(data.account.checkedAt):'Saldo demo oficial: pendiente de conexión. Los USD 10 de arriba pertenecen a otra simulación.';
+  if(!data.connected&&data.state==='AUTHORIZATION_EXPIRED'){
+   $('demo-feedback').textContent='La autorización DEMO de Deriv está vencida. Autoriza nuevamente la conexión; el historial no se elimina.';
+  }else if(!data.connected&&data.state==='NOT_CONNECTED'){
+   $('demo-feedback').textContent='No hay autorización DEMO registrada. La conexión puede solicitarse independientemente de PAPER.';
+  }
   if(!data.connected&&data.discovery){const d=data.discovery,migration={pending:'en curso',complete:'completa',failed:'fallida',not_applicable:'no aplica',unavailable:'no disponible',unknown:'sin confirmar',not_checked:'sin consultar'}[d.migration]||'sin confirmar';$('demo-feedback').textContent='La aplicación fue autorizada, pero la API no permitió verificar una cuenta demo activa en USD. Demo/USD activas informadas: '+d.activeDemoUsd+'. Migración de plataforma: '+migration+'.';}
 }
 async function loadDemo(){
  if(demoLoadBusy)return;
  demoLoadBusy=true;lastDemoLoadAttempt=Date.now();
- try{const r=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(4500),cache:'no-store'});if(!r.ok)throw Error();demoFetched=Date.now();renderDemo(await r.json());}catch{
-  chip('demo-state','Estado demo sin confirmar','offline');$('deriv-refresh').disabled=true;$('deriv-quote').disabled=true;
+ try{const r=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(4500),cache:'no-store'});
+  if(!r.ok)throw Error('HTTP_'+r.status);
+  const data=await r.json();demoFetched=Date.now();renderDemo(data);
+ }catch(error){
+  const reason=error instanceof Error&&/^HTTP_[0-9]{3}$/.test(error.message)?error.message:'RED_O_SERVIDOR';
+  $('demo-feedback').textContent='No se pudo consultar estado Deriv DEMO ('+reason+
+   '). Esto no demuestra que se haya desconectado del broker. No realices compras sin verificar la sesión.';
+  chip('demo-state','Estado DEMO sin verificar','offline');$('deriv-refresh').disabled=true;$('deriv-quote').disabled=true;
   $('official-demo-balance').textContent='No verificado';
   $('official-demo-time').textContent='No usar como saldo vigente';
   $('chart-demo-balance').textContent='Saldo DEMO sin verificar';
@@ -2211,6 +2228,8 @@ window.setInterval(()=>{if(!document.hidden){paintLiveTick();if(liveTick&&(Date.
  $('browser-tick-status').textContent='ALERTA: cotización con más de 5 s de antigüedad; no operar con esta lectura. Reconectando…';
  if(liveTickSocket){try{liveTickSocket.close();}catch{}}
  }}},1000);
+$('demo-connection').hidden=false;
+void loadDemo();
 ensureLiveTicks();refresh();
 $('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
 </script></main></body></html>
