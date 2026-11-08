@@ -17,7 +17,8 @@ export const DEMO_CSV_COLUMNS=[
  'analisis_epoch','ultimo_tick_epoch','edad_cotizacion_reserva_seg',
  'edad_cotizacion_tras_propuesta_seg','latencia_propuesta_ms',
  'navegacion_pagina','inicio_pagina_epoch','sesion_pagina',
- 'base_indicadores','desviacion_entrada_vs_senal_pct'
+ 'base_indicadores','desviacion_entrada_vs_senal_pct',
+ 'edad_senal_antes_buy_ms','latencia_reserva_ms','latencia_acuse_deriv_ms'
 ] as const;
 const number=(x:unknown)=>typeof x==='number'&&Number.isFinite(x)?x:null;
 const cell=(x:unknown)=>{
@@ -76,7 +77,8 @@ export function demoTradesCsv(rows:DemoCsvRow[]):string{
    nums('quoteAgeAtReserveSeconds'),nums('signalAgeAtProposalSec'),
    nums('proposalRttMs'),d.browserNavigationType,d.pageLoadedEpoch,d.pageSessionId,
    d.sourceIndicators,
-   entryDeviationPct
+   entryDeviationPct,
+   nums('preBuyAgeMs'),nums('reserveRttMs'),nums('buyAckRttMs')
   ];
   return v.map(cell).join(',');
  });
