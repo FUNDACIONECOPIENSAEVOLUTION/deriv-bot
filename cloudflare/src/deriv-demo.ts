@@ -388,7 +388,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
       demoLossAlert:this.read<boolean>('demo-loss-halt')===true,
       tradeReport:this.reportDemo(),
       demoBurst:this.demoBurstStatus(),
-      demoBurstPlan:this.planDemoBurst(10)};
+      demoBurstPlan:this.planDemoBurst(10),
+      demoBurstPlans:DEMO_STAKES_CENTS.map(stakeCents=>({stakeCents,...this.planDemoBurst(10,stakeCents)}))};
   }
   async refresh(){
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');
@@ -690,7 +691,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * No `/ws/real`, no retries of any uncertain buy acknowledgement.
    */
   private burstState(){
-    return this.read<{id:string;nonce:string;state:string;signal:'UP'|'DOWN';
+    return this.read<{id:string;nonce:string;state:string;signal:'UP'|'DOWN'|'AUTO';
       accountId:string;count:number;stakeCents:number;startedAt:number;
       ids:number[];pendingId:number|null}>('demo-burst');
   }
@@ -716,7 +717,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
         stakeCents:r.buy_cents,pnlCents:r.pnl_cents,direction:r.contract_type})),
       lastUpdatedAt:epoch(),independentlyVerified:false};
   }
-  planDemoBurst(requested:number){
+  planDemoBurst(requested:number,stakeCents:number=DEMO_BURST_STAKE_CENTS){
     const snapshot=this.getRiskSnapshot(),saved=this.read<{expiresAt:number}>('snapshot');
     const active=this.burstState();
     const blocked=active&&['PREPARING','BUYING','RECONCILING','REVIEW'].includes(active.state);
@@ -730,28 +731,36 @@ export class DerivDemoConnection extends DurableObject<Env> {
       demoConnected:!!saved&&saved.expiresAt>epoch()&&!!this.read('credentials'),
       autoActive:this.read<boolean>('demo-auto')===true,
       batchSettlementPending:snapshot.batchSettlementPending,halted:snapshot.halted
-    });
+    },stakeCents);
     return blocked?{...planning,allowed:false,reason:'DEMO_BURST_ALREADY_ACTIVE'}:planning;
   }
-  async beginDemoBurst(input:{count:number;signal:'UP'|'DOWN'}){
+  async beginDemoBurst(input:{count:number;signal:'UP'|'DOWN'|'AUTO';stakeCents?:number}){
     if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
     if(!input||!Number.isSafeInteger(input.count)||input.count<1||input.count>10||
-       !['UP','DOWN'].includes(input.signal))throw Error('DEMO_BURST_REQUEST_INVALID');
+       (!['UP','DOWN','AUTO'].includes(input.signal)||
+        !DEMO_STAKES_CENTS.some(x=>x===(input.stakeCents??100))))
+      throw Error('DEMO_BURST_REQUEST_INVALID');
     if(this.burstState()&&
       ['PREPARING','BUYING','RECONCILING','REVIEW'].includes(this.burstState()!.state))
       throw Error('DEMO_BURST_ALREADY_ACTIVE');
     // Read-only official account refresh before any OTP or buy.
     await this.refresh();
-    const signal=this.getBrowserSignal();
-    if(!signal.valid||signal.direction!==input.signal||
-       signal.quoteAgeSeconds===null||signal.quoteAgeSeconds>10)
-      throw Error('DEMO_BURST_FRESH_SIGNAL_REQUIRED');
-    const plan=this.planDemoBurst(input.count);
+    const ready=input.signal==='AUTO'
+      ?DEMO_SUPPORTED_SYMBOLS.some(symbol=>{
+         const value=this.getBrowserSignal(symbol);
+         return value.valid&&value.quoteAgeSeconds!==null&&value.quoteAgeSeconds<=10;
+       })
+      :(()=>{const value=this.getBrowserSignal();
+         return value.valid&&value.direction===input.signal&&
+            value.quoteAgeSeconds!==null&&value.quoteAgeSeconds<=10;})();
+    if(!ready)throw Error('DEMO_BURST_FRESH_SIGNAL_REQUIRED');
+    const stakeCents=input.stakeCents??100;
+    const plan=this.planDemoBurst(input.count,stakeCents);
     if(!plan.allowed)throw Error(plan.reason||'DEMO_BURST_RISK_BLOCKED');
     const creds=await this.verifiedDemoCredentials();
     const b={id:crypto.randomUUID(),nonce:random(),state:'PREPARING',
       signal:input.signal,accountId:creds.accountId,
-      count:input.count,stakeCents:DEMO_BURST_STAKE_CENTS,
+      count:input.count,stakeCents,
       startedAt:epoch(),ids:[] as number[],pendingId:null as number|null};
     this.write('demo-burst',b);
     this.write('demo-auto',false);
@@ -762,7 +771,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       this.write('demo-burst',{...b,state:'BUYING'});
       // OTP is returned ONLY to the owner's private browser. Never to MCP/status.
       return {mode:'DEMO_BROWSER_BURST',accountType:'demo',wsUrl,
-        nonce:b.nonce,runId:b.id,count:b.count,stakeCents:b.stakeCents,
+        nonce:b.nonce,runId:b.id,count:b.count,stakeCents:b.stakeCents,signal:b.signal,
         requiresDistinctBrokerAcks:true,autoRetry:false};
     }catch{
       if(this.burstState()?.id===b.id)this.write('demo-burst',{...b,state:'HALTED'});
