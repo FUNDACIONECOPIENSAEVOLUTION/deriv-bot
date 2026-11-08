@@ -94,16 +94,17 @@ async function updateBurstPanel(){
     (b.running?' · Comprando solo si hay señal nueva y saldo DEMO verificado.':'');
   }
   const tbody=$('burst-rows');tbody.replaceChildren();
-  if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=9;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
+  if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=11;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
   for(const row of selection.slice(0,25)){
    const tr=document.createElement('tr');
    const values=[printableTime(row.createdAtMs),row.symbol,row.direction+' / '+row.state,
     fmt(row.rsi),Number.isFinite(row.signalAgeMs)?row.signalAgeMs+' ms':'—',
     printableTime(row.boughtAtMs),printableTime(row.settledAtMs),
     Number.isFinite(row.buyLatencyMs)?(row.buyLatencyMs/1000).toFixed(3)+' s':'—',
-    Number.isFinite(row.pnlCents)?usd(row.pnlCents/100):'Pendiente'];
+    fmt(row.entryTick),fmt(row.exitTick),
+     Number.isFinite(row.pnlCents)?usd(row.pnlCents/100):'Pendiente'];
    values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=value;
-    if(i===8&&Number.isFinite(row.pnlCents))td.className=row.pnlCents>=0?'up':'down';
+    if(i===10&&Number.isFinite(row.pnlCents))td.className=row.pnlCents>=0?'up':'down';
     tr.appendChild(td);
    });tbody.appendChild(tr);
   }
