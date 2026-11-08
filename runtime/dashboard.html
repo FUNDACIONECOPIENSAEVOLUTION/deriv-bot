@@ -1373,9 +1373,12 @@ function scoreDemoMarketSignal(d){
  // Comparative heuristic, NOT a statistically calibrated success probability.
  const separation=Math.abs((fast/slow-1)*100);
  const momentum=Math.abs(rsi-50);
+ // Very extreme RSI may coincide with a short-lived reversal. Do not reward
+ // oversold/overbought conditions monotonically. Exploratory risk penalty only.
+ const extensionPenalty=Math.min(25,Math.max(0,momentum-15)*2);
  return Math.max(0,Math.min(100,Math.round(
    Math.min(1,separation/0.02)*50+Math.min(1,momentum/20)*35
-     -Math.min(1,vol/0.45)*15)));
+     -Math.min(1,vol/0.45)*15-extensionPenalty)));
 }
 function presentMarketScan(rows){
  const tbody=$('demo-market-scan-rows');tbody.replaceChildren();
@@ -1822,6 +1825,7 @@ $('demo-burst-start').onclick=async()=>{
   'Exposición bruta máxima de esta autorización: '+money(count*stakeCents)+
   ', sin superar US$10 de la tanda.\n'+
   'El bot escogerá independientemente el mercado y CALL/PUT para CADA contrato. '+
+  'No repetirá más de 2 veces la misma combinación índice/dirección. '+
   'Si no hay señal válida o pago aceptable, se detendrá sin completar la cantidad.\n'+
   'El score técnico NO es una probabilidad de éxito ni garantiza ganancia. '+
   'Pueden perderse TODAS las apuestas virtuales.\n'+
@@ -1837,7 +1841,8 @@ $('demo-burst-start').onclick=async()=>{
  }
  demoBurstRunning=true;demoBurstStopRequested=false;
  $('demo-burst-start').disabled=true;$('demo-burst-stop').disabled=false;
- let ws=null,nonce=null,confirmed=0,lastPair='',samePairCount=0;
+ let ws=null,nonce=null,confirmed=0;
+ const pairCounts=new Map(); // Max 2 correlated bets in same market and side per batch.
  try{
   const batch=await demoBurstPost('begin',{count,signal:'AUTO',stakeCents});
   if(batch.mode!=='DEMO_BROWSER_BURST'||batch.accountType!=='demo'||
@@ -1861,7 +1866,7 @@ $('demo-burst-start').onclick=async()=>{
    for(const candidate of ranked){
     if(demoBurstStopRequested||document.hidden)break;
     const key=candidate.symbol+':'+candidate.direction;
-    if(key===lastPair&&samePairCount>=3)continue;
+    if((pairCounts.get(key)||0)>=2)continue;
     let fresh;
     try{fresh=await fetchFreshBrowserBotSignal(candidate.symbol);}
     catch{continue;}
@@ -1919,8 +1924,7 @@ $('demo-burst-start').onclick=async()=>{
      throw Error('DEMO_BURST_BUY_REJECTED_STOP');
    confirmed++;
    const pair=selected.symbol+':'+selected.direction;
-   samePairCount=pair===lastPair?samePairCount+1:1;
-   lastPair=pair;
+   pairCounts.set(pair,(pairCounts.get(pair)||0)+1);
    output.textContent=confirmed+'/'+count+' compras DEMO confirmadas. '+
       'Último contrato '+registered.contractId+' · '+selected.symbol+' '+
       (selected.direction==='UP'?'CALL':'PUT')+' · apuesta '+money(stakeCents)+
