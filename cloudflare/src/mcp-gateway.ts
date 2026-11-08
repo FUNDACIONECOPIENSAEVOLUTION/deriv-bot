@@ -87,12 +87,14 @@ export async function handleMcpRequest(req:Request,handlers:McpHandlers):Promise
       ||![35,50,75,100].includes(Number(args.stakeCents))
       ||typeof args.stakeCents!=='number')return error(id,-32602,'INVALID_TRADE_PARAMETERS');
     const live=await handlers.getSignal();
-    let selected:DemoSide;
-    if(args.direction==='AUTO'){
-      if(!live.valid||live.direction==='HOLD')
-        return rpc(id,result({status:'HOLD',reason:live.reason,queued:false,brokerOrders:0}));
-      selected=live.direction;
-    }else selected=args.direction==='CALL'?'UP':'DOWN';
+    if(!live.valid||live.direction==='HOLD')
+      return rpc(id,result({status:'HOLD',reason:live.reason,queued:false,brokerOrders:0}));
+    const selected:DemoSide=args.direction==='AUTO'?live.direction:
+      args.direction==='CALL'?'UP':'DOWN';
+    if(selected!==live.direction)return rpc(id,result({
+      status:'SIGNAL_CONFLICT',reason:'MCP_DIRECTION_NOT_MATCHING_VERIFIED_BOT_SIGNAL',
+      signal:live.direction,queued:false,brokerOrders:0
+    }));
     return rpc(id,result(await handlers.requestIntent({
       signal:selected,stakeCents:args.stakeCents,source:'MCP_OWNER_REVIEW'
     })));
