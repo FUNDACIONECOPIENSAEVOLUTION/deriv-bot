@@ -221,11 +221,13 @@ async function browserPrivate(action,data){
  if(!r.ok){const e=await demoResponseError(r);throw Error(e.code);}
  return r.json();
 }
-const proposalRequest=(direction,stakeCents)=>({
- proposal:1,amount:stakeCents/100,basis:'stake',currency:'USD',
- contract_type:direction==='UP'?'CALL':'PUT',underlying_symbol:'R_100',
- duration:5,duration_unit:'t',req_id:1
-});
+const proposalRequest=(direction,stakeCents,symbol='R_100')=>{
+ if(!demoScanSymbols.includes(symbol)||!['UP','DOWN'].includes(direction))
+   throw Error('DEMO_MARKET_OR_DIRECTION_INVALID');
+ return {proposal:1,amount:stakeCents/100,basis:'stake',currency:'USD',
+  contract_type:direction==='UP'?'CALL':'PUT',underlying_symbol:symbol,
+  duration:5,duration_unit:'t',req_id:1};
+};
 async function browserPublicContracts(){
  const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public');
  try{
@@ -1163,14 +1165,15 @@ void loadMcpIntent();
 window.setInterval(()=>{if(!document.hidden&&!mcpIntentBusy)void loadMcpIntent();},12000);
 
 
-async function fetchFreshBrowserBotSignal(){
+async function fetchFreshBrowserBotSignal(symbol='R_100'){
+ if(!demoScanSymbols.includes(symbol))throw Error('DEMO_SYMBOL_UNSUPPORTED');
  const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public');
  try{
   const response=await brokerMessage(ws,{
-   ticks_history:'R_100',count:150,end:'latest',style:'ticks',req_id:993
+   ticks_history:symbol,count:150,end:'latest',style:'ticks',req_id:993
   },12000);
   if(response.msg_type!=='history'||response.error||response.errors
-    ||response.echo_req?.ticks_history!=='R_100'
+    ||response.echo_req?.ticks_history!==symbol
     ||!Array.isArray(response.history?.prices)
     ||!Array.isArray(response.history?.times)
     ||response.history.prices.length!==150||response.history.times.length!==150)
@@ -1178,7 +1181,7 @@ async function fetchFreshBrowserBotSignal(){
   const r=await fetch('/api/deriv/demo/signal',{
    method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
    body:JSON.stringify({
-    symbol:'R_100',prices:response.history.prices,times:response.history.times
+    symbol,prices:response.history.prices,times:response.history.times
    }),signal:AbortSignal.timeout(7000)
   });
   if(!r.ok)throw Error('DEMO_BOT_SIGNAL_UNAVAILABLE');
@@ -1188,6 +1191,95 @@ async function fetchFreshBrowserBotSignal(){
   return result;
  }finally{try{ws.close();}catch{}}
 }
+function scoreDemoMarketSignal(d){
+ const i=d.indicator||{},fast=Number(i.fast),slow=Number(i.slow),
+   rsi=Number(i.rsi),vol=Number(i.volatility);
+ if(!d.valid||!['UP','DOWN'].includes(d.direction)||![fast,slow,rsi,vol].every(Number.isFinite)
+  ||fast<=0||slow<=0||vol<0||rsi<0||rsi>100)return null;
+ // Comparative heuristic, NOT a statistically calibrated success probability.
+ const separation=Math.abs((fast/slow-1)*100);
+ const momentum=Math.abs(rsi-50);
+ return Math.max(0,Math.min(100,Math.round(
+   Math.min(1,separation/0.02)*50+Math.min(1,momentum/20)*35
+     -Math.min(1,vol/0.45)*15)));
+}
+function presentMarketScan(rows){
+ const tbody=$('demo-market-scan-rows');tbody.replaceChildren();
+ for(const row of rows){
+  const tr=document.createElement('tr');
+  const i=row.indicator||{};
+  const cells=[row.symbol,row.lastPrice==null?'—':price(row.lastPrice),
+    row.valid?(row.direction==='UP'?'CALL · alza':'PUT · baja'):'ESPERAR',
+    Number.isFinite(i.fast)&&Number.isFinite(i.slow)?
+       price(i.fast)+' / '+price(i.slow):'—',
+    Number.isFinite(i.rsi)?price(i.rsi):'—',
+    row.score===null?'Sin señal':String(row.score)+'/100 (heurístico)'];
+  for(const item of cells){const td=document.createElement('td');td.textContent=item;tr.appendChild(td);}
+  tbody.appendChild(tr);
+ }
+ $('demo-market-scan-status').textContent=
+  'Se revisaron '+rows.length+' índices públicos. '+rows.filter(x=>x.valid).length+
+  ' señales técnicas aceptadas, '+rows.filter(x=>!x.valid).length+
+  ' mercados ESPERAR/no verificables. Score comparativo SMA/RSI, NO porcentaje de aciertos. '+
+  'Antes de comprar se pide una propuesta auténtica de Deriv para el mercado elegido.';
+}
+async function scanDemoMarkets(){
+ if(demoMarketScanBusy)return [];
+ demoMarketScanBusy=true;$('demo-market-scan').disabled=true;
+ const ws=await browserSocket('wss://api.derivws.com/trading/v1/options/ws/public','public')
+    .catch(()=>null);
+ if(!ws){
+  demoMarketScanBusy=false;$('demo-market-scan').disabled=false;
+  throw Error('DERIV_PUBLIC_MARKETS_UNAVAILABLE');
+ }
+ try{
+  const observations=await Promise.allSettled(demoScanSymbols.map((symbol,k)=>
+    brokerMessage(ws,{ticks_history:symbol,count:150,end:'latest',style:'ticks',
+       req_id:920+k},10000)));
+  const analyzed=await Promise.all(demoScanSymbols.map(async(symbol,k)=>{
+    const observation=observations[k];
+    if(observation.status!=='fulfilled')return {symbol,valid:false,direction:'HOLD',
+      indicator:{},score:null,lastPrice:null,reason:'MARKET_REQUEST_FAILED'};
+    const history=observation.value;
+    if(history.msg_type!=='history'||history.error||history.errors||
+       history.echo_req?.ticks_history!==symbol||
+       !Array.isArray(history.history?.prices)||
+       !Array.isArray(history.history?.times)||
+       history.history.prices.length!==150||history.history.times.length!==150)
+      return {symbol,valid:false,direction:'HOLD',indicator:{},score:null,
+        lastPrice:null,reason:'INVALID_PUBLIC_HISTORY'};
+    try{
+      const res=await fetch('/api/deriv/demo/signal',{method:'POST',
+       headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+       body:JSON.stringify({symbol,prices:history.history.prices,times:history.history.times}),
+       signal:AbortSignal.timeout(8000)});
+      if(!res.ok)throw Error('BAD_SIGNAL');
+      const data=await res.json();
+      if(!['UP','DOWN','HOLD'].includes(data.direction))throw Error('UNKNOWN_SIGNAL');
+      const lastPrice=Number(history.history.prices.at(-1));
+      return {...data,symbol,lastPrice:Number.isFinite(lastPrice)?lastPrice:null,
+        score:scoreDemoMarketSignal(data)};
+    }catch{return {symbol,valid:false,direction:'HOLD',indicator:{},score:null,
+      lastPrice:null,reason:'SERVER_SIGNAL_UNAVAILABLE'};}
+  }));
+  demoMarketLastScan=analyzed;
+  demoMarketLastAt=Date.now();
+  presentMarketScan(analyzed);
+  return analyzed.filter(x=>x.valid===true&&x.score!==null&&
+    x.quoteAgeSeconds!==null&&x.quoteAgeSeconds<=5)
+    .sort((a,b)=>b.score-a.score);
+ }finally{try{ws.close();}catch{}
+  demoMarketScanBusy=false;$('demo-market-scan').disabled=false;
+ }
+}
+$('demo-market-scan').onclick=async()=>{
+ try{await scanDemoMarkets();}
+ catch(err){$('demo-market-scan-status').textContent=
+   'No se pudo comparar mercados: '+(err instanceof Error?err.message:'ERROR')+
+   '. Ninguna orden fue enviada.';
+ }
+};
+
 async function updateBrowserBotSignal(){
  const status=$('browser-bot-signal');
  if(browserBotBusy)return null;
