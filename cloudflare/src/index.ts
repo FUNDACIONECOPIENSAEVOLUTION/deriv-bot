@@ -334,7 +334,7 @@ export default {
     }
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
-    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback','/api/deriv/demo/mcp-intent','/api/deriv/demo/burst/status','/api/deriv/demo/trades.csv','/api/deriv/demo/burst.csv'].includes(url.pathname);
+    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/storage-status','/api/deriv/callback','/api/deriv/demo/mcp-intent','/api/deriv/demo/burst/status','/api/deriv/demo/trades.csv','/api/deriv/demo/burst.csv'].includes(url.pathname);
     const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal','/api/deriv/demo/manual-stake','/api/deriv/demo/burst/begin','/api/deriv/demo/burst/reserve','/api/deriv/demo/burst/ack','/api/deriv/demo/burst/cancel','/api/deriv/demo/burst/halt','/api/deriv/demo/burst/reconcile','/api/deriv/demo/burst/settle'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
@@ -344,6 +344,8 @@ export default {
       if(url.pathname.startsWith('/api/deriv/')){
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
+        if(url.pathname==='/api/deriv/storage-status')
+          return json(await demo.connectionStorageAudit());
         if(url.pathname==='/api/deriv/demo/trades.csv'||url.pathname==='/api/deriv/demo/burst.csv'){
           const scope=url.pathname.endsWith('burst.csv')?'last-burst':'all';
           const file=await demo.exportDemoCsv(scope);
