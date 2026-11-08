@@ -1915,7 +1915,8 @@ $('demo-burst-start').onclick=async()=>{
        !Number.isFinite(payout)||payout<ask||payout/ask<1.65)continue;
     // Payout ratio is quoted; true win probability is UNKNOWN.
     selected={symbol:candidate.symbol,direction:fresh.direction,
-      lastPrice:candidate.lastPrice,indicator:fresh.indicator,
+      lastPrice:Number.isFinite(fresh.lastPrice)?fresh.lastPrice:null,
+      indicator:fresh.indicator,
       quoteAgeSeconds:fresh.quoteAgeSeconds,reason:fresh.reason,
       score:scoreDemoMarketSignal(fresh),breakEvenWinPct:Math.round(10000*ask/payout)/100};
     quote=proposed;
