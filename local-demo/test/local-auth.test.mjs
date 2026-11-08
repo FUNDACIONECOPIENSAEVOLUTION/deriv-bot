@@ -5,38 +5,47 @@ import {mkdtempSync, rmSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as pause} from 'node:timers/promises';
+import {fileURLToPath} from 'node:url';
 
 const home=new URL('../',import.meta.url);
 const file=new URL('../server.mjs',import.meta.url);
 async function boot(fn){
  const data=mkdtempSync(join(tmpdir(),'ecopiensa-test-'));
  const port=18400+Math.floor(Math.random()*2000);
- const child=spawn(process.execPath,[file.pathname],{
+ // URL.pathname is not a valid filesystem path on Windows (it starts with /C:/).
+ const child=spawn(process.execPath,[fileURLToPath(file)],{
   env:{...process.env,PORT:String(port),ECOPIENSA_DATA_DIR:data,ECOPIENSA_NO_MARKET:'1'},
   stdio:'pipe'
  });
- const base=`http://localhost:${port}`;
+ // The listener is IPv4-only; the OAuth redirect still uses localhost.
+ const base=`http://127.0.0.1:${port}`;
+ const originBase=`http://localhost:${port}`;
+ let stderr='';
+ child.stderr.on('data',part=>{stderr=(stderr+String(part)).slice(-4096);});
  try{
   let ok=false;
-  for(let i=0;i<60;i++){
+  for(let i=0;i<100;i++){
    try{const r=await fetch(base+'/api/health');if(r.ok){ok=true;break;}}catch{}
    if(child.exitCode!==null)break;
    await pause(100);
   }
-  assert.ok(ok,'server must start without Cloudflare or PAT network requests');
-  await fn({base,data,child});
+  assert.ok(ok,`server must start without Cloudflare or PAT network requests; exit=${child.exitCode}; stderr=${stderr}`);
+  await fn({base,originBase,data,child});
  }finally{
   child.kill();
-  rmSync(data,{recursive:true,force:true});
+  if(child.exitCode===null)await Promise.race([
+   new Promise(resolve=>child.once('exit',resolve)),pause(3000)
+  ]);
+  rmSync(data,{recursive:true,force:true,maxRetries:20,retryDelay:100});
  }
 }
-test('OAuth link is official PKCE URL while panel remains local',async()=>boot(async({base,child})=>{
- const p=await fetch(base+'/api/auth/start',{method:'POST',headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1',Origin:base},body:JSON.stringify({appId:'12345'})});
+test('OAuth link is official PKCE URL while panel remains local',async()=>boot(async({base,originBase,child})=>{
+ const p=await fetch(base+'/api/auth/start',{method:'POST',headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1',Origin:originBase},body:JSON.stringify({appId:'12345'})});
  assert.equal(p.status,200);
  const d=await p.json(),u=new URL(d.redirectUrl);
  assert.equal(u.origin,'https://auth.deriv.com');
  assert.equal(u.pathname,'/oauth2/auth');
- assert.equal(u.searchParams.get('redirect_uri'),base+'/api/oauth/callback');
+ assert.equal(u.searchParams.get('redirect_uri'),originBase+'/api/oauth/callback');
  assert.equal(u.searchParams.get('code_challenge_method'),'S256');
  assert.equal(u.searchParams.get('response_type'),'code');
  assert.ok(u.searchParams.get('state')?.length>=32);
@@ -46,8 +55,8 @@ test('OAuth link is official PKCE URL while panel remains local',async()=>boot(a
  assert.equal(child.exitCode,null,'server must stay alive after OAuth is initiated');
  assert.equal((await (await fetch(base+'/api/status')).json()).connected,false);
 }));
-test('Reject invalid PAT without storing authorization; preserve data directory',async()=>boot(async({base,data})=>{
- const p=await fetch(base+'/api/auth/pat',{method:'POST',headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1',Origin:base},body:JSON.stringify({appId:'12345',patToken:'invalid'})});
+test('Reject invalid PAT without storing authorization; preserve data directory',async()=>boot(async({base,originBase,data})=>{
+ const p=await fetch(base+'/api/auth/pat',{method:'POST',headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1',Origin:originBase},body:JSON.stringify({appId:'12345',patToken:'invalid'})});
  assert.equal(p.status,400);
  assert.equal((await p.json()).error,'TOKEN_PAT_INVALIDO');
  assert.equal((await (await fetch(base+'/api/status')).json()).connected,false);
@@ -55,13 +64,17 @@ test('Reject invalid PAT without storing authorization; preserve data directory'
  assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/window\.open\('about:blank','_blank'\)/);
 }));
 
-test('Update button is visible; Linux CI cannot run Windows updater or send orders',async()=>boot(async({base})=>{
+test('Update button is visible; tests never start a real Windows updater',async()=>boot(async({base,originBase})=>{
  const page=await (await fetch(base+'/')).text();
  assert.match(page,/id="update-now"/);
- const r=await fetch(base+'/api/system/update-now',{method:'POST',
-  headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1',Origin:base},body:'{}'});
- assert.equal(r.status,400);
- assert.equal((await r.json()).error,'UPDATE_ONLY_WINDOWS');
+ // On Windows this endpoint would launch the real scheduled updater.
+ // The test must never trigger it on the user's PC or a CI runner.
+ if(process.platform!=='win32'){
+  const r=await fetch(base+'/api/system/update-now',{method:'POST',
+   headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1',Origin:originBase},body:'{}'});
+  assert.equal(r.status,400);
+  assert.equal((await r.json()).error,'UPDATE_ONLY_WINDOWS');
+ }
  const health=await (await fetch(base+'/api/health')).json();
  assert.equal(health.realEnabled,undefined);
  assert.equal(health.safeToUpdate,true);

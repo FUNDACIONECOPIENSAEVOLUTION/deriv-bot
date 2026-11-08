@@ -13,7 +13,28 @@ concurrency:
   group: ecopiensa-pc-local-releases
   cancel-in-progress: false
 jobs:
+  verify-windows:
+    # Impide publicar paquetes que pasan en Linux, pero no pueden arrancar en Windows.
+    if: "!contains(github.event.head_commit.message, '[pc-auto-version]')"
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - name: Descargar fuentes PC
+        uses: actions/checkout@v4
+        with:
+          ref: pc-local
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Probar arranque y controles PC en Windows
+        shell: pwsh
+        run: |
+          node --check local-demo/server.mjs
+          node --check local-demo/public/app.js
+          node --test local-demo/test/*.test.mjs
   verify-and-publish:
+    needs: verify-windows
     # Evita reversionar el propio commit automático.
     if: "!contains(github.event.head_commit.message, '[pc-auto-version]')"
     runs-on: ubuntu-latest
