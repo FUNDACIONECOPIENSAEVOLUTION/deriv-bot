@@ -1,10 +1,11 @@
 {
-  "version": "10.5",
-  "updatedAt": "2026-11-08T01:43:09.644Z",
-  "summary": "Mostrar pérdidas y ganancias por índice y dirección de la tanda, sin confundir muestra con tasa fiable",
+  "version": "10.6",
+  "updatedAt": "2026-11-08T01:43:47.376Z",
+  "summary": "Guardar precio de señal recién actualizada para cada contrato y no el de escaneo anterior",
   "changes": [
-    "Mostrar pérdidas y ganancias por índice y dirección de la tanda, sin confundir muestra con tasa fiable"
+    "Guardar precio de señal recién actualizada para cada contrato y no el de escaneo anterior",
+    "Retornar último tick de la misma señal pública para comparar entrada real y evitar registrar cotización anterior"
   ],
-  "sourceCommit": "90837b808da99f26c0f0e35137292be304375242",
+  "sourceCommit": "e054226c729deb75914e36cae04767aaeca8cda8",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

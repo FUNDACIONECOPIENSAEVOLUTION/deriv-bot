@@ -96,6 +96,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.6 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:43:47.376Z (UTC).
+- **Commit de origen:** `e054226c729d`.
+- Guardar precio de señal recién actualizada para cada contrato y no el de escaneo anterior
+- Retornar último tick de la misma señal pública para comparar entrada real y evitar registrar cotización anterior
+
 ## v10.5 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:43:09.644Z (UTC).
