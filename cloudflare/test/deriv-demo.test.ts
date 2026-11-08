@@ -338,3 +338,36 @@ it('manual stake controls deny unsupported amounts, unauthorized access and real
   }
   expect(calls).not.toContain('buy');
 });
+
+it('ten independent DEMO contracts require owner auth, cannot use 100, and never open on page load',async()=>{
+ const unauthorized=await request('/api/deriv/demo/burst/status');
+ expect(unauthorized.r.status).toBe(401);
+ const missing=await request('/api/deriv/demo/burst/begin',{method:'POST',
+  headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+  body:JSON.stringify({count:10,signal:'UP'})});
+ expect(missing.r.status).toBe(401);
+ for(const count of [0,11,20,100]){
+  const invalid=await request('/api/deriv/demo/burst/begin',{method:'POST',
+   headers,body:JSON.stringify({count,signal:'UP'})});
+  expect(invalid.r.status).toBe(400);
+ }
+ const empty=await request('/api/deriv/demo/burst/status',{headers});
+ expect(empty.r.status).toBe(200);
+ const state=JSON.parse(empty.body);
+ expect(state).toMatchObject({status:'EMPTY',accountType:'demo',confirmed:0,brokerOrders:0});
+ expect(calls).not.toContain('buy');
+});
+it('broker DEMO burst cannot be started without an up-to-date real bot CALL or PUT signal',async()=>{
+ const stub=env.DERIV_DEMO.getByName('demo-burst-without-signal');
+ const oauth=await stub.begin('app-123','https://paper.example');
+ await stub.complete(oauth.state,'fixture-code');
+ await stub.refresh();
+ const state=await stub.status();
+ expect(state.demoBurst.status).toBe('EMPTY');
+ expect(state.demoBurstPlan.maxAllowedNow).toBe(10);
+ expect(await errorFrom(stub,instance=>instance.beginDemoBurst({
+  count:10,signal:'UP'
+ }))).toBe('DEMO_BURST_FRESH_SIGNAL_REQUIRED');
+ expect((await stub.demoBurstStatus()).confirmed).toBe(0);
+ expect(calls).not.toContain('buy');
+});
