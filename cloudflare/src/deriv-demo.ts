@@ -228,6 +228,28 @@ export class DerivDemoConnection extends DurableObject<Env> {
       pilotPurchases:pilot.trades,pilotCommittedCents:pilot.spent,
       batchCommittedCents,batchSettlementPending};
   }
+  /** A one-contract manual stake override; automatic bot stays on fixed rotation. */
+  private currentManualStakeCents():number{
+    const value=this.read<number>('demo-manual-next-stake');
+    return value!==null&&DEMO_STAKES_CENTS.some(x=>x===value)
+      ?value:pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
+  }
+  setNextManualStakeCents(stakeCents:number){
+    if(!DEMO_STAKES_CENTS.some(x=>x===stakeCents))throw Error('DEMO_STAKE_NOT_ALLOWED');
+    if(this.read<boolean>('demo-auto')===true)throw Error('DEMO_AUTOMATION_ALREADY_ACTIVE');
+    if(!this.status().connected)throw Error('DERIV_DEMO_REQUIRED');
+    const checkedAt=this.read<number>('demo-last-balance-at');
+    if(checkedAt===null||epoch()-checkedAt>45)throw Error('DEMO_BALANCE_REFRESH_REQUIRED');
+    const r=this.getRiskSnapshot();
+    if(r.openContracts>0||r.unknownCount>0)throw Error('DEMO_CONTRACT_PENDING_RECONCILIATION');
+    const risk=this.riskFor(stakeCents);
+    if(!risk.allowed)throw Error(risk.reason);
+    this.write('demo-manual-next-stake',stakeCents);
+    this.write('demo-manual-preflight',null);
+    return {mode:'DEMO_MANUAL_STAKE_SET',stakeCents,
+      allowedStakesCents:DEMO_STAKES_CENTS,scope:'ONE_MANUAL_DEMO_BUY',
+      automaticRotationUnchanged:true,noBrokerOrders:true};
+  }
   private chosenMaxConcurrent(){
     const value=this.read<number>('demo-max-concurrent')??10;
     if(!Number.isSafeInteger(value)||value<1||value>10)throw Error('DEMO_CONCURRENCY_INVALID');
@@ -289,7 +311,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     let risk:null|ReturnType<typeof evaluateDemoRisk>=null;
     if(raw.brokerBalanceCents!==null)
       risk=evaluateDemoRisk({...raw,brokerBalanceCents:raw.brokerBalanceCents,
-        stakeCents:pickDemoStakeCents(this.read<number>('demo-stake-index')||0),
+        stakeCents:this.currentManualStakeCents(),
         maxConcurrent:this.chosenMaxConcurrent()});
     const lastChecked=this.read<number>('demo-last-balance-at')||null;
     return {settled:stats.settled,wins:stats.wins,losses:stats.losses,pnlCents:stats.net,
@@ -338,7 +360,9 @@ export class DerivDemoConnection extends DurableObject<Env> {
       demoAutomationAvailable:String(this.env.DEMO_AUTO_ENABLED)==='true',
       demoAutomationRequested:this.read<boolean>('demo-auto')===true,
       demoMaxConcurrent:this.chosenMaxConcurrent(),
-      nextManualStakeCents:pickDemoStakeCents(this.read<number>('demo-stake-index')||0),
+      nextManualStakeCents:this.currentManualStakeCents(),
+      allowedManualStakesCents:DEMO_STAKES_CENTS,
+      maxBrowserConcurrent:1,
       demoLossAlert:this.read<boolean>('demo-loss-halt')===true,
       tradeReport:this.reportDemo()};
   }
@@ -640,13 +664,15 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
     if((signal!=='UP'&&signal!=='DOWN')||!DEMO_STAKES_CENTS.some(s=>s===stakeCents))
       throw Error('DEMO_BROWSER_PARAMETERS_INVALID');
-    const planned=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
+    const planned=this.currentManualStakeCents();
     if(stakeCents!==planned)throw Error('DEMO_QUOTE_WRONG_NEXT_STAKE');
     const existing=this.read<{id:number;at:number}>('demo-browser-reservation');
     if(existing&&['UNKNOWN','OPEN'].includes((existing as {state?:string}).state||''))throw Error('DEMO_BROWSER_ORDER_PENDING');
     const creds=await this.verifiedDemoCredentials();
     const risk=this.riskFor(stakeCents);
     if(!risk.allowed)throw Error(risk.reason);
+    const checkedAt=this.read<number>('demo-last-balance-at');
+    if(checkedAt===null||epoch()-checkedAt>45)throw Error('DEMO_BALANCE_REFRESH_REQUIRED');
     const url=await this.otpDemoUrl(creds);
     const nonce=random();
     // The socket URL is a credential, stored encrypted, never returned in status.
@@ -741,7 +767,10 @@ export class DerivDemoConnection extends DurableObject<Env> {
           ack.code,input.id);
       }
       this.write('demo-browser-reservation',{...reservation,state:ack.accepted?'OPEN':'REJECTED'});
-      if(ack.accepted)this.write('demo-stake-index',(this.read<number>('demo-stake-index')||0)+1);
+      if(ack.accepted){
+        this.write('demo-stake-index',(this.read<number>('demo-stake-index')||0)+1);
+        this.write('demo-manual-next-stake',null);
+      }
     });
     return {mode:'DEMO_BROWSER_OBSERVED',independentlyVerified:false,
       accepted:ack.accepted,contractId:ack.accepted?ack.contractId:null,
@@ -799,7 +828,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
   manualApprovedSignal(): 'UP'|'DOWN'|'HOLD' {
     const a=this.read<{at:number;signal:string;stakeCents:number;accountId:string;purchases:number}>('demo-manual-preflight');
     const snap=this.read<{account:DemoAccount}>('snapshot');
-    const planned=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
+    const planned=this.currentManualStakeCents();
     const count=this.getRiskSnapshot().pilotPurchases;
     if(!snap||!a||!['UP','DOWN'].includes(a.signal))return 'HOLD';
     const direction=a.signal as 'UP'|'DOWN';
@@ -821,7 +850,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
         accountId:string;purchases:number}>('demo-manual-preflight');
       // Consume before sending any proposal, even when it fails.
       this.write('demo-manual-preflight',null);
-      const planned=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
+      const planned=this.currentManualStakeCents();
       const current=this.getRiskSnapshot();
       if(!validManualDemoApproval(approval,{
         now:epoch(),signal:paperSignal,stakeCents:planned,
@@ -829,12 +858,13 @@ export class DerivDemoConnection extends DurableObject<Env> {
       }))throw Error('DEMO_FRESH_APPROVED_QUOTE_REQUIRED');
     }
     const index=this.read<number>('demo-stake-index')||0;
-    const stakeCents=pickDemoStakeCents(index);
+    const stakeCents=source==='manual'?this.currentManualStakeCents():pickDemoStakeCents(index);
     const firstRisk=this.riskFor(stakeCents);
     if(!firstRisk.allowed)throw Error(firstRisk.reason);
     // A rejected proposal advances the experiment instead of retrying
     // the same unaccepted amount indefinitely.
     this.write('demo-stake-index',index+1);
+    if(source==='manual')this.write('demo-manual-next-stake',null);
     const url=await this.otpDemoUrl(creds);
     const safeNumber=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)?v:null;
     const decision=JSON.stringify({
