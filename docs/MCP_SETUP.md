@@ -7,8 +7,9 @@ Estado v1.1: código de servidor implementado y subido, pero NO desplegado como 
 - get_project_status: descripción, links y permisos del proyecto.
 - get_market_snapshot: consulta cotizaciones públicas actuales de Deriv e indicadores descriptivos, sin cuenta de usuario.
 - compare_research_strategies: compara 5 reglas fijas sobre ticks históricos, con división temporal desarrollo 60 % / prueba 40 % y pago hipotético.
+- simulate_ten_bot_paper_trades: ejecuta 10 operaciones hipotéticas sobre ticks públicos reutilizando el motor PAPER Node del bot; decide CALL/PUT/HOLD, devuelve balance hipotético y jamás envía órdenes.
 
-No se incluyen órdenes de compra, venta, retirada, transferencia, autorización Deriv ni consulta de saldos reales.
+No se incluyen órdenes de compra, venta, retirada, transferencia, autorización Deriv ni consulta de saldos reales. Requisito adicional: Node.js 24+ para que el nuevo comando reutilice el motor de simulación. [Guía del ensayo PAPER](MCP_PAPER_10.md).
 
 ## Iniciar servidor local
 
@@ -38,7 +39,7 @@ Si no hay acceso a servidores MCP personalizados, el repositorio sigue pudiendo 
 
 ## Verificación de integración
 
-1. Inspeccionar la lista de herramientas; deben ser solo get_project_status, get_market_snapshot y compare_research_strategies.
+1. Inspeccionar la lista de herramientas; deben ser get_project_status, get_market_snapshot, compare_research_strategies y simulate_ten_bot_paper_trades. Ninguna compra contratos.
 2. Confirmar que get_project_status informa real_trading_enabled=false.
 3. Consultar get_market_snapshot con un símbolo válido; nunca inventar precios si Deriv falla.
 4. Ejecutar compare_research_strategies y comprobar que indica pago hipotético, muestra de prueba temporal y executed_orders=0.
