@@ -1268,6 +1268,176 @@ $('demo-command').addEventListener('keydown',event=>{
 });
 $('demo-quote-direction').onchange=()=>{demoManualApproval=null;};
 $('demo-quote-stake').onchange=()=>{demoManualApproval=null;};
+
+$('demo-burst-count').oninput=()=>{
+ const field=$('demo-burst-count');field.dataset.userEdited='1';
+ const count=Number(field.value),max=Number(demoCurrent?.demoBurstPlan?.maxAllowedNow??0);
+ const out=$('demo-burst-plan');
+ if(!Number.isInteger(count)||count<1||count>10){
+  out.textContent='Cantidad inválida: escribe un número entero de 1 a 10. Ninguna orden enviada.';
+ }else{
+  out.textContent='Solicitas '+count+' compras DEMO diferentes, cada una de US$1 · total '+money(count*100)+
+    '. Cupos disponibles en la tanda actual: '+max+
+    (count>max?'. Insuficientes: espera la siguiente tanda o reduce la cantidad.':
+    '. Requiere señal vigente y confirmación; no es una orden todavía.');
+ }
+ const burst=demoCurrent?.demoBurst||{},active=['PREPARING','BUYING','RECONCILING','REVIEW'].includes(burst.status);
+ $('demo-burst-start').disabled=demoBurstRunning||active||!demoCurrent?.connected||
+    !demoCurrent?.demoTradingEnabled||!Number.isInteger(count)||count<1||count>10||
+    count>max||(demoCurrent?.tradeReport?.unknownCount||0)>0||
+    (demoCurrent?.tradeReport?.openCount||0)>0;
+};
+$('demo-burst-stop').onclick=()=>{
+ demoBurstStopRequested=true;
+ $('demo-burst-stop').disabled=true;
+ $('demo-burst-live').textContent='Parada solicitada. No se enviarán MÁS compras después de resolver la solicitud actualmente enviada. '+
+  'Los contratos ya comprados deben conciliarse; nunca se cancelan ni se duplican automáticamente.';
+};
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden&&demoBurstRunning)demoBurstStopRequested=true;
+});
+$('demo-burst-reconcile').onclick=async()=>{
+ if(demoBurstRunning||demoBurstSettling)return;
+ demoBurstSettling=true;$('demo-burst-reconcile').disabled=true;
+ let ws=null;
+ try{
+  const pending=await demoBurstPost('reconcile',{});
+  if(pending.mode!=='DEMO_BURST_SETTLEMENT'||pending.accountType!=='demo'||pending.noOrders!==true)
+    throw Error('DEMO_BURST_RECONCILE_INVALID');
+  ws=await browserSocket(pending.wsUrl,'demo');
+  const out=await settleBurstKnownContracts(ws,pending.nonce);
+  $('demo-burst-live').textContent='Verificación de contratos DEMO: '+burstSummary(out)+
+    (out.opened>0?' · todavía quedan contratos abiertos.':'')+
+    (out.uncertain?' · aceptación incierta; no reintentar compras.':'')+
+    '. Confirmación observada desde el navegador.';
+ }catch(error){
+  $('demo-burst-live').textContent='No se pudo finalizar la conciliación: '+
+    (error instanceof Error?error.message:'ERROR')+
+    '. NO repitas una compra; revisa los identificadores en Deriv.';
+ }finally{
+  if(ws)try{ws.close();}catch{}
+  demoBurstSettling=false;await loadDemo();void syncBrokerBalance(true);
+ }
+};
+$('demo-burst-start').onclick=async()=>{
+ if(demoBurstRunning||demoBurstSettling||demoBalancedRunning)return;
+ const count=Number($('demo-burst-count').value);
+ const limit=demoCurrent?.demoBurstPlan?.maxAllowedNow??0;
+ if(!Number.isInteger(count)||count<1||count>10||count>limit){
+  $('demo-burst-live').textContent='Tanda no autorizada. Solo '+limit+
+    ' compras disponibles antes del corte de diez. No se envió ninguna orden.';
+  return;
+ }
+ demoBurstRunning=true;demoBurstStopRequested=false;
+ $('demo-burst-start').disabled=true;$('demo-burst-stop').disabled=false;
+ let ws=null,nonce=null,confirmed=0;
+ const status=$('demo-burst-live');
+ try{
+  if(!(await syncBrokerBalance(true)))throw Error('DEMO_BALANCE_NOT_REFRESHED');
+  // The algorithm, not the user, must choose CALL/PUT/HOLD.
+  const signal=await updateBrowserBotSignal();
+  if(!signal||!signal.valid||!['UP','DOWN'].includes(signal.direction)||
+     Date.now()-signal.at*1000>9000)
+    throw Error('DEMO_BOT_SIGNAL_HOLD_OR_STALE');
+  const direction=signal.direction;
+  const freshPlan=demoCurrent?.demoBurstPlan||{};
+  if(freshPlan.maxAllowedNow<count||
+     (demoCurrent?.tradeReport?.unknownCount||0)>0||
+     (demoCurrent?.tradeReport?.openCount||0)>0)
+    throw Error('DEMO_BURST_BUDGET_OR_POSITIONS_CHANGED');
+  const decision=direction==='UP'?'CALL · ALZA':'PUT · BAJA';
+  const approved=window.confirm(
+    '¿CONFIRMAS '+count+' COMPRAS DISTINTAS en DERIV DEMO?\n\n'+
+    'Decisión del bot: '+decision+' · R_100 · cinco ticks.\n'+
+    'Apuesta por contrato: US$1 virtual.\n'+
+    'Apuesta TOTAL máxima: '+money(count*100)+' (nunca más de US$10 por tanda).\n'+
+    'Cada compra tendrá un contrato individual y puede ganar o perder.\n'+
+    'Las órdenes se enviarán una por una sin esperar a que termine cada contrato; '+
+    'algunos podrían liquidarse antes de completar la tanda.\n'+
+    'No se usarán fondos reales y no se reintentará una orden incierta.\n'+
+    '¿Autorizas estas '+count+' compras DEMO?'
+  );
+  if(!approved){status.textContent='No se autorizaron compras DEMO.';return;}
+  status.textContent='Solicitando sesión DEMO autenticada para '+count+
+    ' órdenes independientes. Todavía no se ha comprado ningún contrato.';
+  const session=await demoBurstPost('begin',{count,signal:direction});
+  if(session.mode!=='DEMO_BROWSER_BURST'||session.accountType!=='demo'||
+    session.count!==count||session.stakeCents!==100||session.autoRetry!==false)
+    throw Error('DEMO_BURST_SESSION_INVALID');
+  nonce=session.nonce;
+  ws=await browserSocket(session.wsUrl,'demo');
+  const evidence=signal.indicator||{};
+  for(let i=0;i<count;i++){
+   if(demoBurstStopRequested||document.hidden){
+    status.textContent='Pausado antes de la orden '+(i+1)+'. '+confirmed+
+      ' contratos confirmados; no se enviarán compras adicionales.';
+    break;
+   }
+   status.textContent='Preparando compra DEMO '+(i+1)+'/'+count+
+      ', '+decision+', US$1 virtual. Confirmadas: '+confirmed+'.';
+   const quote=await brokerMessage(ws,proposalRequest(direction,100),8500);
+   const p=quote.proposal||{},ask=Number(p.ask_price),payout=Number(p.payout);
+   if(quote.msg_type!=='proposal'||quote.error||quote.errors||
+      typeof p.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(p.id)||
+      !Number.isFinite(ask)||Math.abs(ask-1)>0.000001||
+      !Number.isFinite(payout)||payout<ask)
+    throw Error('DEMO_BURST_PROPOSAL_REJECTED_STOP');
+   // Durable UNKNOWN reservation commits before any buy message leaves browser.
+   const reservation=await demoBurstPost('reserve',{
+    nonce,proposalId:p.id,askPrice:ask,payout,
+    evidence:{fast:evidence.fast,slow:evidence.slow,rsi:evidence.rsi,
+     volatility:evidence.volatility,
+     entryQuote:liveTick?.quote??null,
+     quoteAgeSeconds:signal.quoteAgeSeconds,reason:signal.reason}
+   });
+   if(reservation.mode!=='DEMO_BURST_RESERVED'||
+      reservation.accountType!=='demo'||
+      !Number.isSafeInteger(reservation.id)||
+      reservation.request?.price!==1||
+      typeof reservation.request?.buy!=='string')
+    throw Error('DEMO_BURST_RESERVATION_INVALID');
+   // EXACTLY ONE broker buy for THIS reservation. Never retry a missing ACK.
+   const brokerAck=await brokerMessage(ws,reservation.request,10000);
+   const result=await demoBurstPost('ack',{
+     nonce,id:reservation.id,response:brokerAck
+   });
+   if(result.mode!=='DEMO_BURST_ACK'||result.accepted!==true||
+      !Number.isSafeInteger(result.contractId))
+    throw Error('DEMO_BURST_BUY_REJECTED_STOP');
+   confirmed++;
+   status.textContent='Compra '+confirmed+'/'+count+' confirmada por Deriv. '+
+      'Contrato '+result.contractId+' · compra virtual '+money(100)+
+      ' · compromiso confirmado del lote '+money(confirmed*100)+
+      '. Actualizando saldo oficial sin esperar la liquidación.';
+   // Refresh immediately on every accepted broker buy, rather than only on settlement.
+   void syncBrokerBalance(true);
+   await demoBurstCurrent();
+  }
+  if(demoBurstStopRequested||confirmed<count){
+    await demoBurstPost('halt',{});
+  }
+  if(ws&&confirmed>0){
+    const after=await settleBurstKnownContracts(ws,nonce);
+    status.textContent='Compra DEMO terminada: '+burstSummary(after)+
+      (after.opened>0?' · contratos abiertos pendientes de liquidar.':'')+
+      (after.uncertain?' · al menos una orden sin confirmación; no volver a comprar.':'')+
+      '. Consulta la lista por número de contrato.';
+  }else if(confirmed===0)status.textContent='No se confirmó ninguna compra DEMO.';
+ }catch(error){
+  status.textContent='DETENIDO: '+(error instanceof Error?error.message:'DEMO_BURST_UNKNOWN_ERROR')+
+   '. Confirmaciones recibidas: '+confirmed+
+   '. Si falta un acuse, NO repitas órdenes: consulta el historial de contratos.';
+  try{await demoBurstPost('halt',{});}catch{}
+  try{await demoBurstCurrent();}catch{}
+ }finally{
+  if(ws)try{ws.close();}catch{}
+  demoBurstRunning=false;demoBurstStopRequested=false;
+  $('demo-burst-stop').disabled=true;
+  await loadDemo();
+  void syncBrokerBalance(true);
+ }
+};
+
 $('demo-balanced-start').onclick=()=>{
  if(demoBalancedRunning)return;
  if(!demoCurrent?.connected||!demoCurrent.demoTradingEnabled
