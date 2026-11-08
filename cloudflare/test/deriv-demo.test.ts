@@ -280,3 +280,31 @@ it('blocks unauthenticated browser DEMO session endpoints and invalid stakes bef
   expect(JSON.parse(executionOff.body).code).toBe('DEMO_EXECUTION_DISABLED');
   expect(calls).not.toContain('buy');
 });
+
+it('browser-reported public prices are analyzed as CALL/PUT/HOLD without connecting to a broker',async()=>{
+  const stub=env.DERIV_DEMO.getByName('market-only-mcp-1');
+  const now=Math.floor(Date.now()/1000);
+  const prices=Array.from({length:150},(_,i)=>550+i*0.03);
+  const times=Array.from({length:150},(_,i)=>now-149+i);
+  const result=await stub.analyzeBrowserPrices({symbol:'R_100',prices,times});
+  expect(['UP','DOWN','HOLD']).toContain(result.direction);
+  expect(result.verifiedIndependently).toBe(false);
+  const cached=await stub.getBrowserSignal();
+  expect(cached.source).toBe('OWNER_BROWSER_REPORTED_PUBLIC_R_100');
+  expect(cached.verifiedIndependently).toBe(false);
+  expect(calls).not.toContain('buy');
+});
+it('new MCP endpoint stays closed until configured with its own secret and protects browser signal endpoint',async()=>{
+  const health=await request('/api/health/mcp');
+  expect(health.r.status).toBe(200);
+  expect(JSON.parse(health.body).mode).toBe('MCP_STAGING_DEMO_ONLY');
+  const mcp=await request('/mcp',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});
+  expect(mcp.r.status).toBe(503);
+  expect(JSON.parse(mcp.body).code).toBe('MCP_NOT_CONFIGURED');
+  const signal=await request('/api/deriv/demo/signal',{method:'POST',
+    headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}'});
+  expect(signal.r.status).toBe(401);
+  expect(calls).not.toContain('buy');
+});
