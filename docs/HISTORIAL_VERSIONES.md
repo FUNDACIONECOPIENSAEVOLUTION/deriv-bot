@@ -86,6 +86,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.6 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:12:14.493Z (UTC).
+- **Commit de origen:** `6dfaf992f0fb`.
+- Probar mínimo US$0.10 y propuestas CALL/PUT de cuatro índices sin operaciones ni cuenta Deriv
+
 ## v9.5 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:11:29.994Z (UTC).

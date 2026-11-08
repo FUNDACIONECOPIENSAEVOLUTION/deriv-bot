@@ -1,10 +1,10 @@
 {
-  "version": "9.5",
-  "updatedAt": "2026-11-08T01:11:29.994Z",
-  "summary": "Dibujar entradas/salidas DEMO solo con spot y hora confirmados; curva de P&L de contratos DEMO, PAPER separado",
+  "version": "9.6",
+  "updatedAt": "2026-11-08T01:12:14.493Z",
+  "summary": "Probar mínimo US$0.10 y propuestas CALL/PUT de cuatro índices sin operaciones ni cuenta Deriv",
   "changes": [
-    "Dibujar entradas/salidas DEMO solo con spot y hora confirmados; curva de P&L de contratos DEMO, PAPER separado"
+    "Probar mínimo US$0.10 y propuestas CALL/PUT de cuatro índices sin operaciones ni cuenta Deriv"
   ],
-  "sourceCommit": "35bf403d38de68033430e19b88a117455d1d06a0",
+  "sourceCommit": "6dfaf992f0fb4ea64a06f6ee416e3be583f1d260",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
