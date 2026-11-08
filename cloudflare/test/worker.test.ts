@@ -79,6 +79,18 @@ it('dependency health reports unavailable PAPER without hiding healthy DEMO stor
  expect(JSON.parse(body)).toMatchObject({paper:'unavailable',demo:'ready',
    brokerAuthorization:'not_checked'});
 });
+it('identifies DEMO namespace errors without exposing owner account data or returning a false green',async()=>{
+ const broken={...env,DERIV_DEMO:{getByName(){throw Error('binding is unavailable');}}};
+ const {response,body}=await request('/api/health/dependencies',{},broken as unknown as typeof env);
+ expect(response.status).toBe(503);
+ const diagnostic=JSON.parse(body);
+ expect(diagnostic).toMatchObject({
+  demo:'unavailable',demoStorage:'unavailable',demoErrorCode:'DO_RPC_UNAVAILABLE',
+  demoReport:'unavailable',brokerAuthorization:'not_checked',noOrders:true
+ });
+ for(const token of ['credentials','accountId','clientId','accessToken'])
+   expect(body).not.toContain('"'+token+'"');
+});
 it('private dashboard embeds this exact release and escapes changelog placeholders',async()=>{
   const {response,body}=await request('/',{headers});
   expect(response.status).toBe(200);
