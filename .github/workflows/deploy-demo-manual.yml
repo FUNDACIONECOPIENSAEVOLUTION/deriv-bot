@@ -45,7 +45,8 @@ jobs:
         run: (cd .. && node tests/test_html.mjs)
       - name: Bloquear importes obsoletos y exigir la misma lista en HTTP y riesgo DEMO
         run: |
-          grep -F 'DEMO_STAKES_CENTS=Object.freeze([35,50,75,100]' src/demo-risk-policy.ts
+          grep -F 'DEMO_STAKES_CENTS=Object.freeze([35,50,75,90,100]' src/demo-risk-policy.ts
+          grep -F 'DEMO_AUTOMATIC_STAKES_CENTS=Object.freeze([35,50,75,100]' src/demo-risk-policy.ts
           grep -F 'DEMO_STAKES_CENTS.some(allowed=>allowed===stakeCents)' src/index.ts
           grep -F "for(const stakeCents of [35,50,75,100])" test/deriv-demo.test.ts
           grep -F "for(const stakeCents of [10,25,30,200])" test/deriv-demo.test.ts
@@ -75,6 +76,11 @@ jobs:
           grep -F "request_demo_buy" src/mcp-gateway.ts
           grep -F "getBrowserSignal" src/deriv-demo.ts
           grep -F "mcp-approve" ../runtime/dashboard.html
+          grep -F 'demo-apply-stake' ../runtime/dashboard.html
+          grep -F 'DEMO_MANUAL_STAKE_SET' src/deriv-demo.ts
+          grep -F 'syncBrokerBalance' ../runtime/dashboard.html
+          grep -F "ticks:'R_100',subscribe:1" ../runtime/dashboard.html
+          grep -F 'demo-max-concurrent' ../runtime/dashboard.html
           grep -F "browser-bot-buy" ../runtime/dashboard.html
           grep -F "completeMcpDemoIntent" src/deriv-demo.ts
       - name: Validar acceso seguro y publicar panel sin operaciones
