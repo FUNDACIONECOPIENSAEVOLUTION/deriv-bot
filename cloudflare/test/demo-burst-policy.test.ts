@@ -2,7 +2,7 @@ import {expect,it} from 'vitest';
 import {planDemoBurst} from '../src/demo-burst-policy';
 
 const fresh=()=>({
- pilotPurchases:0,pilotCommittedCents:0,batchCommittedCents:0,
+ pilotPurchases:0,pilotCommittedCents:0,batchCommittedCents:0,burstPurchases:0,
  openContracts:0,unknownCount:0,exposureCents:0,
  brokerBalanceCents:1000000,balanceCheckedAt:1794090000,now:1794090001,
  demoConnected:true,autoActive:false,batchSettlementPending:false,halted:false
@@ -15,7 +15,7 @@ it('10 orders mean 10 distinct purchases of US$1 and gross US$10, never one purc
 });
 it('requires eight remaining when two previous contracts already belong to the batch',()=>{
  const f=fresh(),after={...f,pilotPurchases:2,pilotCommittedCents:85,
-   batchCommittedCents:85};
+   batchCommittedCents:85,burstPurchases:2};
  expect(planDemoBurst(10,after)).toMatchObject({
    allowed:false,reason:'DEMO_BURST_REMAINING_LIMIT',maxAllowedNow:8
  });
@@ -26,12 +26,42 @@ it('requires eight remaining when two previous contracts already belong to the b
 it('does not exceed US$10 budget even when the remaining slots appear available',()=>{
  const f=fresh();
  expect(planDemoBurst(5,{...f,pilotPurchases:3,pilotCommittedCents:800,
-  batchCommittedCents:800})).toMatchObject({
+  batchCommittedCents:800,burstPurchases:3})).toMatchObject({
    allowed:false,reason:'DEMO_BURST_REMAINING_LIMIT',maxAllowedNow:2
  });
  expect(planDemoBurst(2,{...f,pilotPurchases:3,pilotCommittedCents:800,
   batchCommittedCents:800}).allowed).toBe(true);
 });
+
+it('a new 10-contract burst after 29 settled pilot purchases keeps campaign limits',()=>{
+ const f=fresh(),previous={...f,pilotPurchases:29,pilotCommittedCents:2900,
+   burstPurchases:0,batchCommittedCents:0};
+ expect(planDemoBurst(10,previous)).toMatchObject({
+   allowed:true,maxAllowedNow:10,remainingInBatch:10,remainingInPilot:21
+ });
+ const current={...previous,pilotPurchases:34,pilotCommittedCents:3400,
+   burstPurchases:5,batchCommittedCents:500};
+ expect(planDemoBurst(6,current)).toMatchObject({
+   allowed:false,reason:'DEMO_BURST_REMAINING_LIMIT',maxAllowedNow:5
+ });
+ expect(planDemoBurst(5,current).allowed).toBe(true);
+ expect(planDemoBurst(10,{...f,pilotPurchases:49,pilotCommittedCents:4900}))
+   .toMatchObject({allowed:false,reason:'DEMO_BURST_REMAINING_LIMIT',maxAllowedNow:1});
+ expect(planDemoBurst(1,{...f,pilotPurchases:50,pilotCommittedCents:5000}))
+   .toMatchObject({allowed:false,maxAllowedNow:0});
+});
+
+it('separate burst budget never resets the cumulative US$50 pilot ceiling',()=>{
+ const f=fresh(),current={...f,pilotPurchases:31,pilotCommittedCents:3500,
+   burstPurchases:7,batchCommittedCents:900};
+ expect(planDemoBurst(2,current)).toMatchObject({
+   allowed:false,reason:'DEMO_BURST_REMAINING_LIMIT',maxAllowedNow:1
+ });
+ expect(planDemoBurst(1,current).allowed).toBe(true);
+ expect(planDemoBurst(1,{...f,pilotPurchases:20,pilotCommittedCents:4950})
+   .maxAllowedNow).toBe(0);
+});
+
 it('blocks unknown buys, open contracts, stale balance, auto and loss guard',()=>{
  const f=fresh();
  for(const [overrides,reason] of [

@@ -701,6 +701,16 @@ export class DerivDemoConnection extends DurableObject<Env> {
       accountId:string;count:number;stakeCents:number;startedAt:number;
       ids:number[];pendingId:number|null}>('demo-burst');
   }
+  /** Confirmed gross stake for this single authorized burst only. */
+  private burstCommittedCents(b:{ids:number[]}|null):number{
+    if(!b)return 0;
+    return b.ids.reduce((total,id)=>{
+      const row=this.ctx.storage.sql.exec<{buy_cents:number|null}>(
+        "SELECT buy_cents FROM demo_trades WHERE id=? AND state IN ('OPEN','SETTLED','UNKNOWN')",id
+      ).toArray()[0];
+      return total+(row?.buy_cents??0);
+    },0);
+  }
   demoBurstStatus(){
     const b=this.burstState();
     if(!b)return {status:'EMPTY',accountType:'demo',confirmed:0,requested:0,
@@ -728,10 +738,14 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const snapshot=this.getRiskSnapshot(),saved=this.read<{expiresAt:number}>('snapshot');
     const active=this.burstState();
     const blocked=active&&['PREPARING','BUYING','RECONCILING','REVIEW'].includes(active.state);
+    const currentRun=blocked?active:null;
     const planning=planDemoBurst(requested,{
       pilotPurchases:snapshot.pilotPurchases,
       pilotCommittedCents:snapshot.pilotCommittedCents,
-      batchCommittedCents:snapshot.batchCommittedCents,
+      // Each newly authorized burst gets its own 10 slots/$10 gross ceiling.
+      // The overall campaign still has the same 50-contract/$50 ceiling.
+      burstPurchases:currentRun?.ids.length??0,
+      batchCommittedCents:this.burstCommittedCents(currentRun),
       openContracts:snapshot.openContracts,unknownCount:snapshot.unknownCount,
       exposureCents:snapshot.exposureCents,brokerBalanceCents:snapshot.brokerBalanceCents,
       balanceCheckedAt:this.read<number>('demo-last-balance-at')||0,now:epoch(),
@@ -828,8 +842,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
       baselineBalanceCents:risk.baselineBalanceCents,
       halted:risk.halted,maxConcurrent:10,
       pilotPurchases:risk.pilotPurchases,pilotCommittedCents:risk.pilotCommittedCents,
-      batchCommittedCents:risk.batchCommittedCents,
-      batchSettlementPending:risk.batchSettlementPending
+      batchCommittedCents:this.burstCommittedCents(b),
+      batchSettlementPending:false
     });
     const id=this.ctx.storage.transactionSync(()=>{
       const latest=this.burstState(),snap=this.getRiskSnapshot();
@@ -841,11 +855,12 @@ export class DerivDemoConnection extends DurableObject<Env> {
       const limits=planDemoBurst(1,{
         pilotPurchases:snap.pilotPurchases,
         pilotCommittedCents:snap.pilotCommittedCents,
-        batchCommittedCents:snap.batchCommittedCents,
+        burstPurchases:latest.ids.length,
+        batchCommittedCents:this.burstCommittedCents(latest),
         openContracts:0,unknownCount:0,exposureCents:snap.exposureCents,
         brokerBalanceCents:snap.brokerBalanceCents,
         balanceCheckedAt:this.read<number>('demo-last-balance-at')||0,now:epoch(),
-        demoConnected:true,autoActive:false,batchSettlementPending:snap.batchSettlementPending,
+        demoConnected:true,autoActive:false,batchSettlementPending:false,
         halted:snap.halted
       },b.stakeCents);
       if(!limits.allowed)throw Error(limits.reason||'DEMO_BURST_RISK_LIMIT');

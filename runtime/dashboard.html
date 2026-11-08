@@ -1095,7 +1095,8 @@ function renderDemo(data){
     countField.value=String(Math.min(10,Math.max(1,plan.maxAllowedNow)));
   }
   const intended=Number(countField.value);
-  $('demo-burst-start').disabled=demoBurstRunning||activeBurst||demoBalancedRunning||
+  const riskBlock=Boolean(plan.reason&&!['DEMO_BURST_REMAINING_LIMIT','DEMO_BURST_ALREADY_ACTIVE'].includes(plan.reason));
+  $('demo-burst-start').disabled=demoBurstRunning||activeBurst||demoBalancedRunning||riskBlock||
     !data.connected||!data.demoTradingEnabled||data.demoAutomationRequested||
     !Number.isInteger(intended)||intended<1||intended>10||
     !Number.isInteger(plan.maxAllowedNow)||intended>plan.maxAllowedNow||
@@ -1104,12 +1105,16 @@ function renderDemo(data){
   $('demo-burst-stop').disabled=!demoBurstRunning||demoBurstStopRequested;
   $('demo-burst-reconcile').disabled=demoBurstRunning||demoBurstSettling||
     !data.connected||!(burst.confirmed>burst.settled);
-  $('demo-burst-plan').textContent='Hasta diez contratos DEMO por tanda. Apuesta elegida '+
-    money(stakeCents)+' por contrato. Techo de apuestas brutas US$10; cupos disponibles: '+
-    (plan.maxAllowedNow??0)+', total de '+(Number(countField.value)||0)+' compras: '+
-    money((Number(countField.value)||0)*stakeCents)+'. '+
-    (plan.reason?'Riesgo: '+plan.reason+'. ':'')+
-    'Sin señal aceptable, el bot puede enviar menos compras de las solicitadas.';
+  $('demo-burst-plan').textContent='Tanda NUEVA e independiente: hasta 10 contratos DEMO; '+
+    'sin reiniciar los límites del piloto. Apuesta '+money(stakeCents)+
+    ' por contrato; techo US$10 por tanda. Cupos disponibles para esta tanda: '+
+    (plan.maxAllowedNow??0)+', solicitadas: '+(Number(countField.value)||0)+
+    ', importe bruto '+money((Number(countField.value)||0)*stakeCents)+'. '+
+    'Piloto global restante: '+(report.pilotRemainingPurchases??'—')+
+    ' compras / '+money(report.pilotRemainingBudgetCents??0)+'. '+
+    (riskBlock?'Bloqueo: '+plan.reason+'. ':
+      intended>Number(plan.maxAllowedNow||0)?'Cantidad supera límite vigente. ':'')+
+    'Sin señal aceptable, podrían ejecutarse menos compras de las solicitadas.';
   renderBurstContracts(burst);
   renderDemoBatches(report.history||[]);
 
@@ -1787,12 +1792,15 @@ $('demo-burst-count').oninput=()=>{
   out.textContent='Solicitas '+count+' compras DEMO diferentes, cada una de '+
     money(stake)+' · total '+money(count*stake)+
     '. Cupos disponibles en la tanda actual: '+max+
-    (count>max?'. Insuficientes: espera la siguiente tanda o reduce la cantidad.':
-    '. Requiere señal vigente y confirmación; no es una orden todavía.');
+    (count>max?'. El piloto no tiene cupos/presupuesto para esa cantidad; reduce la solicitud.':
+    '. Esta tanda tiene cupos propios; requiere señales actuales y confirmación.');
  }
  const burst=demoCurrent?.demoBurst||{},active=['PREPARING','BUYING','RECONCILING','REVIEW'].includes(burst.status);
- $('demo-burst-start').disabled=demoBurstRunning||active||!demoCurrent?.connected||
-    !demoCurrent?.demoTradingEnabled||!Number.isInteger(count)||count<1||count>10||
+ const plan=(demoCurrent?.demoBurstPlans||[]).find(p=>p.stakeCents===stake);
+ const hardBlock=Boolean(plan?.reason&&!['DEMO_BURST_REMAINING_LIMIT','DEMO_BURST_ALREADY_ACTIVE'].includes(plan.reason));
+ $('demo-burst-start').disabled=demoBurstRunning||active||demoBalancedRunning||hardBlock||
+    !demoCurrent?.connected||!demoCurrent?.demoTradingEnabled||
+    !!demoCurrent?.demoAutomationRequested||!Number.isInteger(count)||count<1||count>10||
     count>max||(demoCurrent?.tradeReport?.unknownCount||0)>0||
     (demoCurrent?.tradeReport?.openCount||0)>0;
 };
