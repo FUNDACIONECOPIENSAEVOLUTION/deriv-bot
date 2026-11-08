@@ -390,6 +390,88 @@ const reasons={WARMUP:'Espera al menos 30 precios.',HIGH_VOLATILITY:'La volatili
 const feedLabels={stopped:'Detenida',live:'Recibiendo precios',connecting:'Conectando',syncing:'Cargando historial',disconnected:'Desconectada',recovering:'Recuperando'};
 let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0,arbFetched=0;
 let liveTick=null,liveTickSocket=null,liveTickRetry=null,lastLiveChartAt=0,brokerSyncBusy=false,lastBrokerSyncAt=0;
+
+function paintLiveTick(){
+ if($('provider').value!=='deriv'||!liveTick||Date.now()-liveTick.receivedAt>5000){
+  $('browser-tick-status').textContent='Ticker público directo: '+
+    (document.hidden?'pausado (pestaña oculta)':'sin precio reciente; se muestra la última lectura del servidor');
+  return;
+ }
+ $('quote').textContent=price(liveTick.quote);
+ $('quoteTime').textContent=time(liveTick.epoch)+' · tick público directo · recibido hace '+
+   Math.max(0,Math.floor((Date.now()-liveTick.receivedAt)/1000))+' s';
+ $('browser-tick-status').textContent='Fuente R_100: WebSocket público Deriv; actualiza en cada tick, '+
+  'no es saldo ni valor de contrato DEMO abierto.';
+}
+function stopLiveTicks(){
+ if(liveTickRetry!==null){clearTimeout(liveTickRetry);liveTickRetry=null;}
+ const ws=liveTickSocket;liveTickSocket=null;
+ if(ws)try{ws.close();}catch{}
+}
+function ensureLiveTicks(){
+ if(document.hidden||liveTickSocket||liveTickRetry!==null)return;
+ let ws;
+ try{ws=new WebSocket('wss://api.derivws.com/trading/v1/options/ws/public');}
+ catch{
+  $('browser-tick-status').textContent='No se pudo abrir el ticker público; disponible actualización del servidor.';
+  liveTickRetry=setTimeout(()=>{liveTickRetry=null;ensureLiveTicks();},8000);return;
+ }
+ liveTickSocket=ws;
+ ws.addEventListener('open',()=>{
+  if(ws!==liveTickSocket||document.hidden)return;
+  try{ws.send(JSON.stringify({ticks:'R_100',subscribe:1,req_id:941}));}
+  catch{try{ws.close();}catch{}}
+ });
+ ws.addEventListener('message',event=>{
+  if(ws!==liveTickSocket||document.hidden||typeof event.data!=='string'||event.data.length>8192)return;
+  try{
+   const msg=JSON.parse(event.data);
+   if(msg.error||msg.errors){try{ws.close();}catch{}return;}
+   if(msg.msg_type!=='tick'||msg.tick?.symbol!=='R_100')return;
+   const q=Number(msg.tick.quote),t=Number(msg.tick.epoch),now=Math.floor(Date.now()/1000);
+   if(!Number.isFinite(q)||q<=0||!Number.isSafeInteger(t)||t<now-15||t>now+5)return;
+   if(liveTick&&t<liveTick.epoch)return;
+   liveTick={quote:q,epoch:t,receivedAt:Date.now()};
+   paintLiveTick();
+   if($('provider').value==='deriv'&&state&&Date.now()-lastLiveChartAt>=1000){
+    lastLiveChartAt=Date.now();drawCandles();
+   }
+  }catch{}
+ });
+ const reconnect=()=>{
+  if(ws!==liveTickSocket)return;
+  liveTickSocket=null;
+  $('browser-tick-status').textContent='Ticker directo desconectado; se reintentará y se conserva el precio del servidor.';
+  if(!document.hidden)liveTickRetry=setTimeout(()=>{liveTickRetry=null;ensureLiveTicks();},6000);
+ };
+ ws.addEventListener('close',reconnect);
+ ws.addEventListener('error',()=>{if(ws===liveTickSocket)try{ws.close();}catch{}});
+}
+async function syncBrokerBalance(force=false){
+ if(brokerSyncBusy||document.hidden||!demoCurrent?.connected)return false;
+ if(!force&&Date.now()-lastBrokerSyncAt<20000)return false;
+ brokerSyncBusy=true;lastBrokerSyncAt=Date.now();
+ const label=$('official-demo-sync');
+ try{
+  const response=await fetch('/api/deriv/refresh',{method:'POST',
+   headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+   body:'{}',signal:AbortSignal.timeout(12000)});
+  if(!response.ok)throw Error('DERIV_BALANCE_REFRESH_FAILED');
+  const result=await response.json();
+  if(!result.connected||result.account?.type!=='demo'||result.account?.currency!=='USD'
+    ||!Number.isFinite(result.account.balance))throw Error('DERIV_DEMO_BALANCE_INVALID');
+  demoFetched=Date.now();renderDemo(result);
+  label.textContent='Saldo oficial comprobado en Deriv a las '+date(result.account.checkedAt)+
+   ' · consulta periódica cada ~20 s mientras la pestaña esté visible. '+
+   'El precio del índice cambia por ticks; el saldo cambia por movimientos de cuenta.';
+  return true;
+ }catch{
+  label.textContent='No se pudo comprobar un saldo oficial nuevo. Se conserva el último valor '+
+   'con su fecha; NO tomarlo como saldo actual.';
+  return false;
+ }finally{brokerSyncBusy=false;}
+}
+
 function svg(parent,name,attrs={},text){const el=document.createElementNS(ns,name);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,String(v));if(text!==undefined)el.textContent=text;parent.appendChild(el);return el;}
 function chip(id,text,tone=''){const el=$(id);el.textContent=text;el.className='chip '+tone;}
 function showBar(bar){$('ohlc').textContent=date(bar.time)+' · Apertura '+price(bar.open)+' · Máximo '+price(bar.high)+' · Mínimo '+price(bar.low)+' · Cierre '+price(bar.close)+(bar.partial?' · Vela parcial':'');}
@@ -1187,6 +1269,10 @@ $('arb-refresh').onclick=async()=>{
   }catch{$('arb-feedback').textContent='No se pudo confirmar una muestra comparable. No hubo ninguna operación.';}
   finally{btn.disabled=false;}
 };
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});refresh();
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden){stopLiveTicks();paintLiveTick();}
+ else{ensureLiveTicks();lastBrokerSyncAt=0;void refresh();}
+});
+ensureLiveTicks();refresh();
 $('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
 </script></main></body></html>
