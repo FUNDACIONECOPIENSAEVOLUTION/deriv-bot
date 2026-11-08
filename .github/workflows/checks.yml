@@ -29,6 +29,10 @@ jobs:
         run: node scripts/bump_release.mjs --verify
       - name: Validar HTML y seguridad básica
         run: node tests/test_html.mjs
+      - name: Verificar sintaxis y motor del ensayo PAPER 10
+        run: |
+          node --check scripts/paper_ten_browser.mjs
+          node --test tests/test_paper_ten_replay.mjs
       - name: Validar integridad de cotizaciones públicas con datos sintéticos de prueba
         run: node --test tests/test_public_history.mjs tests/test_deriv_probe.mjs
       - name: Validar RSI neutral y estadísticas de análisis sin órdenes
