@@ -365,9 +365,11 @@ it('broker DEMO burst cannot be started without an up-to-date real bot CALL or P
  const state=await stub.status();
  expect(state.demoBurst.status).toBe('EMPTY');
  expect(state.demoBurstPlan.maxAllowedNow).toBe(10);
- expect(await errorFrom(stub,instance=>instance.beginDemoBurst({
-  count:10,signal:'UP'
- }))).toBe('DEMO_BURST_FRESH_SIGNAL_REQUIRED');
+ expect(await errorFrom(stub,async instance=>{
+  // Tests run with buying disabled by default. Enable only this local fixture.
+  (instance as unknown as {env:{DEMO_BUY_ENABLED:string}}).env.DEMO_BUY_ENABLED='true';
+  return instance.beginDemoBurst({count:10,signal:'UP'});
+ })).toBe('DEMO_BURST_FRESH_SIGNAL_REQUIRED');
  expect((await stub.demoBurstStatus()).confirmed).toBe(0);
  expect(calls).not.toContain('buy');
 });
@@ -391,7 +393,12 @@ it('records ten distinct confirmed broker DEMO contract IDs, one buy reservation
  network.use(http.post('https://api.derivws.com/trading/v1/options/accounts/DOT12345/otp',
   ()=>{calls.push('otp');return HttpResponse.json({
     data:{url:'wss://api.derivws.com/trading/v1/options/ws/demo?otp=fixture-only'}});}));
- const session=await stub.beginDemoBurst({count:10,signal:'UP'});
+ const session=await runInDurableObject(stub,async instance=>{
+  // The standalone Vitest Worker has DEMO_BUY_ENABLED unset intentionally.
+  // Do not change global defaults: this fixture verifies the guarded DEMO flow only.
+  (instance as unknown as {env:{DEMO_BUY_ENABLED:string}}).env.DEMO_BUY_ENABLED='true';
+  return instance.beginDemoBurst({count:10,signal:'UP'});
+ });
  expect(session.mode).toBe('DEMO_BROWSER_BURST');
  expect(session.accountType).toBe('demo');
  expect(session.stakeCents).toBe(100);
