@@ -27,7 +27,6 @@ it('historical DEMO settlement lacking time shows empty cell, does not invent an
  const csv=demoTradesCsv([{...row,bought_at:null,settled_at:null,
   entry_spot:null,exit_spot:null}]);
  expect(csv).toContain('"SIN_SPOTS_CONFIRMADOS"');
- expect(csv).toContain('"registro"'.slice(1,1)); // ensure CSV still valid string
  const fields=csv.trim().split('\r\n')[1]?.match(/"[^"]*"/g)||[];
  expect(fields[6]).toBe('""');
  expect(fields[7]).toBe('""');
