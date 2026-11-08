@@ -88,6 +88,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.8 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:13:39.578Z (UTC).
+- **Commit de origen:** `9b05273fdad6`.
+- Conservar feed de señales por índice para scanner de mercado DEMO y auditar símbolo elegido por contrato
+
 ## v9.7 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:12:59.324Z (UTC).

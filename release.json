@@ -1,12 +1,10 @@
 {
-  "version": "9.7",
-  "updatedAt": "2026-11-08T01:12:59.324Z",
-  "summary": "Validar cuatro símbolos DEMO permitidos en buy/settlement y mantener bloqueo real",
+  "version": "9.8",
+  "updatedAt": "2026-11-08T01:13:39.578Z",
+  "summary": "Conservar feed de señales por índice para scanner de mercado DEMO y auditar símbolo elegido por contrato",
   "changes": [
-    "Validar cuatro símbolos DEMO permitidos en buy/settlement y mantener bloqueo real",
-    "Permitir cuatro símbolos de índices comprobados en cotizaciones DEMO, sin habilitar cuenta real",
-    "Permitir stakes DEMO US$0.35–1 por contrato en tandas, cálculo de exposición y presupuesto US$10"
+    "Conservar feed de señales por índice para scanner de mercado DEMO y auditar símbolo elegido por contrato"
   ],
-  "sourceCommit": "0ed77460bc7583533e08816914743b4d6a810669",
+  "sourceCommit": "9b05273fdad68931249993c3bd1e888823b209c9",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
