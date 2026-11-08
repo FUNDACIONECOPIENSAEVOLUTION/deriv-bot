@@ -62,6 +62,22 @@ it('health is public but the dashboard, status, CSV and controls require credent
     expect(response.status).toBe(401);expect(response.headers.get('WWW-Authenticate')).toContain('Basic');
   }
 });
+it('public dependency health checks both PAPER and broker DEMO without exposing account data',async()=>{
+ const {response,body}=await request('/api/health/dependencies');
+ expect(response.status).toBe(200);
+ const d=JSON.parse(body);
+ expect(d).toMatchObject({version:release.version+'.0',paper:'ready',demo:'ready',
+   brokerAuthorization:'not_checked',noOrders:true});
+ for(const secret of ['credentials','accessToken','accountId','balance','account'])
+  expect(body).not.toContain('"'+secret+'"');
+});
+it('dependency health reports unavailable PAPER without hiding healthy DEMO storage',async()=>{
+ const broken={...env,PAPER:{getByName(){throw Error('TEST_PAPER_UNAVAILABLE');}}};
+ const {response,body}=await request('/api/health/dependencies',{},broken as unknown as typeof env);
+ expect(response.status).toBe(503);
+ expect(JSON.parse(body)).toMatchObject({paper:'unavailable',demo:'ready',
+   brokerAuthorization:'not_checked'});
+});
 it('private dashboard embeds this exact release and escapes changelog placeholders',async()=>{
   const {response,body}=await request('/',{headers});
   expect(response.status).toBe(200);
