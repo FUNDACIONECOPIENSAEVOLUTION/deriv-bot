@@ -33,3 +33,11 @@ test('No success rate or probability is inferred from candle history',()=>{
  assert.equal(s.successProbability,undefined);
  assert.equal(s.predictedAccuracy,undefined);
 });
+
+test('Projection has a comparable out-of-sample MAE and never drives an automatic BUY',()=>{
+ const result=computeMarketAnalysis(ticks,{connected:true,ageReceivedMs:100});
+ assert.ok(Number.isFinite(result.projectedNextTick));
+ assert.ok(Number.isFinite(result.modelMae));
+ assert.ok(Number.isFinite(result.naiveMae));
+ assert.equal(result.projectionIsResearchOnly,true);
+});
