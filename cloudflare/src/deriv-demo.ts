@@ -2,7 +2,7 @@ import { dayAt, analyzeSignal } from '../../runtime/core.mjs';
 import {planDemoBurst,DEMO_BURST_STAKE_CENTS} from './demo-burst-policy';
 import {demoTradesCsv,type DemoCsvRow} from './demo-csv';
 import {DEMO_SUPPORTED_SYMBOLS,isDemoSymbol,type DemoSymbol} from './demo-symbols';
-import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, validManualDemoApproval } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, parseDemoBuyResponse, parseDemoSettlement, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
