@@ -66,7 +66,7 @@
  <button id="demo-burst-reconcile" disabled>Verificar liquidaciones de la tanda</button>
 </div>
 <p id="demo-burst-plan" class="note" role="status">Tanda no preparada. Se comprobarán la cantidad disponible y los US$10 de límite.</p>
-<p id="demo-burst-live" class="note" role="status">Órdenes confirmadas: 0. Ninguna compra se genera al cargar el panel.</p><div class="tools"><a id="demo-burst-inline-csv" href="/api/deriv/demo/burst.csv">Descargar análisis CSV de esta tanda DEMO</a><a href="/api/deriv/demo/trades.csv">Historial completo de contratos DEMO CSV</a></div>
+<p id="demo-burst-live" class="note" role="status">Órdenes confirmadas: 0. Ninguna compra se genera al cargar el panel.</p><p id="demo-burst-diagnosis" class="note" role="status">Diagnóstico de la última tanda: pendiente de resultados DEMO.</p><div class="tools"><a id="demo-burst-inline-csv" href="/api/deriv/demo/burst.csv">Descargar análisis CSV de esta tanda DEMO</a><a href="/api/deriv/demo/trades.csv">Historial completo de contratos DEMO CSV</a></div>
 <div class="table-scroll"><table><thead><tr><th>Contrato DEMO confirmado</th><th>Dirección</th><th>Importe</th><th>Estado</th><th>Resultado neto</th></tr></thead><tbody id="demo-burst-rows"></tbody></table></div>
 <div class="divider"></div>
 <h3>Ensayo secuencial comparativo · 5 CALL / 5 PUT</h3>
@@ -659,6 +659,23 @@ async function refresh(){
 $('provider').onchange=async()=>{marketView=null;marketError='';marketFetched=0;render();await loadMarket(true);render();};$('window').onchange=drawCandles;
 for(const action of ['start','stop'])$('paper-'+action).onclick=async()=>{const out=$('paper-control-status');$('paper-start').disabled=true;$('paper-stop').disabled=true;try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();out.textContent=action==='start'?'Deriv: simulación iniciada.':'Deriv: simulación pausada.';await refresh();}catch{out.textContent='No se pudo confirmar el cambio. Comprueba el estado antes de reintentar.';}};
 function renderBurstContracts(burst){
+ const current=burst.contracts||[];
+ const settled=current.filter(x=>x.state==='SETTLED'&&Number.isInteger(x.pnlCents));
+ const wins=settled.filter(x=>x.pnlCents>0).length;
+ const losses=settled.filter(x=>x.pnlCents<0).length;
+ const sides=[...new Set(current.map(x=>x.direction).filter(Boolean))];
+ const note=$('demo-burst-diagnosis');
+ note.textContent=settled.length
+   ?'Última tanda DEMO · '+settled.length+' liquidados, '+wins+' ganados, '+losses+
+     ' perdidos · P&L neto '+money(settled.reduce((v,x)=>v+x.pnlCents,0))+
+     ' · direcciones '+(sides.join('/')||'sin registrar')+'. '+
+     (losses===settled.length&&settled.length>=3
+       ?'ALERTA: todas las compras de esta tanda terminaron en pérdida. '+
+         'Repetir una dirección no diversifica el riesgo y el vencimiento de cinco ticks puede contradecir el SMA/RSI. '
+       :'')+
+     'Se necesita revisar los indicadores y los spots de cada contrato antes de concluir qué falló; '+
+     'las operaciones DEMO no reentrenan automáticamente el modelo.'
+   :'Sin operaciones liquidadas en la última tanda. No hay rendimiento que evaluar.';
  const rows=$('demo-burst-rows');rows.replaceChildren();
  for(const c of burst.contracts||[]){
   const tr=document.createElement('tr');
