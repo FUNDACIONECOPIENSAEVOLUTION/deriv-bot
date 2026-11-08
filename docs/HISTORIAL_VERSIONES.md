@@ -94,6 +94,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.4 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:42:33.388Z (UTC).
+- **Commit de origen:** `1673dff1e406`.
+- Reducir exposición correlacionada a 2 CALL/PUT por mercado y penalizar RSI extremo sin alegar probabilidad calibrada
+- Conservar pago cotizado y tasa mínima de acierto necesaria por cada compra DEMO para analizar expectativa sin inventar probabilidad
+
 ## v10.3 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:41:54.352Z (UTC).
