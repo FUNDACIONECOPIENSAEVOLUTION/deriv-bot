@@ -24,29 +24,29 @@ $('update-now').onclick=async()=>{
  }catch(e){$('update-message').textContent='No se pudo iniciar: '+e.message;}
  finally{setTimeout(()=>{button.disabled=false;void poll();},3500);}
 };
-function marketCard(m){let c=$('market-'+m.symbol);if(!c){c=document.createElement('button');c.className='market';c.id='market-'+m.symbol;c.addEventListener('click',()=>{chosen=m.symbol;draw();});$('markets').appendChild(c);}c.classList.toggle('active',chosen===m.symbol);const direction=m.fresh?m.direction:'ESPERAR';c.innerHTML='<span>'+escapeText(m.symbol)+'</span><b>'+fmt(m.quote)+'</b><div class="'+(direction==='CALL'?'up':direction==='PUT'?'down':'hold')+'">'+direction+'</div><small>RSI '+fmt(m.rsi14)+' · Edad '+(m.ageReceivedMs??'—')+' ms · '+(m.fresh?'FRESCO':'OBSOLETO')+'</small>';}
-function draw(){const m=markets.get(chosen),cv=$('chart'),ctx=cv.getContext('2d');const w=cv.width,h=cv.height;ctx.clearRect(0,0,w,h);const points=m?.lastPrices||[];if(points.length<2)return;const lo=Math.min(...points),hi=Math.max(...points),range=hi-lo||1;ctx.strokeStyle='#3ed6bd';ctx.lineWidth=2;ctx.beginPath();points.forEach((v,i)=>{const x=10+i*(w-20)/(points.length-1),y=h-10-(v-lo)/range*(h-20);if(!i)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();ctx.fillStyle='#a8c7d4';ctx.font='12px Arial';ctx.fillText(chosen+' · '+points.length+' ticks · '+fmt(points.at(-1)),12,17);drawCandles(points);}
-function drawCandles(points){
+function marketCard(m){let c=$('market-'+m.symbol);if(!c){c=document.createElement('button');c.className='market';c.id='market-'+m.symbol;c.addEventListener('click',()=>{chosen=m.symbol;draw();});$('markets').appendChild(c);}c.classList.toggle('active',chosen===m.symbol);const direction=m.fresh?m.direction:'ESPERAR';c.innerHTML='<span>'+escapeText(m.symbol)+'</span><b>'+fmt(m.quote)+'</b><div class="'+(direction==='CALL'?'up':direction==='PUT'?'down':'hold')+'">'+direction+'</div><small>RSI '+fmt(m.rsi14)+' · '+(m.candleCount||0)+'/60 velas · '+(m.available?'Activo':'No disponible')+' · '+(m.fresh?'FRESCO':'OBSOLETO')+'</small>';}
+function draw(){const m=markets.get(chosen),cv=$('chart'),ctx=cv.getContext('2d');const w=cv.width,h=cv.height;ctx.clearRect(0,0,w,h);const points=m?.lastPrices||[];if(points.length<2)return;const lo=Math.min(...points),hi=Math.max(...points),range=hi-lo||1;ctx.strokeStyle='#3ed6bd';ctx.lineWidth=2;ctx.beginPath();points.forEach((v,i)=>{const x=10+i*(w-20)/(points.length-1),y=h-10-(v-lo)/range*(h-20);if(!i)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();ctx.fillStyle='#a8c7d4';ctx.font='12px Arial';ctx.fillText(chosen+' · '+points.length+' ticks · '+fmt(points.at(-1)),12,17);drawCandles(m?.candles||[]);
+ $('market-analysis').textContent=(m?.symbol||chosen)+': '+(m?.trend||'INDEFINIDA')+
+  ' · '+(m?.candleCount||0)+'/60 velas · EMA20 '+fmt(m?.ema20)+
+  ' · EMA50 '+fmt(m?.ema50)+' · RSI '+fmt(m?.rsi14)+
+  ' · ATR '+fmt(m?.atr14)+' · pendiente '+fmt(m?.slope10)+
+  ' · señal '+(m?.direction||'ESPERAR')+' ('+(m?.reason||'SIN_DATOS')+
+  '). Intensidad descriptiva '+(m?.signalStrength??'—')+'/100; no es probabilidad de ganar.';
+}
+function drawCandles(candles){
  const canvas=$('candles');if(!canvas)return;
  const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
  ctx.clearRect(0,0,w,h);
- const candles=[];
- for(let i=0;i+1<points.length;i+=10){
-  const set=points.slice(i,i+10);
-  if(set.length<2)continue;
-  candles.push({o:set[0],h:Math.max(...set),l:Math.min(...set),c:set.at(-1)});
- }
- if(candles.length===0)return;
- const lo=Math.min(...candles.map(c=>c.l)),hi=Math.max(...candles.map(c=>c.h));
+ if(candles.length===0){ctx.fillStyle='#a8c7d4';ctx.fillText('Cargando 60 velas históricas de Deriv...',15,25);return;}
+ const lo=Math.min(...candles.map(c=>c.low)),hi=Math.max(...candles.map(c=>c.high));
  const spread=hi-lo||1,priceY=v=>h-15-(v-lo)/spread*(h-45);
  const space=(w-50)/candles.length;
- ctx.font='12px Arial';ctx.fillStyle='#a8c7d4';ctx.fillText(chosen+' · '+candles.length+' velas de 10 ticks',13,18);
+ ctx.font='12px Arial';ctx.fillStyle='#a8c7d4';ctx.fillText(chosen+' · '+candles.length+' velas completas de 10 ticks',13,18);
  candles.forEach((c,i)=>{
-  const x=26+i*space+space/2;
-  const color=c.c>=c.o?'#39d8ae':'#ff8d95';
+  const x=26+i*space+space/2,color=c.close>=c.open?'#39d8ae':'#ff8d95';
   ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=1.5;
-  ctx.beginPath();ctx.moveTo(x,priceY(c.h));ctx.lineTo(x,priceY(c.l));ctx.stroke();
-  const top=Math.min(priceY(c.o),priceY(c.c)),height=Math.max(2,Math.abs(priceY(c.o)-priceY(c.c)));
+  ctx.beginPath();ctx.moveTo(x,priceY(c.high));ctx.lineTo(x,priceY(c.low));ctx.stroke();
+  const top=Math.min(priceY(c.open),priceY(c.close)),height=Math.max(2,Math.abs(priceY(c.open)-priceY(c.close)));
   ctx.fillRect(x-Math.min(10,space*.29),top,Math.min(20,space*.58),height);
  });
 }
@@ -78,14 +78,16 @@ async function updateBurstPanel(){
   const net=closed.reduce((sum,x)=>sum+x.pnlCents,0);
   const latencies=selection.map(x=>x.buyLatencyMs).filter(Number.isFinite);
   $('burst-net').textContent=usd(net/100);
-  $('burst-settled').textContent=closed.length+' / '+(last?.requested||selection.length);
+  const executed=selection.filter(x=>['OPEN','SETTLED'].includes(x.state)).length;
+  $('burst-settled').textContent=executed+' ejecutadas / '+closed.length+' liquidadas (de '+(last?.requested||selection.length)+')';
   $('burst-winloss').textContent=wins+' / '+losses+(closed.length?' ('+(100*wins/closed.length).toFixed(1)+'%)':'');
   $('burst-latency').textContent=latencies.length?(latencies.reduce((a,v)=>a+v,0)/latencies.length/1000).toFixed(3)+' s':'—';
   $('burst-start').disabled=!!b.running||d.pendingOrOpen>0;
   $('burst-stop').disabled=!b.running;
   if(last){
    $('burst-message').textContent='Tanda '+last.id.slice(0,8)+' · '+last.state+
-    ' · '+last.completed+'/'+last.requested+' liquidaciones'+
+    ' · '+executed+'/'+last.requested+' ejecutadas · '+closed.length+' liquidadas'+
+     (b.inFlight?' · '+b.inFlight+' simultáneas en curso':'')+
     (last.stopReason?' · '+last.stopReason:'')+
     (b.running?' · Comprando solo si hay señal nueva y saldo DEMO verificado.':'');
   }
@@ -107,16 +109,18 @@ async function updateBurstPanel(){
  }catch(e){$('burst-message').textContent='No se pudieron consultar las tandas: '+e.message;return null;}
 }
 $('burst-start').onclick=async()=>{
- const count=Number($('burst-count').value),stakeCents=Number($('burst-stake').value),symbol=$('burst-symbol').value;
+ const count=Number($('burst-count').value),stakeCents=Number($('burst-stake').value),
+   symbol=$('burst-symbol').value;
+ const concurrency=Math.min(count,Number($('burst-concurrency').value));
  const cost=count*stakeCents/100;
  if(!Number.isSafeInteger(count)||count<1||count>10||cost>10){$('burst-message').textContent='La tanda permite de 1 a 10 compras y hasta US$10 en apuestas.';return;}
- const confirmation=$('burst-confirm').value.trim();
- if(confirmation!=='CONFIRMAR TANDA DEMO'){$('burst-message').textContent='Escribe CONFIRMAR TANDA DEMO para aprobar hasta '+count+' compras, máximo '+usd(cost)+' virtuales.';return;}
+ // El clic en el botón local es la autorización explícita para esta tanda DEMO.
+ const confirmation='CONFIRMAR TANDA DEMO';
  $('burst-start').disabled=true;$('burst-message').textContent='Autorizando tanda DEMO. No vuelvas a pulsar.';
- try{const d=await post('/api/demo/burst/start',{count,stakeCents,symbol,confirmation});
+ try{const d=await post('/api/demo/burst/start',{count,stakeCents,symbol,concurrency,confirmation});
   $('burst-message').textContent='Tanda '+d.id.slice(0,8)+' autorizada. Se enviarán como máximo '+count+' contratos virtuales; REAL bloqueada.';
  }catch(e){$('burst-message').textContent='Tanda no iniciada: '+e.message;}
- finally{$('burst-confirm').value='';await updateBurstPanel();}
+ finally{await updateBurstPanel();}
 };
 $('burst-stop').onclick=async()=>{
  try{const r=await post('/api/demo/burst/stop',{});$('burst-message').textContent=r.stopped?'Se detendrán nuevas compras tras concluir la actual.':'No hay tanda activa.';}
@@ -124,6 +128,21 @@ $('burst-stop').onclick=async()=>{
  await updateBurstPanel();
 };
 $('burst-check').onclick=updateBurstPanel;
+
+async function refreshExternalWatchlist(){
+ try{
+  const d=await get('/api/watchlist');
+  const items=d.assets||[];
+  $('watchlist').replaceChildren();
+  for(const a of items){
+   const el=document.createElement('div');el.className='item';
+   el.textContent=a.name+' · '+(a.available&&a.quote!==null?fmt(a.quote):'NO DISPONIBLE')+
+    ' · '+(a.symbol||'sin símbolo')+' · '+(a.ageSeconds===null?'sin cotización':a.ageSeconds+' s')+
+    ' · cotización informativa';
+   $('watchlist').appendChild(el);
+  }
+ }catch(e){$('watchlist').textContent='Observatorio no disponible: '+e.message;}
+}
 
 // No order is placed by MCP; an explicit owner confirmation in this local panel is required.
 let demoIntentId=null,demoIntentState=null;
@@ -152,16 +171,14 @@ $('demo-intent').onclick=async()=>{
   const params={symbol:$('quote-symbol').value,direction:$('quote-dir').value,
    stakeCents:Math.round(Number($('quote-stake').value)*100)};
   const q=await post('/api/demo/intent',params);
-  $('demo-message').textContent='Solicitud '+q.id.slice(0,8)+' creada; no se envió BUY. Escribe la confirmación exacta en esta ventana.';
+  $('demo-message').textContent='Solicitud '+q.id.slice(0,8)+' creada; no se envió BUY. Pulsa Confirmar compra DEMO para autorizarla.';
  }catch(e){$('demo-message').textContent='Solicitud bloqueada: '+e.message;}
  await showDemoOrders();
 };
 $('demo-confirm').onclick=async()=>{
  if(!demoIntentId)return;
- const confirmation=$('demo-confirm-text').value.trim();
- if(confirmation!=='CONFIRMAR COMPRA DEMO'){
-  $('demo-message').textContent='Escribe exactamente CONFIRMAR COMPRA DEMO para autorizar una orden.';return;
- }
+ // El clic humano es la confirmación de la única orden DEMO seleccionada.
+  const confirmation='CONFIRMAR COMPRA DEMO';
  const id=demoIntentId;
  $('demo-confirm').disabled=true;$('demo-cancel').disabled=true;
  $('demo-message').textContent='Comprobando saldo y cotización oficiales. No repitas el clic.';
@@ -173,7 +190,7 @@ $('demo-confirm').onclick=async()=>{
    '. Si está UNKNOWN o OPEN, no abras una nueva compra antes de conciliar.';
  }catch(e){
   $('demo-message').textContent='No reintentes sin revisar el estado en Deriv: '+e.message;
- }finally{$('demo-confirm-text').value='';await showDemoOrders();}
+ }finally{await showDemoOrders();}
 };
 $('demo-cancel').onclick=async()=>{
  if(!demoIntentId)return;
@@ -236,4 +253,5 @@ $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
  setInterval(poll,15000);setInterval(showDemoOrders,15000);setInterval(updateBurstPanel,4000);
+ await refreshExternalWatchlist();setInterval(refreshExternalWatchlist,15000);
 })();
