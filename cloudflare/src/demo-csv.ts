@@ -17,7 +17,8 @@ const number=(x:unknown)=>typeof x==='number'&&Number.isFinite(x)?x:null;
 const cell=(x:unknown)=>{
  const raw=x===null||x===undefined?'':String(x);
  // Neutralize CSV spreadsheet formula injection, also after leading spaces.
- const sanitized=/^\s*[=+@-]/.test(raw)&&number(x)===null?"'"+raw:raw;
+ const numeric=/^-?(?:0|[1-9][0-9]*)(?:[.][0-9]+)?$/.test(raw);
+ const sanitized=/^\s*[=+@-]/.test(raw)&&number(x)===null&&!numeric?"'"+raw:raw;
  return '"'+sanitized.replaceAll('"','""')+'"';
 };
 const asUsd=(x:number|null)=>x===null?'':(x/100).toFixed(2);
