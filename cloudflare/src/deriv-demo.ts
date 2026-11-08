@@ -777,9 +777,12 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(!b||b.state!=='BUYING'||input?.nonce!==b.nonce||
       b.pendingId!==null||b.ids.length>=b.count||epoch()-b.startedAt>45)
       throw Error('DEMO_BURST_RESERVATION_NOT_ALLOWED');
-    if(b.ids.length===0&&(!this.getBrowserSignal().valid||
-       this.getBrowserSignal().direction!==b.signal))
-      throw Error('DEMO_BURST_SIGNAL_STALE');
+    // Recalculate against the last authenticated browser-reported public ticks
+    // for EVERY proposal, not only the first one in this burst.
+    const latestSignal=this.getBrowserSignal();
+    if(!latestSignal.valid||latestSignal.direction!==b.signal||
+       latestSignal.quoteAgeSeconds===null||latestSignal.quoteAgeSeconds>5)
+      throw Error('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
     const credentials=await this.verifiedDemoCredentials();
     if(credentials.accountId!==b.accountId)throw Error('DEMO_ONLY');
     const session=this.read<{iv:string;data:string}>('demo-burst-ws-session');
