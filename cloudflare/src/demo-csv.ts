@@ -54,6 +54,9 @@ export function demoTradesCsv(rows:DemoCsvRow[]):string{
    if(x&&typeof x==='object'&&!Array.isArray(x))d=x;
   }catch{d={};}
   const nums=(key:string)=>number(d[key]);
+  const signalPrice=nums('entryQuote');
+  const entryDeviationPct=row.entry_spot!==null&&signalPrice!==null&&signalPrice>0
+    ?(row.entry_spot/signalPrice-1)*100:null;
   const verification=row.code==='CLIENT_OBSERVED'?
    'OBSERVADO_NAVEGADOR_NO_VERIFICADO_INDEPENDIENTEMENTE':
     row.state==='UNKNOWN'?'ACEPTACION_INCIERTA_NO_REINTENTAR':
@@ -73,8 +76,7 @@ export function demoTradesCsv(rows:DemoCsvRow[]):string{
    nums('quoteAgeAtReserveSeconds'),nums('signalAgeAtProposalSec'),
    nums('proposalRttMs'),d.browserNavigationType,d.pageLoadedEpoch,d.pageSessionId,
    d.sourceIndicators,
-   row.entry_spot!==null&&nums('entryQuote')!==null&&nums('entryQuote')!>0
-     ?(row.entry_spot/nums('entryQuote')!-1)*100:null
+   entryDeviationPct
   ];
   return v.map(cell).join(',');
  });
