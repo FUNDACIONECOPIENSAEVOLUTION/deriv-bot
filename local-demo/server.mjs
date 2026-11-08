@@ -201,7 +201,7 @@ function publicSocket(){
    publicLastError='DERIV_'+safe;publicStats.diagnosticCode=publicLastError;return;
   }
   if(o.msg_type==='active_symbols'&&Array.isArray(o.active_symbols)){
-   receivedSymbols=true;clearTimeout(symbolsTimer);
+   receivedSymbols=true;clearTimeout(symbolsTimer);publicStats.lastTickAt=null;
    configureSymbols(ws,o.active_symbols);publicLastError='';return;
   }
   if(o.msg_type==='history'){
