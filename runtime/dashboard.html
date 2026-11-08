@@ -552,6 +552,7 @@ function drawCandles(){
     if(historyMode==='DEMO'){
       const historical=demoCurrent?.tradeReport?.history||[];
       for(const trade of historical){
+        if((trade.symbol||'R_100')!=='R_100')continue;
         const dir=trade.contractType==='PUT'?'↓':'↑';
         // We never substitute a reservation time for the confirmed buy time.
         const entries=[
@@ -576,7 +577,7 @@ function drawCandles(){
         }
       }
       $('demo-chart-marker-stats').textContent=
-       'Gráfico R_100 · '+marks+' contratos DEMO con al menos una marca respaldada por precio y hora; '+
+       'Gráfico R_100 · '+marks+' contratos DEMO de R_100 con al menos una marca respaldada por precio y hora; '+
        missing+' registros sin marcas exactas. Las compras anteriores al periodo visible '+
        'no se representan fuera de la ventana. El gráfico no incluye contratos de otros mercados.';
     }else{
@@ -683,7 +684,7 @@ function renderDemoTopTrades(){
   const spot=(typeof t.entrySpot==='number'?price(t.entrySpot):'—')+
     ' → '+(typeof t.exitSpot==='number'?price(t.exitSpot):'—');
   const pnl=t.state==='SETTLED'&&Number.isInteger(t.pnlCents)?money(t.pnlCents):'—';
-  const analysis='Contrato '+(t.contractId??'sin acuse')+
+  const analysis='Mercado '+(t.symbol||'R_100')+' · Contrato '+(t.contractId??'sin acuse')+
    (typeof d.runId==='string'?' · Tanda '+d.runId.slice(0,8):'')+
    ' · '+(d.reason||'Señal sin detalle')+
    (typeof d.fast==='number'?' · SMA8 '+price(d.fast):'')+
@@ -875,10 +876,12 @@ function renderDemo(data){
   $('demo-main-counts').textContent=connected
     ?'Contratos DEMO liquidados · '+(report.openCount||0)+' abiertos · '+
       (report.unknownCount||0)+' órdenes sin confirmación':'Sin sesión DEMO';
-  $('demo-main-purchases').textContent=connected?String(report.pilotPurchases||0):'—';
+  $('demo-main-purchases').textContent=connected?String(report.confirmedPurchases??0):'—';
   $('demo-main-exposure').textContent=connected
-    ?'Compras confirmadas del piloto · exposición abierta '+money(report.activeExposureCents||0)+
-      ' · importe bruto del piloto '+money(report.pilotCommittedCents||0)
+    ?'Contratos confirmados: '+(report.confirmedPurchases??0)+
+      ' · reservas inciertas: '+(report.unknownCount||0)+
+      ' · importe bruto confirmado '+money(report.confirmedCommittedCents??0)+
+      ' · exposición abierta '+money(report.activeExposureCents||0)
     :'Saldo y contratos disponibles solo con cuenta DEMO conectada';
 
   const burst=data.demoBurst||{},stakeCents=Number($('demo-burst-stake').value),
