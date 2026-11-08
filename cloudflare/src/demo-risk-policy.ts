@@ -3,7 +3,10 @@
  * The 100 USD guard is a hard loss boundary from verified baseline;
  * never use this module to authorize real-money transactions.
  */
-export const DEMO_STAKES_CENTS=Object.freeze([35,50,75,100] as const);
+export const DEMO_STAKES_CENTS=Object.freeze([35,50,75,90,100] as const);
+// Automatic pilot keeps its proven four-amount rotation.
+// US$0.90 is owner-selectable for a single DEMO buy only.
+export const DEMO_AUTOMATIC_STAKES_CENTS=Object.freeze([35,50,75,100] as const);
 export const DEMO_MAX_STAKE_CENTS=100;
 export const DEMO_MAX_OPEN=10;
 export const DEMO_MAX_LOSS_CENTS=10_000; // US$100 off verified demo starting balance
@@ -51,7 +54,7 @@ export function requireFirstDemoSettlement(settled:number){
 }
 export function pickDemoStakeCents(index:number){
  if(!Number.isSafeInteger(index)||index<0)throw Error('DEMO_STAKE_INDEX_INVALID');
- return DEMO_STAKES_CENTS[index%DEMO_STAKES_CENTS.length];
+ return DEMO_AUTOMATIC_STAKES_CENTS[index%DEMO_AUTOMATIC_STAKES_CENTS.length];
 }
 export function evaluateDemoRisk(s:DemoRiskInput){
  const maxConcurrent=s.maxConcurrent??DEMO_MAX_OPEN;
