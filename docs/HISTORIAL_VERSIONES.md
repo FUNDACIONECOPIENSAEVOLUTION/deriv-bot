@@ -90,6 +90,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.0 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:20:33.422Z (UTC).
+- **Commit de origen:** `d53bf32cb768`.
+- Añadir selector de índice para velas reales y marcas DEMO por mercado, sin mezclar símbolos
+
 ## v9.9 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:19:37.584Z (UTC).
