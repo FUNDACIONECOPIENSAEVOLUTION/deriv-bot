@@ -44,6 +44,17 @@ package_path = app / "package.json"
 package = json.loads(package_path.read_text(encoding="utf-8"))
 package["version"] = new_version + ".0"
 package_path.write_text(json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+# Actualiza también la versión visible en el HTML que usan las pruebas iniciales.
+html_path = app / "public" / "index.html"
+html_source = html_path.read_text(encoding="utf-8")
+html_source, match_count = re.subn(
+    r'<h1 id="version-title">Deriv DEMO · aplicación local(?: v[0-9]+\.[0-9])?</h1>',
+    f'<h1 id="version-title">Deriv DEMO · aplicación local v{new_version}</h1>',
+    html_source,
+    count=1,
+)
+assert match_count == 1, "No se encuentra titulo de version en panel"
+html_path.write_text(html_source, encoding="utf-8")
 changes = app / "CHANGELOG-LOCAL.md"
 entry = (f"## v{new_version} · {dt.date.today().isoformat()}\n\n"
          "- Bot DEMO permite tandas autorizadas de 1 a 10 contratos, uno a uno; REAL bloqueada.\n"
