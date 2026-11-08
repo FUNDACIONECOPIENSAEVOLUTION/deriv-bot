@@ -7,6 +7,7 @@ import release from '../../release.json';
 import { PublicSocket } from './public-socket';
 import { DEMO_STAKES_CENTS } from './demo-risk-policy';
 import { checkPublicContractCompatibility } from './deriv-contracts';
+import { handleMcpRequest, type McpSignal } from './mcp-gateway';
 import { readPublicArbitrageSnapshot } from '../../runtime/cross-exchange.mjs';
 export { DerivDemoConnection } from './deriv-demo';
 
@@ -223,10 +224,57 @@ export default {
       const result=await readDerivSocketTransport();
       return json({readOnly:true,version:release.version+'.0',...result},result.status==='CONNECTED'?200:503);
     }
+    if(url.pathname==='/api/health/mcp'&&request.method==='GET'){
+      const configured=typeof (env as Env & {MCP_BRIDGE_TOKEN?:string}).MCP_BRIDGE_TOKEN==='string'
+        &&((env as Env & {MCP_BRIDGE_TOKEN?:string}).MCP_BRIDGE_TOKEN||'').length>=32;
+      return json({mode:'MCP_STAGING_DEMO_ONLY',configured,connectedToThisChat:false,
+        toolCount:5,orderExecution:'OWNER_BROWSER_APPROVAL_ONLY',
+        requires:'MCP OAuth 2.1 provider + compatible ChatGPT workspace',
+        noDerivRealAccount:true});
+    }
+    if(url.pathname==='/mcp'){
+      const token=(env as Env & {MCP_BRIDGE_TOKEN?:string}).MCP_BRIDGE_TOKEN;
+      if(!token||token.length<32)return json({code:'MCP_NOT_CONFIGURED'},503);
+      if(!request.headers.get('Authorization')?.startsWith('Bearer ')
+        ||!await authorized(request,token))
+        return json({code:'MCP_AUTH_REQUIRED'},401,{'WWW-Authenticate':'Bearer realm="Ecopiensa demo MCP"'});
+      if(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)
+        return json({code:'MCP_ORIGIN_FORBIDDEN'},403);
+      const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
+      const signal=async():Promise<McpSignal>=>{
+        const status=env.PAPER.getByName(EXPERIMENT).status();
+        const d=status.decision;
+        const quoteAge=status.quoteAgeSeconds;
+        const valid=status.running===true&&status.config.symbol==='R_100'
+          &&status.market.state==='live'&&typeof quoteAge==='number'
+          &&quoteAge>=0&&quoteAge<=10&&[1,-1].includes(d.direction);
+        const direction=valid?(d.direction===1?'UP':'DOWN'):'HOLD';
+        return {direction,reason:valid?d.reason:'NO_VERIFIED_LIVE_BOT_SIGNAL',
+          valid,source:'PUBLIC_R_100_BOT_ENGINE',quoteAgeSeconds:quoteAge,
+          indicator:{fast:d.fast,slow:d.slow,rsi:d.rsi,volatility:d.volatility}};
+      };
+      return handleMcpRequest(request,{
+        getStatus:async()=>{
+          const r=await demo.status();
+          return {mode:r.mode,connected:r.connected,account:r.account,
+            risk:r.tradeReport.risk,settled:r.tradeReport.settled,
+            wins:r.tradeReport.wins,losses:r.tradeReport.losses,
+            pnlCents:r.tradeReport.pnlCents,
+            browserObservedSettled:r.tradeReport.browserObservedSettled,
+            brokerVerifiedSettled:r.tradeReport.brokerVerifiedSettled,
+            nextStakeCents:r.nextManualStakeCents,accountType:'demo',
+            directBrokerOrdersFromMcp:0};
+        },
+        getSignal:signal,
+        getIntent:()=>demo.getMcpDemoIntent(),
+        requestIntent:args=>demo.queueMcpDemoIntent(args),
+        cancelIntent:id=>demo.cancelMcpDemoIntent(id)
+      });
+    }
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
-    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check'].includes(url.pathname);
+    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback','/api/deriv/demo/mcp-intent'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -236,6 +284,28 @@ export default {
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
         if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
+        if(url.pathname==='/api/deriv/demo/mcp-intent'&&request.method==='GET')
+          return json(await demo.getMcpDemoIntent());
+        if(url.pathname.startsWith('/api/deriv/demo/mcp-intent/')&&request.method==='POST'){
+          const raw=await request.text();
+          if(raw.length>300)return json({code:'MCP_COMMAND_TOO_LARGE'},413);
+          let input:unknown;
+          try{input=JSON.parse(raw);}catch{return json({code:'MCP_COMMAND_INVALID'},400);}
+          if(!input||typeof input!=='object'||Array.isArray(input))
+            return json({code:'MCP_COMMAND_INVALID'},400);
+          const arg=input as {id?:unknown;contractId?:unknown};
+          if(typeof arg.id!=='string'||!/^[0-9a-f-]{36}$/i.test(arg.id))
+            return json({code:'MCP_COMMAND_ID_INVALID'},400);
+          const action=url.pathname.split('/').at(-1);
+          if(action==='claim')return json(await demo.claimMcpDemoIntent(arg.id));
+          if(action==='cancel')return json(await demo.cancelMcpDemoIntent(arg.id));
+          if(action==='complete'){
+            if(typeof arg.contractId!=='number'||!Number.isSafeInteger(arg.contractId)
+              ||arg.contractId<=0)return json({code:'MCP_CONTRACT_ID_INVALID'},400);
+            return json(await demo.completeMcpDemoIntent(arg.id,arg.contractId));
+          }
+        }
+
         if(url.pathname==='/api/deriv/market-check'){
           // Public, READ ONLY contracts_for; never sends a buy or changes the broker account.
           return json(await checkPublicContractCompatibility());
