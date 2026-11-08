@@ -1,0 +1,10 @@
+{
+  "version": "11.7",
+  "channel": "pc-local",
+  "runtime": "Windows desktop only",
+  "distribution": "manual-patch",
+  "expectedFile": "ecopiensa-deriv-PC-actualizacion-11.7.zip",
+  "notes": "La versión 11.7 del PC coincide con pc-local. Próximas entregas requieren publicar un paquete íntegro firmado antes de habilitar la actualización automática.",
+  "trading": "demo-read-only",
+  "updatedAt": "2026-11-08"
+}
