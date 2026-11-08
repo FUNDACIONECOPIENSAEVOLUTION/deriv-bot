@@ -95,6 +95,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.5 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:43:09.644Z (UTC).
+- **Commit de origen:** `90837b808da9`.
+- Mostrar pérdidas y ganancias por índice y dirección de la tanda, sin confundir muestra con tasa fiable
+
 ## v10.4 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:42:33.388Z (UTC).

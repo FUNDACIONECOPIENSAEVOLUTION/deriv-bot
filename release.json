@@ -1,11 +1,10 @@
 {
-  "version": "10.4",
-  "updatedAt": "2026-11-08T01:42:33.388Z",
-  "summary": "Reducir exposición correlacionada a 2 CALL/PUT por mercado y penalizar RSI extremo sin alegar probabilidad calibrada",
+  "version": "10.5",
+  "updatedAt": "2026-11-08T01:43:09.644Z",
+  "summary": "Mostrar pérdidas y ganancias por índice y dirección de la tanda, sin confundir muestra con tasa fiable",
   "changes": [
-    "Reducir exposición correlacionada a 2 CALL/PUT por mercado y penalizar RSI extremo sin alegar probabilidad calibrada",
-    "Conservar pago cotizado y tasa mínima de acierto necesaria por cada compra DEMO para analizar expectativa sin inventar probabilidad"
+    "Mostrar pérdidas y ganancias por índice y dirección de la tanda, sin confundir muestra con tasa fiable"
   ],
-  "sourceCommit": "1673dff1e406c19d6800af19aa514b06b2a923b5",
+  "sourceCommit": "90837b808da99f26c0f0e35137292be304375242",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
