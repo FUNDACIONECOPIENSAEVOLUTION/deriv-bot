@@ -138,7 +138,7 @@ it('allows quote requests only to the owner and never quotes without a connected
 });
 
 it('accepts current 35/50/75/100-cent DEMO stakes at the HTTP boundary and rejects obsolete stakes',async()=>{
-  for(const stakeCents of [35,50,75,100]){
+  for(const stakeCents of [35,50,75,90,100]){
     const result=await request('/api/deriv/quote',{method:'POST',headers,
       body:JSON.stringify({direction:'UP',stakeCents})});
     // No DEMO OAuth in test: reaches the broker-only guard rather than rejecting the stake.
@@ -256,7 +256,7 @@ it('audits ten virtual purchases per tranche before the next of five tranches',a
   expect(reviewed.unknownCount).toBe(0);
 });
 it('supports all experimental quote values without purchasing',()=>{
- for(const stakeCents of [35,50,75,100]){
+ for(const stakeCents of [35,50,75,90,100]){
    const q=demoQuoteRequest('DOWN',stakeCents);
    expect(q).toMatchObject({proposal:1,contract_type:'PUT',amount:stakeCents/100});
    expect(q).not.toHaveProperty('buy');
@@ -306,5 +306,35 @@ it('new MCP endpoint stays closed until configured with its own secret and prote
   const signal=await request('/api/deriv/demo/signal',{method:'POST',
     headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}'});
   expect(signal.r.status).toBe(401);
+  expect(calls).not.toContain('buy');
+});
+
+it('one manual US$0.90 override is accepted after fresh DEMO balance, without changing auto-rotation',async()=>{
+  const stub=env.DERIV_DEMO.getByName('demo-manual-custom-90');
+  const start=await stub.begin('app-123','https://paper.example');
+  await stub.complete(start.state,'fixture-code');
+  await stub.refresh();
+  const original=await stub.status();
+  expect(original.nextManualStakeCents).toBe(35);
+  const selected=await stub.setNextManualStakeCents(90);
+  expect(selected).toMatchObject({mode:'DEMO_MANUAL_STAKE_SET',
+    stakeCents:90,scope:'ONE_MANUAL_DEMO_BUY',noBrokerOrders:true,
+    automaticRotationUnchanged:true});
+  const current=await stub.status();
+  expect(current.nextManualStakeCents).toBe(90);
+  expect(current.allowedManualStakesCents).toContain(90);
+  expect(current.maxBrowserConcurrent).toBe(1);
+  expect(calls).not.toContain('buy');
+});
+it('manual stake controls deny unsupported amounts, unauthorized access and real-account operations',async()=>{
+  const unauth=await request('/api/deriv/demo/manual-stake',{method:'POST',
+    headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+    body:JSON.stringify({stakeCents:90})});
+  expect(unauth.r.status).toBe(401);
+  for(const stakeCents of [10,25,30,101,1000]){
+    const forbidden=await request('/api/deriv/demo/manual-stake',{method:'POST',headers,
+      body:JSON.stringify({stakeCents})});
+    expect(forbidden.r.status).toBe(400);
+  }
   expect(calls).not.toContain('buy');
 });
