@@ -389,13 +389,28 @@ async function runBalancedDemoTrial(){
 const reasons={WARMUP:'Espera al menos 30 precios.',HIGH_VOLATILITY:'La volatilidad supera el filtro de 0,45 %.',NO_TREND:'Las medias todavía no muestran una dirección suficiente.',RSI_CONFLICT:'La dirección de las medias y el RSI no coinciden.',TREND_AND_MOMENTUM:'Las medias y el RSI coinciden dentro del filtro de volatilidad.'};
 const feedLabels={stopped:'Detenida',live:'Recibiendo precios',connecting:'Conectando',syncing:'Cargando historial',disconnected:'Desconectada',recovering:'Recuperando'};
 let state=null,marketView=null,marketFetched=0,marketError='',timer=null,busy=false,activeBars=[],crosshair=null,demoFetched=0,arbFetched=0;
+let liveTick=null,liveTickSocket=null,liveTickRetry=null,lastLiveChartAt=0,brokerSyncBusy=false,lastBrokerSyncAt=0;
 function svg(parent,name,attrs={},text){const el=document.createElementNS(ns,name);for(const [k,v]of Object.entries(attrs))el.setAttribute(k,String(v));if(text!==undefined)el.textContent=text;parent.appendChild(el);return el;}
 function chip(id,text,tone=''){const el=$(id);el.textContent=text;el.className='chip '+tone;}
 function showBar(bar){$('ohlc').textContent=date(bar.time)+' · Apertura '+price(bar.open)+' · Máximo '+price(bar.high)+' · Mínimo '+price(bar.low)+' · Cierre '+price(bar.close)+(bar.partial?' · Vela parcial':'');}
 function drawCandles(){
   const root=$('candles');root.replaceChildren();crosshair=null;activeBars=[];
   const provider=$('provider').value,view=provider==='deriv'?state?.chart:marketView;
-  const bars=(view?.candles||[]).slice(-Number($('window').value));
+  const bars=(view?.candles||[]).slice(-Number($('window').value)).map(b=>({...b}));
+  // Client live price overlays ONLY the visible candle; it never modifies the
+  // PaperExperiment ledger or pretends to revalue an open broker contract.
+  if(provider==='deriv'&&liveTick&&Date.now()-liveTick.receivedAt<5000&&bars.length){
+    const minute=Math.floor(liveTick.epoch/60)*60,tail=bars.at(-1);
+    if(minute===tail.time){
+      tail.high=Math.max(tail.high,liveTick.quote);
+      tail.low=Math.min(tail.low,liveTick.quote);
+      tail.close=liveTick.quote;tail.partial=true;
+    }else if(minute===tail.time+60){
+      bars.push({time:minute,open:tail.close,high:Math.max(tail.close,liveTick.quote),
+        low:Math.min(tail.close,liveTick.quote),close:liveTick.quote,partial:true});
+      if(bars.length>Number($('window').value))bars.shift();
+    }
+  }
   if(!bars.length){svg(root,'text',{x:460,y:165,'text-anchor':'middle',fill:'#9baeba','font-size':15},marketError||'Las velas aparecerán al recibir datos.');$('ohlc').textContent='Sin velas verificadas para esta vista.';return;}
   const left=12,right=830,top=18,bottom=305,start=bars[0].time-30,end=bars.at(-1).time+30;
   const x=t=>left+(t-start)/(end-start)*(right-left);
@@ -433,6 +448,7 @@ function render(){
   chip('engine-status','Deriv · '+(x.running===false?'en pausa':live?'recibiendo datos':'sin datos recientes'),x.running===false?'warn':live?'live':'offline');
   $('balance').textContent=money(x.balanceCents);$('profit').textContent=money(x.profitCents);$('profit').className='value '+(x.profitCents>=0?'positive':'negative');$('capital').textContent='Capital inicial: '+money(x.config.initialCents);$('completed').textContent=x.completed;$('voided').textContent=x.wins+' ganadas · '+(x.completed-x.wins)+' perdidas · '+x.voided+' no evaluables';$('quote').textContent=price(x.lastQuote);$('quoteTime').textContent=x.lastEpoch?time(x.lastEpoch)+' · hace '+x.quoteAgeSeconds+' s':'Sin precio reciente';
   if(x.lastEpoch)$('quoteTime').textContent=time(x.lastEpoch)+' · hace '+Math.max(0,x.quoteAgeSeconds)+' s';
+   paintLiveTick();
   $('feed').textContent=feedLabels[x.market.state]||x.market.state;$('position').textContent=x.position?(x.position.direction>0?'Alcista':'Bajista')+' · '+x.position.ticksHeld+'/'+x.config.horizon+' ticks':'Sin posición';$('ticks').textContent=x.acceptedTicks;
   const d=x.decision||{};$('fast').textContent=price(d.fast);$('slow').textContent=price(d.slow);$('rsi').textContent=price(d.rsi);$('vol').textContent=d.volatility===null||d.volatility===undefined?'—':price(d.volatility)+' %';
   $('decision').textContent=labels[x.entryBlock]||(d.direction?'Señal '+(d.direction>0?'alcista':'bajista'):'Sin señal de entrada');
@@ -466,7 +482,7 @@ async function loadMarket(force=false){
 }
 async function refresh(){
   clearTimeout(timer);if(busy)return;if(document.hidden){timer=setTimeout(refresh,5000);return;}busy=true;
-  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500)}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();$('demo-connection').hidden=!state.serverManaged;if(state.serverManaged&&Date.now()-demoFetched>60000)await loadDemo();if(Date.now()-arbFetched>60000)await loadArbitrage();}
+  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500)}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();$('demo-connection').hidden=!state.serverManaged;if(state.serverManaged&&Date.now()-demoFetched>10000)await loadDemo();if(demoCurrent?.connected)void syncBrokerBalance();if(Date.now()-arbFetched>60000)await loadArbitrage();}
   catch{$('error').textContent='No se pudo actualizar. Los valores visibles pueden estar desactualizados.';chip('engine-status','Deriv · estado sin confirmar','offline');chip('chart-status','Sin actualización verificada','offline');$('paper-start').disabled=true;}
   finally{busy=false;timer=setTimeout(refresh,5000);}
 }
@@ -477,20 +493,30 @@ function renderDemo(data){
   chip('demo-state',data.connected?'Demo verificada':'Sin conexión demo',data.connected?'live':'warn');
   $('deriv-refresh').disabled=!data.connected;
   $('deriv-quote').disabled=!data.connected;
+  $('demo-apply-stake').disabled=!data.connected||!data.demoTradingEnabled;
   const report=data.tradeReport||{},pending=report.unresolved;
   $('demo-next-stake').textContent='Próxima compra del bot: '
     +money(data.nextManualStakeCents||35)+' · debe cotizarse ese importe en la dirección de la señal actual. '
     +'La cotización no es una compra y puede ser rechazada por Deriv.';
   const selectedConcurrent=Number.isInteger(data.demoMaxConcurrent)?data.demoMaxConcurrent:10;
-  if(document.activeElement!==$('demo-max-concurrent'))
+  // The input is a requested capacity, NOT an authorization for >10 contracts.
+  // Do not overwrite a manually typed 15/20/100 with the server's hard limit.
+  if(document.activeElement!==$('demo-max-concurrent')&&
+     !$('demo-max-concurrent').dataset.userEdited)
     $('demo-max-concurrent').value=String(selectedConcurrent);
   if(data.account&&data.connected&&Number.isFinite(data.account.balance)){
-    const fresh=Number.isFinite(data.account.checkedAt)&&Date.now()/1000-data.account.checkedAt<=120;
+    const age=Number.isFinite(data.account.checkedAt)?Math.max(0,Math.floor(Date.now()/1000-data.account.checkedAt)):Infinity;
+    const fresh=age<=45;
     const label=money(Math.round(data.account.balance*100));
     $('official-demo-balance').textContent=label;
     $('official-demo-time').textContent='Cuenta verificada '+data.account.label+' · Actualización: '+date(data.account.checkedAt)
+      +' · hace '+(Number.isFinite(age)?age+' s':'tiempo desconocido')
       +(fresh?'':' · dato desactualizado');
     $('chart-demo-balance').textContent='Saldo DEMO del broker: '+label+(fresh?'':' (desactualizado)');
+    $('official-demo-sync').textContent='Saldo oficial REST · última verificación hace '+
+      (Number.isFinite(age)?age+' s':'—')+
+      '. Se consulta automáticamente cada ~20 s mientras esta pestaña esté visible; no cambia por cada tick. '+
+      ((report.openCount||0)>0?'Hay contratos abiertos; su valoración no es el saldo disponible.':'Sin posición registrada en este bot.');
     $('chart-demo-locked').textContent='Comprometido en '+(report.openCount||0)+' contratos: '
       +money(report.activeExposureCents||0)+' virtuales';
     $('chart-demo-pnl').textContent='P&L DEMO registrado (incluye resultados del navegador sin verificación independiente): '+money(report.pnlCents||0)
@@ -520,7 +546,7 @@ function renderDemo(data){
   // Do not overwrite an already-approved quote or the control being edited.
   if(!demoManualApproval){
     const stakeSelect=$('demo-quote-stake'),directionSelect=$('demo-quote-direction');
-    if(document.activeElement!==stakeSelect&&[35,50,75,100].includes(data.nextManualStakeCents))
+    if(document.activeElement!==stakeSelect&&[35,50,75,90,100].includes(data.nextManualStakeCents))
       stakeSelect.value=String(data.nextManualStakeCents);
     if(document.activeElement!==directionSelect&&manualDirection)
       directionSelect.value=manualDirection;
@@ -530,7 +556,7 @@ function renderDemo(data){
     &&demoManualApproval.stakeCents===data.nextManualStakeCents
     &&demoManualApproval.purchases===(report.pilotPurchases||0);
   const daily=report.dayRisk||{},canBuy=data.connected&&data.demoTradingEnabled&&quoteApproved
-    &&daily.allowed===true&&(report.openCount||0)<selectedConcurrent
+    &&daily.allowed===true&&(report.openCount||0)<1
     &&Number(report.pilotRemainingPurchases)>0&&Number(report.pilotRemainingBudgetCents)>=35;
   $('demo-buy-once').disabled=!canBuy;
   $('demo-auto-start').disabled=!(data.connected&&data.demoAutomationAvailable
