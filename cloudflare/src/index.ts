@@ -222,26 +222,50 @@ export default {
       note:'Estado técnico del Worker. No confirma sesión Deriv ni operaciones DEMO.'
     });
     if(url.pathname==='/api/health/dependencies'&&request.method==='GET'){
-      // Only publish booleans for storage reachability; never return user account,
-      // balances, internal errors, OAuth data, or private DO state.
-      const probe=async(component:'PAPER'|'DERIV_DEMO',check:()=>Promise<unknown>)=>{
-        try{await check();return true;}
+      // Safe, read-only health: classify failures without exposing tokens, App ID,
+      // account identifiers, balances or internal exception details.
+      const classify=(error:unknown):string=>{
+        const message=error instanceof Error?error.message:'';
+        if(message==='EXPERIMENT_CONFIG_CHANGED')return 'PAPER_CONFIG_MISMATCH';
+        if(message==='DEMO_LEDGER_UNAVAILABLE')return 'DEMO_LEDGER_UNAVAILABLE';
+        if(/no such table|no such column|SQLITE|D1_ERROR|database is locked/i.test(message))
+          return 'DO_DATABASE_ERROR';
+        if(/exceeded|quota|too many|rate limit/i.test(message))return 'DO_QUOTA';
+        if(/timeout|timed out|unavailable|connection closed/i.test(message))
+          return 'DO_RPC_UNAVAILABLE';
+        if(/not a function|cannot read properties of undefined|binding/i.test(message))
+          return 'DO_BINDING_ERROR';
+        return 'DO_UNKNOWN_ERROR';
+      };
+      type ProbeResult={state:'ready'|'unavailable';errorCode:string|null};
+      const probe=async(component:'PAPER'|'DERIV_DEMO',
+        check:()=>Promise<unknown>):Promise<ProbeResult>=>{
+        try{await check();return {state:'ready',errorCode:null};}
         catch(error){
-          // Include only a fixed, non-sensitive error classification in Worker logs.
-          const code=error instanceof Error&&error.message==='EXPERIMENT_CONFIG_CHANGED'
-            ?'EXPERIMENT_CONFIG_CHANGED':'STORAGE_UNAVAILABLE';
-          console.error(JSON.stringify({type:'readiness_failed',component,code}));
-          return false;
+          const errorCode=classify(error);
+          console.error(JSON.stringify({type:'readiness_failed',component,code:errorCode}));
+          return {state:'unavailable',errorCode};
         }
       };
-      const [paperReady,demoReady]=await Promise.all([
+      const [paper,demoStorage]=await Promise.all([
         probe('PAPER',()=>env.PAPER.getByName(EXPERIMENT).status()),
-        probe('DERIV_DEMO',()=>env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status())
+        probe('DERIV_DEMO',()=>env.DERIV_DEMO.getByName('owner-deriv-demo-v1').storageHealth())
       ]);
+      let demoReport:ProbeResult={state:'unavailable',errorCode:'DO_STORAGE_UNAVAILABLE'};
+      if(demoStorage.state==='ready'){
+        const report=await probe('DERIV_DEMO',async()=>{
+          const current=await env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status();
+          if(current.ledgerAvailable===false)throw Error('DEMO_LEDGER_UNAVAILABLE');
+        });
+        demoReport=report;
+      }
+      const demoReady=demoStorage.state==='ready'&&demoReport.state==='ready';
       return json({version:release.version+'.0',
-        paper:paperReady?'ready':'unavailable',
+        paper:paper.state,paperErrorCode:paper.errorCode,
         demo:demoReady?'ready':'unavailable',
-        // A ready storage service is NOT the same as an authenticated broker session.
+        demoStorage:demoStorage.state,demoErrorCode:demoStorage.errorCode,
+        demoReport:demoReport.state,demoReportErrorCode:demoReport.errorCode,
+        // This endpoint has no access to account authorization or balances.
         brokerAuthorization:'not_checked',noOrders:true},
         demoReady?200:503,{'Cache-Control':'no-store'});
     }
@@ -293,12 +317,16 @@ export default {
       return handleMcpRequest(request,{
         getStatus:async()=>{
           const r=await demo.status();
+          // Never advertise MCP trading decisions if the broker's historic
+          // contract ledger cannot be read and its risk cannot be assessed.
+          const report=r.tradeReport;
+          if(!report)throw Error('DEMO_LEDGER_UNAVAILABLE');
           return {mode:r.mode,connected:r.connected,account:r.account,
-            risk:r.tradeReport.risk,settled:r.tradeReport.settled,
-            wins:r.tradeReport.wins,losses:r.tradeReport.losses,
-            pnlCents:r.tradeReport.pnlCents,
-            browserObservedSettled:r.tradeReport.browserObservedSettled,
-            brokerVerifiedSettled:r.tradeReport.brokerVerifiedSettled,
+            risk:report.risk,settled:report.settled,
+            wins:report.wins,losses:report.losses,
+            pnlCents:report.pnlCents,
+            browserObservedSettled:report.browserObservedSettled,
+            brokerVerifiedSettled:report.brokerVerifiedSettled,
             nextStakeCents:r.nextManualStakeCents,accountType:'demo',
             directBrokerOrdersFromMcp:0};
         },
@@ -310,7 +338,7 @@ export default {
     }
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
-    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback','/api/deriv/demo/mcp-intent','/api/deriv/demo/burst/status','/api/deriv/demo/trades.csv','/api/deriv/demo/burst.csv'].includes(url.pathname);
+    const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/storage-status','/api/deriv/callback','/api/deriv/demo/mcp-intent','/api/deriv/demo/burst/status','/api/deriv/demo/trades.csv','/api/deriv/demo/burst.csv'].includes(url.pathname);
     const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal','/api/deriv/demo/manual-stake','/api/deriv/demo/burst/begin','/api/deriv/demo/burst/reserve','/api/deriv/demo/burst/ack','/api/deriv/demo/burst/cancel','/api/deriv/demo/burst/halt','/api/deriv/demo/burst/reconcile','/api/deriv/demo/burst/settle'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
@@ -320,6 +348,8 @@ export default {
       if(url.pathname.startsWith('/api/deriv/')){
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
+        if(url.pathname==='/api/deriv/storage-status')
+          return json(await demo.connectionStorageAudit());
         if(url.pathname==='/api/deriv/demo/trades.csv'||url.pathname==='/api/deriv/demo/burst.csv'){
           const scope=url.pathname.endsWith('burst.csv')?'last-burst':'all';
           const file=await demo.exportDemoCsv(scope);

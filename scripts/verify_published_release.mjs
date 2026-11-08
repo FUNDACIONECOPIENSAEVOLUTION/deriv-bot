@@ -20,8 +20,16 @@ for(const target of targets){
     try{
       const u=new URL(target.url);u.searchParams.set('release_audit',Date.now().toString());
       const response=await fetch(u,{cache:'no-store',signal:AbortSignal.timeout(10000)});
-      if(!response.ok)throw Error('HTTP_'+response.status);
-      const data=await response.json();
+      const data=await response.json().catch(()=>null);
+      if(!response.ok){
+        const safe=v=>typeof v==='string'&&/^[A-Z_]{2,60}$/.test(v)?v:'UNKNOWN';
+        const diagnostic=target.name.includes('storage')?
+          ' DEMO_STORAGE='+safe(data?.demoStorage?.toUpperCase())+
+          ' DEMO_REPORT='+safe(data?.demoReport?.toUpperCase())+
+          ' DEMO_CODE='+safe(data?.demoErrorCode)+
+          ' REPORT_CODE='+safe(data?.demoReportErrorCode):'';
+        throw Error('HTTP_'+response.status+diagnostic);
+      }
       seen=String(data?.version??'sin versión');
       if(target.valid(data)){ok=true;break;}
     }catch(error){seen=error instanceof Error?error.message:'ERROR';}

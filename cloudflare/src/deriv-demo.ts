@@ -377,24 +377,60 @@ export class DerivDemoConnection extends DurableObject<Env> {
         decision:r.decision_json?JSON.parse(r.decision_json):null}))
     };
   }
+  /** Bounded read-only storage probe. NEVER returns account ID, token, balance or app ID. */
+  storageHealth(){
+    const row=this.ctx.storage.sql.exec<{n:number}>(
+      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='demo_connection'").one();
+    return {storage:row?.n===1?'ready':'schema_missing',noOrders:true};
+  }
+  /** Owner-only: safe existence flags for ORIGINAL named DEMO namespace. No secret values. */
+  connectionStorageAudit(){
+    const slots=this.ctx.storage.sql.exec<{slot:string}>(
+      "SELECT slot FROM demo_connection WHERE slot IN ('clientId','credentials','snapshot')"
+    ).toArray();
+    const present=new Set(slots.map(r=>r.slot));
+    const trades=this.ctx.storage.sql.exec<{n:number}>(
+      'SELECT COUNT(*) AS n FROM demo_trades').one().n;
+    return {storage:'ready',hasAppId:present.has('clientId'),
+      hasEncryptedCredentials:present.has('credentials'),
+      hasSavedSnapshot:present.has('snapshot'),
+      totalHistoricalRows:trades,readOnly:true,noOrders:true};
+  }
   status(){
     const saved=this.read<{account:DemoAccount;checkedAt:number;expiresAt:number}>('snapshot');
     const connected=!!saved&&saved.expiresAt>epoch()&&!!this.read('credentials');
-    return {mode:'DERIV_DEMO',connected,executionEnabled:false,aiConnected:false,clientId:this.read<string>('clientId')||'',
-      account:connected&&saved?{type:'demo',currency:'USD',label:'Demo · …'+saved.account.account_id.slice(-4),balance:saved.account.balance,checkedAt:saved.checkedAt}:null,
-      discovery:this.read<Discovery>('discovery'),state:connected?'DEMO_VERIFIED':saved?'AUTHORIZATION_EXPIRED':this.read('discovery')?'DEMO_ACCOUNT_NOT_VERIFIED':'NOT_CONNECTED',
-      demoTradingEnabled:String(this.env.DEMO_BUY_ENABLED)==='true',
-      demoAutomationAvailable:false,
-      demoAutomationRequested:false,
-      demoMaxConcurrent:this.chosenMaxConcurrent(),
-      nextManualStakeCents:this.currentManualStakeCents(),
-      allowedManualStakesCents:DEMO_STAKES_CENTS,
-      maxBrowserConcurrent:1,
+    const currentClientId=this.read<string>('clientId')||'';
+    // A damaged historical analysis must not erase or conceal an OAuth App ID.
+    // This is read-only recovery. Trading is DISABLED unless all risk reports work.
+    let ledgerAvailable=true,tradeReport:ReturnType<DerivDemoConnection['reportDemo']>|null=null;
+    let demoBurst:ReturnType<DerivDemoConnection['demoBurstStatus']>|null=null;
+    let demoBurstPlan:ReturnType<DerivDemoConnection['planDemoBurst']>|null=null;
+    let demoBurstPlans:Array<ReturnType<DerivDemoConnection['planDemoBurst']>>=[];
+    try {
+      tradeReport=this.reportDemo();
+      demoBurst=this.demoBurstStatus();
+      demoBurstPlan=this.planDemoBurst(10);
+      demoBurstPlans=DEMO_STAKES_CENTS.map(stakeCents=>this.planDemoBurst(10,stakeCents));
+    }catch(error){
+      ledgerAvailable=false;tradeReport=null;demoBurst=null;demoBurstPlan=null;demoBurstPlans=[];
+      console.error(JSON.stringify({type:'demo_status_ledger_unavailable',
+        code:error instanceof Error&&/SQL|sqlite|no such table/i.test(error.message)
+          ?'DEMO_STORAGE_SCHEMA':'DEMO_STATUS_AGGREGATION'}));
+    }
+    return {mode:'DERIV_DEMO',connected,executionEnabled:false,aiConnected:false,clientId:currentClientId,
+      account:connected&&saved?{type:'demo',currency:'USD',label:'Demo · …'+saved.account.account_id.slice(-4),
+        balance:saved.account.balance,checkedAt:saved.checkedAt}:null,
+      discovery:this.read<Discovery>('discovery'),
+      state:!ledgerAvailable?'DEMO_LEDGER_UNAVAILABLE':connected?'DEMO_VERIFIED':
+        saved?'AUTHORIZATION_EXPIRED':this.read('discovery')?'DEMO_ACCOUNT_NOT_VERIFIED':'NOT_CONNECTED',
+      ledgerAvailable,brokerAuthorizationChecked:false,
+      demoTradingEnabled:ledgerAvailable&&String(this.env.DEMO_BUY_ENABLED)==='true',
+      demoAutomationAvailable:false,demoAutomationRequested:false,
+      demoMaxConcurrent:ledgerAvailable?this.chosenMaxConcurrent():10,
+      nextManualStakeCents:ledgerAvailable?this.currentManualStakeCents():35,
+      allowedManualStakesCents:DEMO_STAKES_CENTS,maxBrowserConcurrent:1,
       demoLossAlert:this.read<boolean>('demo-loss-halt')===true,
-      tradeReport:this.reportDemo(),
-      demoBurst:this.demoBurstStatus(),
-      demoBurstPlan:this.planDemoBurst(10),
-      demoBurstPlans:DEMO_STAKES_CENTS.map(stakeCents=>this.planDemoBurst(10,stakeCents))};
+      tradeReport,demoBurst,demoBurstPlan,demoBurstPlans};
   }
   async refresh(){
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');

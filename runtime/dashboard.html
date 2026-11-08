@@ -1076,13 +1076,16 @@ async function settleBurstKnownContracts(ws,nonce){
 
 function renderDemo(data){
   demoCurrent=data;
-  chip('demo-state',data.connected?'Demo verificada':'Sin conexión demo',data.connected?'live':'warn');
+  const ledgerAvailable=data.ledgerAvailable!==false;
+  chip('demo-state',!ledgerAvailable?'Historial DEMO inaccesible':
+    data.connected?'Sesión DEMO guardada':'Sin conexión DEMO',
+    ledgerAvailable&&data.connected?'live':'warn');
   $('deriv-refresh').disabled=!data.connected;
   $('deriv-quote').disabled=!data.connected;
   $('demo-apply-stake').disabled=!data.connected||!data.demoTradingEnabled;
   const report=data.tradeReport||{},pending=report.unresolved;
   // The top metrics use ONLY the authenticated Deriv DEMO ledger.
-  const connected=!!data.connected;
+  const connected=!!data.connected&&ledgerAvailable;
   $('demo-main-pnl').textContent=connected?money(report.pnlCents||0):'Sin conectar';
   $('demo-main-pnl').className='value '+((report.pnlCents||0)>=0?'positive':'negative');
   $('demo-main-wins').textContent=connected
@@ -1142,7 +1145,7 @@ function renderDemo(data){
   if(document.activeElement!==$('demo-max-concurrent')&&
      !$('demo-max-concurrent').dataset.userEdited)
     $('demo-max-concurrent').value=String(selectedConcurrent);
-  if(data.account&&data.connected&&Number.isFinite(data.account.balance)){
+  if(data.account&&data.connected&&ledgerAvailable&&Number.isFinite(data.account.balance)){
     const age=Number.isFinite(data.account.checkedAt)?Math.max(0,Math.floor(Date.now()/1000-data.account.checkedAt)):Infinity;
     const fresh=age<=45;
     const label=money(Math.round(data.account.balance*100));
@@ -1296,7 +1299,21 @@ function renderDemo(data){
   }
   if(document.activeElement!==$('deriv-client')&&data.clientId)$('deriv-client').value=data.clientId;
   $('demo-balance').textContent=data.account?'Saldo demo oficial: '+money(Math.round(data.account.balance*100))+' · '+data.account.label+' · Consultado '+date(data.account.checkedAt):'Saldo demo oficial: pendiente de conexión. Los USD 10 de arriba pertenecen a otra simulación.';
-  if(!data.connected&&data.state==='AUTHORIZATION_EXPIRED'){
+  if(!ledgerAvailable){
+    $('demo-feedback').textContent='La sesión DEMO puede seguir guardada, pero no se pudo leer el historial persistente. '+
+      'Las compras están bloqueadas para proteger los contratos. Revisa el diagnóstico técnico; '+
+      'NO autorices otra aplicación ni borres datos hasta comprobar el almacenamiento.';
+    $('demo-trade-summary').textContent='Historial DEMO temporalmente no verificable; no se muestran cifras inventadas.';
+    $('demo-main-pnl').textContent='No verificado';
+    $('demo-main-settled').textContent='—';
+    $('demo-main-purchases').textContent='—';
+    $('demo-buy-once').disabled=true;
+    $('demo-burst-start').disabled=true;
+    $('demo-balanced-start').disabled=true;
+    $('demo-export-csv').disabled=true;
+    $('official-demo-balance').textContent='No verificado';
+    $('official-demo-time').textContent='Hay información de una sesión previa, pero no se verificó el historial ni el saldo actual.';
+  }else if(!data.connected&&data.state==='AUTHORIZATION_EXPIRED'){
    $('demo-feedback').textContent='La autorización DEMO de Deriv está vencida. Autoriza nuevamente la conexión; el historial no se elimina.';
   }else if(!data.connected&&data.state==='NOT_CONNECTED'){
    $('demo-feedback').textContent='No hay autorización DEMO registrada. La conexión puede solicitarse independientemente de PAPER.';
@@ -1312,7 +1329,17 @@ async function loadDemo(){
  }catch(error){
   const reason=error instanceof Error&&/^HTTP_[0-9]{3}$/.test(error.message)?error.message:'RED_O_SERVIDOR';
   $('demo-feedback').textContent='No se pudo consultar estado Deriv DEMO ('+reason+
-   '). Esto no demuestra que se haya desconectado del broker. No realices compras sin verificar la sesión.';
+   '). Esto NO demuestra que se hayan borrado el App ID, los contratos ni la autorización. '+
+   'No compres ni vuelvas a autorizar hasta conocer el estado del almacenamiento.';
+  try{
+    const health=await fetch('/api/health/dependencies',{
+      signal:AbortSignal.timeout(3000),cache:'no-store'});
+    const d=await health.json();
+    const code=String(d.demoErrorCode||d.demoReportErrorCode||'DIAGNOSTICO_PENDIENTE');
+    $('demo-feedback').textContent+=' · Diagnóstico: '+code+
+      ' · servicio DEMO '+String(d.demoStorage||'sin verificar')+
+      ' · informe '+String(d.demoReport||'sin verificar')+'.';
+  }catch{ $('demo-feedback').textContent+=' · Servicio de diagnóstico no disponible.'; }
   chip('demo-state','Estado DEMO sin verificar','offline');$('deriv-refresh').disabled=true;$('deriv-quote').disabled=true;
   $('official-demo-balance').textContent='No verificado';
   $('official-demo-time').textContent='No usar como saldo vigente';
