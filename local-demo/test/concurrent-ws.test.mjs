@@ -21,7 +21,9 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
     buy:{contract_id:++contract,buy_price:0.50}};
    else if(request.proposal_open_contract)reply={msg_type:'proposal_open_contract',
     req_id:request.req_id,proposal_open_contract:{contract_id:request.contract_id,
-     is_sold:1,profit:0.35}};
+     is_sold:1,profit:0.35,
+     entry_tick:100.21,exit_tick:100.45,
+     entry_tick_time:1762637000,exit_tick_time:1762637010}};
    else throw Error('UNEXPECTED_REQUEST');
    queueMicrotask(()=>this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify(reply)})));
   }
@@ -61,6 +63,8 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   const csv=trading.exportCsv('all');
   assert.match(csv,/ema20/);
   assert.match(csv,/proposalPayoutCents/);
+  assert.match(csv,/entryTick/);
+  assert.ok(totals.orders.every(x=>x.entryTick===100.21&&x.exitTick===100.45));
  }finally{
   db.close();globalThis.WebSocket=original;
  }
