@@ -164,15 +164,15 @@ def get_project_status() -> dict[str, Any]:
     """
     return {
         "project": "Ecopiensa Quant Lab / Deriv IA Trader",
-        "version": "1.1 (MCP de investigación)",
+        "version": "2.0 (MCP de investigación y ensayo PAPER 10)",
         "web": "https://fundacionecopiensaevolution.github.io/deriv-bot/",
         "backtest": "https://fundacionecopiensaevolution.github.io/deriv-bot/laboratorio.html",
         "connection": "Datos públicos Deriv Options WebSocket",
-        "permissions": ["public_market_data_read", "paper_research_analysis"],
+        "permissions": ["public_market_data_read", "paper_research_analysis", "paper_replay_ten"],
         "real_trading_enabled": False,
         "demo_trading_enabled": False,
         "guaranteed_profit": False,
-        "note": "Conectar este servidor a una cuenta ChatGPT elegible requiere despliegue seguro, revisión y autorización. La existencia del archivo Python no crea una conexión.",
+        "note": "Herramienta simulate_ten_bot_paper_trades integrada en código para simular 10 entradas hipotéticas; NO adquiere contratos. Conectar este servidor a ChatGPT requiere despliegue seguro, autorización y cuenta elegible.",
     }
 
 
