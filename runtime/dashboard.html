@@ -85,6 +85,7 @@
 <button type="button" id="demo-command-submit">Ejecutar comando seguro</button></div>
 <p id="demo-command-output" class="note" role="status">Estos comandos utilizan los botones, la autenticación y las confirmaciones existentes. No realizan operaciones reales.</p>
 <p id="demo-trade-status" class="note" role="status">Sin operaciones DEMO verificadas.</p>
+<p id="demo-unrealized" class="note" role="status">Valoración de contrato DEMO abierto: sin datos. El saldo oficial solo refleja los movimientos de la cuenta.</p>
 <p id="demo-trade-summary" class="note">El historial PAPER superior no equivale a resultados de contratos del broker.</p>
 <p id="demo-daily-risk" class="note">Esperando saldo oficial DEMO.</p><p id="demo-stake-stats" class="note">Importes: sin resultados aún.</p><p id="demo-batch-stats" class="note">Tandas: sin contratos DEMO confirmados.</p>
 <div class="divider"></div>
@@ -281,19 +282,34 @@ async function oneBrowserDemoBuy(approved,msg){
   }
   msg.textContent='Compra DEMO observada: contrato '+result.contractId+
    ', importe '+money(stakeCents)+'. Comprobando el cierre...';
+  $('demo-unrealized').textContent='Contrato '+result.contractId+' abierto. Consultando valoración indicativa del broker; el P&L no está realizado.';
   for(let i=0;i<8;i++){
    await new Promise(resolve=>setTimeout(resolve,2500));
    const reply=await brokerMessage(ws,{proposal_open_contract:1,contract_id:result.contractId,req_id:3});
    if(reply.error||reply.errors)throw Error('DEMO_BROWSER_SETTLEMENT_UNAVAILABLE');
+   if(reply.msg_type==='proposal_open_contract'&&
+      reply.proposal_open_contract?.contract_id===result.contractId){
+      const c=reply.proposal_open_contract;
+      const provisional=Number(c.profit);
+      if(![1,true].includes(c.is_sold)&&Number.isFinite(provisional)&&Math.abs(provisional)<=100){
+        $('demo-unrealized').textContent='Contrato DEMO '+result.contractId+
+          ' abierto · P&L indicativo no realizado: '+money(Math.round(provisional*100))+
+          '. Dato del navegador, no ganancia liquidada.';
+      }
+   }
    if(reply.msg_type==='proposal_open_contract'&&[1,true].includes(reply.proposal_open_contract?.is_sold)){
     const settled=await browserPrivate('settle',{nonce:session.nonce,id:reserved.id,response:reply});
     msg.textContent='Contrato DEMO '+result.contractId+' cerrado · resultado '+money(settled.settlement.profitCents)+
      '. Observado desde el navegador; aún sin verificación independiente en Cloudflare.';
+    $('demo-unrealized').textContent='Contrato '+result.contractId+
+      ' liquidado · P&L realizado registrado: '+money(settled.settlement.profitCents)+
+      ' virtuales (observado desde el navegador).';
     return {state:'SETTLED',contractId:result.contractId,pnlCents:settled.settlement.profitCents,stakeCents};
 
    }
   }
   msg.textContent='Compra DEMO '+result.contractId+' observada; el cierre sigue pendiente. No repitas la compra.';
+  $('demo-unrealized').textContent='Contrato aún sin liquidación comprobada. No confundir una variación del índice con el saldo de la cuenta.';
   return {state:'OPEN',contractId:result.contractId};
  }finally{try{ws.close();}catch{}}
 }
