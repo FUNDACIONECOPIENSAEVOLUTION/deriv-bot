@@ -768,6 +768,17 @@ function renderDemoTopTrades(){
    if(i===5&&t.state==='SETTLED')td.className=t.pnlCents>=0?'positive':'negative';
    tr.appendChild(td);
   });
+  tr.style.cursor='pointer';
+  tr.title='Ver índice '+(t.symbol||'R_100')+' en el gráfico de Deriv';
+  tr.onclick=async()=>{
+   const market=demoScanSymbols.includes(t.symbol)?t.symbol:'R_100';
+   $('demo-chart-symbol').value=market;
+   await $('demo-chart-symbol').onchange();
+   $('candles').scrollIntoView({block:'center',behavior:'smooth'});
+   $('ohlc').textContent='Contrato '+(t.contractId??'sin acuse')+
+    ' de '+market+' · resultado '+pnl+
+    '. Una marca solo aparece si hay hora y spot conocidos dentro de las velas visibles.';
+  };
   body.appendChild(tr);
  }
 }
@@ -788,7 +799,9 @@ function render(){
   if(!state)return;const x=state,provider=$('provider').value;
   const live=x.market.state==='live'&&x.quoteAgeSeconds!==null&&x.quoteAgeSeconds<=15&&x.quoteAgeSeconds>=-3;
   chip('engine-status','Deriv · '+(x.running===false?'en pausa':live?'recibiendo datos':'sin datos recientes'),x.running===false?'warn':live?'live':'offline');
-  $('balance').textContent=money(x.balanceCents);$('profit').textContent=money(x.profitCents);$('profit').className='value '+(x.profitCents>=0?'positive':'negative');$('capital').textContent='Capital inicial: '+money(x.config.initialCents);$('completed').textContent=x.completed;$('voided').textContent=x.wins+' ganadas · '+(x.completed-x.wins)+' perdidas · '+x.voided+' no evaluables';$('quote').textContent=price(x.lastQuote);$('quoteTime').textContent=x.lastEpoch?time(x.lastEpoch)+' · hace '+x.quoteAgeSeconds+' s':'Sin precio reciente';
+  $('balance').textContent=money(x.balanceCents);$('profit').textContent=money(x.profitCents);$('profit').className='value '+(x.profitCents>=0?'positive':'negative');$('capital').textContent='Capital inicial: '+money(x.config.initialCents);$('completed').textContent=x.completed;$('voided').textContent=x.wins+' ganadas · '+(x.completed-x.wins)+' perdidas · '+x.voided+' no evaluables';$('quote').textContent=$('demo-chart-symbol').value==='R_100'?price(x.lastQuote):'—';
+  $('quoteTime').textContent=$('demo-chart-symbol').value==='R_100'&&x.lastEpoch
+    ?time(x.lastEpoch)+' · hace '+x.quoteAgeSeconds+' s':'Esperando tick público del índice seleccionado';
   if(x.lastEpoch)$('quoteTime').textContent=time(x.lastEpoch)+' · hace '+Math.max(0,x.quoteAgeSeconds)+' s';
    paintLiveTick();
   $('feed').textContent=feedLabels[x.market.state]||x.market.state;$('position').textContent=x.position?(x.position.direction>0?'Alcista':'Bajista')+' · '+x.position.ticksHeld+'/'+x.config.horizon+' ticks':'Sin posición';$('ticks').textContent=x.acceptedTicks;
