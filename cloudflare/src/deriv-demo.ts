@@ -854,6 +854,11 @@ export class DerivDemoConnection extends DurableObject<Env> {
         throw Error('DEMO_BURST_ATOMIC_LOCK');
       if(epoch()-(this.read<number>('demo-last-balance-at')||0)>30)
         throw Error('DEMO_BALANCE_REFRESH_REQUIRED');
+      // Recheck freshness atomically: authorization/crypto may take time.
+      const atReserveSignal=this.getBrowserSignal(symbol);
+      if(!atReserveSignal.valid||atReserveSignal.direction!==direction||
+         atReserveSignal.quoteAgeSeconds===null||atReserveSignal.quoteAgeSeconds>3)
+        throw Error('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
       const limits=planDemoBurst(1,{
         pilotPurchases:snap.pilotPurchases,
         pilotCommittedCents:snap.pilotCommittedCents,
@@ -882,10 +887,10 @@ export class DerivDemoConnection extends DurableObject<Env> {
           entryQuote:researchNumber(d.entryQuote,0,1000000),
           quoteAgeSeconds:researchNumber(d.quoteAgeSeconds,0,3600),
           // Server reservation age (based on browser-supplied public market timestamps).
-          analysisAtEpoch:Number.isSafeInteger(latestSignal.at)?latestSignal.at:null,
-          lastSourceTickEpoch:Number.isSafeInteger(latestSignal.quoteAgeSeconds)?
-            epoch()-latestSignal.quoteAgeSeconds:null,
-          quoteAgeAtReserveSeconds:latestSignal.quoteAgeSeconds,
+          analysisAtEpoch:Number.isSafeInteger(atReserveSignal.at)?atReserveSignal.at:null,
+          lastSourceTickEpoch:Number.isSafeInteger(atReserveSignal.quoteAgeSeconds)?
+            epoch()-atReserveSignal.quoteAgeSeconds:null,
+          quoteAgeAtReserveSeconds:atReserveSignal.quoteAgeSeconds,
           signalAgeAtProposalSec:researchNumber(d.signalAgeAtProposalSec,0,30),
           proposalRttMs:researchNumber(d.proposalRttMs,0,30000),
           pageLoadedEpoch:researchNumber(d.pageLoadedEpoch,0,2100000000),
