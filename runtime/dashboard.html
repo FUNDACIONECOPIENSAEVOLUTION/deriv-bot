@@ -828,7 +828,7 @@ function selectHistory(mode){
  $('history-mode-demo').setAttribute('aria-pressed',String(mode==='DEMO'));
  $('history-mode-paper').setAttribute('aria-pressed',String(mode==='PAPER'));
  if(state)render();
- else if(mode==='DEMO')renderDemoTopTrades();
+ else if(mode==='DEMO'){renderDemoTopTrades();drawCandles();drawEquity();}
 }
 $('history-mode-demo').onclick=()=>selectHistory('DEMO');
 $('history-mode-paper').onclick=()=>selectHistory('PAPER');
@@ -1198,7 +1198,7 @@ function renderDemo(data){
     note.className='metric-foot '+(Math.abs(difference)>1?'negative':'');
     $('official-demo-sync').textContent='Saldo oficial REST · última verificación hace '+
       (Number.isFinite(age)?age+' s':'—')+
-      '. Se consulta automáticamente cada ~20 s mientras esta pestaña esté visible; no cambia por cada tick. '+
+      '. Se consulta automáticamente cada ~60 s en reposo o ~5 s durante tandas; no cambia por cada tick. '+
       ((report.openCount||0)>0?'Hay contratos abiertos; su valoración no es el saldo disponible.':'Sin posición registrada en este bot.');
     $('chart-demo-locked').textContent='Comprometido en '+(report.openCount||0)+' contratos: '
       +money(report.activeExposureCents||0)+' virtuales';
@@ -1317,7 +1317,7 @@ function renderDemo(data){
   }
   if(historyMode==='DEMO'){
     renderDemoTopTrades();
-    if(state){drawCandles();drawEquity();}
+    drawCandles();drawEquity();
   }
   const history=$('demo-trade-history');history.replaceChildren();
   for(const item of report.history||[]){
