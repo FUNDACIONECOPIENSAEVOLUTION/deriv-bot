@@ -1,10 +1,21 @@
 {
-  "version": "7.8",
-  "updatedAt": "2026-11-08T00:27:06.536Z",
-  "summary": "Verificar si Deriv admite apuestas virtuales US$0.90 para CALL y PUT sin realizar compras",
+  "version": "7.9",
+  "updatedAt": "2026-11-08T00:33:22.590Z",
+  "summary": "Mostrar discrepancias entre saldo oficial DEMO y contratos registrados sin inventar movimientos",
   "changes": [
-    "Verificar si Deriv admite apuestas virtuales US$0.90 para CALL y PUT sin realizar compras"
+    "Mostrar discrepancias entre saldo oficial DEMO y contratos registrados sin inventar movimientos",
+    "Alinear cotizador Deriv DEMO con apuestas permitidas, incluido US$0.90",
+    "Asegurar pruebas HTML de ticker por tick, saldo actualizado y controles DEMO configurables",
+    "Actualizar regresión de stakes: manual US$0.90, rotación automática original sin duplicar pérdidas",
+    "Actualizar verificación CI de US$0.90 DEMO y apuestas automáticas con secuencia controlada",
+    "Probar US$0.90 como apuesta DEMO manual válida y bloqueo de importes o sesiones no autorizadas",
+    "Verificar en despliegue stakes US$0.90, monitor tick en vivo y actualización de saldo DEMO",
+    "Habilitar elección persistente de apuesta DEMO, mostrar límites reales de concurrencia y confirmar importe exacto",
+    "Suscribir R_100 por tick público en navegador y sincronizar saldo REST DEMO cada 20 s con advertencia de antigüedad",
+    "Actualizar monitor con overlay de tick público directo, saldo oficial por antigüedad y límite real de una compra navegador",
+    "Mostrar importe editable US$0.35–1.00, campo simultaneidad solicitada 1–100 con límite efectivo y estado de ticks/saldo",
+    "Publicar endpoint privado para fijar importe de una compra DEMO con riesgo y saldo verificados"
   ],
-  "sourceCommit": "15a32e9db29b5ef8567c888c2d378d8091929395",
+  "sourceCommit": "5334adc30da83401f85931ec5ca8473c0af5cb44",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

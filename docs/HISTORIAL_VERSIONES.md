@@ -69,6 +69,24 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.9 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:33:22.590Z (UTC).
+- **Commit de origen:** `5334adc30da8`.
+- Mostrar discrepancias entre saldo oficial DEMO y contratos registrados sin inventar movimientos
+- Alinear cotizador Deriv DEMO con apuestas permitidas, incluido US$0.90
+- Asegurar pruebas HTML de ticker por tick, saldo actualizado y controles DEMO configurables
+- Actualizar regresión de stakes: manual US$0.90, rotación automática original sin duplicar pérdidas
+- Actualizar verificación CI de US$0.90 DEMO y apuestas automáticas con secuencia controlada
+- Probar US$0.90 como apuesta DEMO manual válida y bloqueo de importes o sesiones no autorizadas
+- Verificar en despliegue stakes US$0.90, monitor tick en vivo y actualización de saldo DEMO
+- Habilitar elección persistente de apuesta DEMO, mostrar límites reales de concurrencia y confirmar importe exacto
+- Suscribir R_100 por tick público en navegador y sincronizar saldo REST DEMO cada 20 s con advertencia de antigüedad
+- Actualizar monitor con overlay de tick público directo, saldo oficial por antigüedad y límite real de una compra navegador
+- Mostrar importe editable US$0.35–1.00, campo simultaneidad solicitada 1–100 con límite efectivo y estado de ticks/saldo
+- Publicar endpoint privado para fijar importe de una compra DEMO con riesgo y saldo verificados
+
 ## v7.8 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:27:06.536Z (UTC).
