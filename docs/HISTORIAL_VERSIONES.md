@@ -81,6 +81,17 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.1 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:05:08.526Z (UTC).
+- **Commit de origen:** `ab0a3e7a7a31`.
+- Conservar pérdidas negativas como valores numéricos en Excel sin permitir inyección de fórmulas CSV
+- Actualizar pruebas para exportador CSV server-side y tabla superior DEMO en lugar del botón cliente antiguo
+- Eliminar comprobación trivial del CSV y mantener pruebas de timestamps faltantes
+- Probar CSV del historial broker DEMO con precio, tiempos reales, análisis y sanitización de fórmulas
+- Hacer que el botón anterior también descargue el historial completo DEMO, no solo 50 filas de vista previa
+
 ## v9.0 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:03:30.641Z (UTC).

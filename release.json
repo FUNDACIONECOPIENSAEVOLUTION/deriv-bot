@@ -1,11 +1,14 @@
 {
-  "version": "9.0",
-  "updatedAt": "2026-11-08T01:03:30.641Z",
-  "summary": "Bloquear cada compra DEMO sin señal pública reciente o cuando la dirección cambia durante la tanda",
+  "version": "9.1",
+  "updatedAt": "2026-11-08T01:05:08.526Z",
+  "summary": "Conservar pérdidas negativas como valores numéricos en Excel sin permitir inyección de fórmulas CSV",
   "changes": [
-    "Bloquear cada compra DEMO sin señal pública reciente o cuando la dirección cambia durante la tanda",
-    "Validar una señal SMA/RSI reciente para CADA compra DEMO y detener tanda si se debilita o cambia de dirección"
+    "Conservar pérdidas negativas como valores numéricos en Excel sin permitir inyección de fórmulas CSV",
+    "Actualizar pruebas para exportador CSV server-side y tabla superior DEMO en lugar del botón cliente antiguo",
+    "Eliminar comprobación trivial del CSV y mantener pruebas de timestamps faltantes",
+    "Probar CSV del historial broker DEMO con precio, tiempos reales, análisis y sanitización de fórmulas",
+    "Hacer que el botón anterior también descargue el historial completo DEMO, no solo 50 filas de vista previa"
   ],
-  "sourceCommit": "83fa649bb38f3646c0a01adcc2e787ae36c40c5d",
+  "sourceCommit": "ab0a3e7a7a314745460426ac6f474d6342e8d3b3",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
