@@ -58,7 +58,8 @@ test('Reject invalid PAT without storing authorization; preserve data directory'
 test('Local and GitHub pc-local version displayed without sending an order',async()=>boot(async({base,data})=>{
  const m=JSON.parse(readFileSync(new URL('../local-release.json',import.meta.url),'utf8'));
  const html=await (await fetch(base+'/')).text();
- assert.match(html,new RegExp('v'+m.version.replace('.','\\.')));
+ assert.match(html,/id="version-title"/); // La versión se carga dinámicamente desde /api/status.
+ assert.match(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),/loadedVersion/);
  const state=await (await fetch(base+'/api/status')).json();
  assert.equal(state.version,'v'+m.version);
  assert.equal(state.buyEnabled,false);
