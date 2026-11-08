@@ -33,6 +33,9 @@ assert.ok(panel.includes('syncBrokerBalance()'),'El saldo oficial debe refrescar
 assert.ok(panel.includes('DEMO_BURST_FRESHNESS_SECONDS=1')&&
   panel.includes('demoAgeSinceSignal(fresh,signalReceivedAtMs)'),
   'Cada compra DEMO debe comprobar la edad real de la señal también después de la cotización');
+assert.ok(panel.includes("void loadDemoSymbolCandles($('demo-chart-symbol').value)")&&
+ panel.includes("if($('paper-lab').open&&Date.now()-lastPaperStatusAttempt>60000)"),
+ 'El gráfico DEMO debe cargar desde Deriv sin depender de PAPER ni sondearlo continuamente');
 assert.ok(panel.includes('demoTickMatchesSignal')&&
   panel.includes('openDemoBurstMarketTicks')&&panel.includes("demoBurstPost('cancel'"),
   'Every BUY needs a fresh live tick and safe cancel-before-send path');
@@ -40,12 +43,12 @@ assert.ok(panel.includes('preBuyAgeSec>=1')&&panel.includes('reserveRttMs>=1000'
   'Stale signals or >=1000ms reservation must cancel before BUY');
 for(const field of ['proposalRttMs','demoPageNavigationType','demoPageSessionId','demoPageLoadedEpoch'])
  assert.ok(panel.includes(field),'La trazabilidad DEMO debe incluir '+field);
-assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<(demoBurstActive()?5000:20000)'),
-  'La sincronización de saldo debe estar acotada: 5 segundos en tanda y 20 en reposo');
+assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<(demoBurstActive()?5000:60000)'),
+  'La sincronización de saldo debe estar acotada: 5 segundos en tanda y 60 en reposo');
 assert.ok(panel.includes('demoLoadBusy') && panel.includes('cache:\'no-store\''),
   'El estado DEMO debe evitar consultas superpuestas y respuestas almacenadas');
-assert.ok(panel.includes('Date.now()-lastDemoLoadAttempt>(demoBurstActive()?2000:5000)'),
-  'El estado DEMO debe actualizarse cada 2 segundos en tanda y 5 en reposo');
+assert.ok(panel.includes('Date.now()-lastDemoLoadAttempt>(demoBurstActive()?2000:15000)'),
+  'El estado DEMO debe actualizarse cada 2 segundos en tanda y 15 en reposo');
 assert.ok(panel.includes('marketAge') && panel.includes('localAge'),
   'El panel debe rastrear la antigüedad del tick en el mercado y en el navegador');
 assert.ok(panel.includes('demo-max-concurrent'), 'Se debe informar el límite configurable de contratos');
