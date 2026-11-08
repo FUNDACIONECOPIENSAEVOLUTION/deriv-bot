@@ -598,6 +598,7 @@ async function loadDemoSymbolCandles(symbol){
   demoOtherChartAt=Date.now();
   if($('provider').value==='deriv'&&$('demo-chart-symbol').value===symbol){
    drawCandles();
+   chip('chart-status','Velas públicas '+symbol+' · sin PAPER','live');
    $('platform-note').textContent='Velas '+symbol+' agregadas desde ticks públicos Deriv. '+
      'Solo se muestran minutos con datos observados; no se rellenan periodos faltantes.';
   }
@@ -880,8 +881,26 @@ async function loadMarket(force=false){
 }
 async function refresh(){
   clearTimeout(timer);if(busy)return;if(document.hidden){timer=setTimeout(refresh,5000);return;}busy=true;
-  try{const [r]=await Promise.all([fetch('/api/status',{signal:AbortSignal.timeout(4500),cache:'no-store'}),loadMarket()]);if(!r.ok)throw Error();state=await r.json();$('error').textContent='';render();if(Date.now()-arbFetched>60000)await loadArbitrage();}
-  catch{$('error').textContent='No se pudo actualizar PAPER; Deriv DEMO se verifica por separado.';chip('engine-status','PAPER · sin confirmar','offline');chip('chart-status','Sin actualización verificada','offline');$('paper-start').disabled=true;}
+  try{
+   await loadMarket();
+   // PAPER is optional, not part of DEMO trading: polling its durable object
+   // by default can exhaust the Workers Free daily quota.
+   if($('paper-lab').open&&Date.now()-lastPaperStatusAttempt>60000){
+    lastPaperStatusAttempt=Date.now();
+    const r=await fetch('/api/status',{signal:AbortSignal.timeout(4500),cache:'no-store'});
+    if(!r.ok)throw Error('PAPER_OPTIONAL_UNAVAILABLE');
+    state=await r.json();render();
+   }
+   $('error').textContent='';
+   if(!state)chip('engine-status','PAPER pausado · prioridad DEMO','warn');
+   if(demoOtherChart?.candles?.length)
+    chip('chart-status','Velas públicas Deriv · sin PAPER','live');
+  }catch{
+   $('error').textContent='Laboratorio PAPER opcional sin disponibilidad; DEMO se consulta por separado.';
+   chip('engine-status','PAPER opcional · sin conexión','warn');
+   if(!demoOtherChart?.candles?.length)
+    chip('chart-status','Preparando velas públicas Deriv','warn');
+  }
   finally{
    // The private DEMO connection must never depend on the PAPER endpoint.
    $('demo-connection').hidden=false;
@@ -2332,6 +2351,9 @@ window.setInterval(()=>{if(!document.hidden){paintLiveTick();if(liveTick&&(Date.
  }}},1000);
 $('demo-connection').hidden=false;
 void loadDemo();
+void loadDemoSymbolCandles($('demo-chart-symbol').value).catch(()=>{
+ $('platform-note').textContent='No se pudo cargar el historial público Deriv; el ticker se reconecta por separado.';
+});
 ensureLiveTicks();refresh();
 $('open-monitor').onclick=()=>window.open(location.origin+'/', 'ecopiensa-monitor','popup,width=1280,height=900');
 </script></main></body></html>
