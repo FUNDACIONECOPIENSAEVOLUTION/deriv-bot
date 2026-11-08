@@ -11,3 +11,16 @@ node_modules/
 
 # Copias locales; nunca se publican en GitHub.
 /backups-export/
+
+# Windows local DEMO private data and credentials — NEVER COMMIT
+/local-demo/data/
+/local-demo/.env*
+/local-demo/.dev.vars*
+/local-demo/*.sqlite
+/local-demo/*.db
+/local-demo/*.key
+/local-demo/*.csv
+/copias-privadas-codigo/
+/local-demo/copias-privadas/
+/cloudflare/.wrangler/
+*.log
