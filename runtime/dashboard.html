@@ -74,8 +74,17 @@
  <button id="demo-burst-reconcile" disabled>Verificar liquidaciones de la tanda</button>
 </div>
 <p id="demo-burst-plan" class="note" role="status">Tanda no preparada. Se comprobarán la cantidad disponible y los US$10 de límite.</p>
+<div class="metrics" id="demo-burst-summary" role="status" aria-label="Resultado total de la última tanda DEMO" style="margin-top:12px;margin-bottom:12px">
+ <section class="card"><div class="metric-label">RESULTADO NETO · ÚLTIMA TANDA</div><div id="demo-burst-net" class="value">—</div><div id="demo-burst-net-status" class="metric-foot">Todavía no hay resultado confirmado</div></section>
+ <section class="card"><div class="metric-label">Total apostado</div><div id="demo-burst-gross" class="value">—</div><div id="demo-burst-gross-status" class="metric-foot">Apuestas registradas</div></section>
+ <section class="card"><div class="metric-label">Aciertos de la tanda</div><div id="demo-burst-hit-rate" class="value">—</div><div id="demo-burst-hit-details" class="metric-foot">Sin liquidaciones</div></section>
+ <section class="card"><div class="metric-label">Compras DEMO liquidadas</div><div id="demo-burst-finished" class="value">—</div><div id="demo-burst-finished-status" class="metric-foot">El resultado puede estar incompleto</div></section>
+</div>
 <p id="demo-burst-live" class="note" role="status">Órdenes confirmadas: 0. Ninguna compra se genera al cargar el panel.</p><p id="demo-burst-diagnosis" class="note" role="status">Diagnóstico de la última tanda: pendiente de resultados DEMO.</p><div class="tools"><a id="demo-burst-inline-csv" href="/api/deriv/demo/burst.csv">Descargar análisis CSV de esta tanda DEMO</a><a href="/api/deriv/demo/trades.csv">Historial completo de contratos DEMO CSV</a></div>
 <div class="table-scroll"><table><thead><tr><th>Contrato DEMO confirmado</th><th>Mercado</th><th>Dirección</th><th>Importe</th><th>Estado</th><th>Resultado neto</th></tr></thead><tbody id="demo-burst-rows"></tbody></table></div>
+<div class="divider"></div><h3>Resultados de cada tanda DEMO</h3>
+<p class="note" id="demo-batches-note">Historial de tandas identificado por su código de ejecución. No incluye PAPER.</p>
+<div class="table-scroll"><table><thead><tr><th>Tanda</th><th>Compra inicial · Colombia</th><th>Compras confirmadas</th><th>Liquidadas</th><th>Ganadas / perdidas</th><th>Total apostado</th><th>Resultado neto</th></tr></thead><tbody id="demo-batches-rows"></tbody></table></div>
 <div class="divider"></div>
 <h3>Ensayo secuencial comparativo · 5 CALL / 5 PUT</h3>
 <p class="note">Cinco CALL y cinco PUT, alternados, de 5 ticks, uno tras otro. Máximo US$10 de apuestas virtuales en esta prueba. Detener ante 3 pérdidas consecutivas, resultado acumulado de -US$3, un contrato sin confirmar, falta de saldo verificado o si se oculta la pestaña. Requiere confirmación expresa y mantener abierto este navegador. No demuestra ventaja predictiva ni activa operaciones reales.</p>
