@@ -912,16 +912,30 @@ export class DerivDemoConnection extends DurableObject<Env> {
     });
   }
 
-  acknowledgeDemoBurst(input:{nonce:string;id:number;response:unknown}){
+  acknowledgeDemoBurst(input:{nonce:string;id:number;response:unknown;
+    timing?:{preBuyAgeMs?:number;reserveRttMs?:number;buyAckRttMs?:number}}){
     const b=this.burstState();
     if(!b||b.state!=='BUYING'||b.nonce!==input?.nonce||
        b.pendingId!==input.id)throw Error('DEMO_BURST_ACK_NOT_ALLOWED');
-    const row=this.ctx.storage.sql.exec<{buy_cents:number}>(
-      "SELECT buy_cents FROM demo_trades WHERE id=? AND state='UNKNOWN'",input.id
+    const row=this.ctx.storage.sql.exec<{buy_cents:number;decision_json:string|null}>(
+      "SELECT buy_cents,decision_json FROM demo_trades WHERE id=? AND state='UNKNOWN'",input.id
     ).toArray()[0];
     if(!row)throw Error('DEMO_BURST_ACK_NOT_ALLOWED');
     const ack=parseDemoBuyResponse(input.response,row.buy_cents);
     this.ctx.storage.transactionSync(()=>{
+      if(input.timing&&row.decision_json){
+        let previous:Record<string,unknown>={};
+        try{previous=JSON.parse(row.decision_json) as Record<string,unknown>;}catch{}
+        const boundedMs=(n:unknown)=>typeof n==='number'&&Number.isFinite(n)&&
+          Number.isSafeInteger(n)&&n>=0&&n<=30000?n:null;
+        const newEvidence={...previous,
+          preBuyAgeMs:boundedMs(input.timing.preBuyAgeMs),
+          reserveRttMs:boundedMs(input.timing.reserveRttMs),
+          buyAckRttMs:boundedMs(input.timing.buyAckRttMs)};
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET decision_json=? WHERE id=? AND state='UNKNOWN'",
+          JSON.stringify(newEvidence),input.id);
+      }
       if(!ack.accepted){
         this.ctx.storage.sql.exec(
           "UPDATE demo_trades SET state='REJECTED',code=? WHERE id=? AND state='UNKNOWN'",
