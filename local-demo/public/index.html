@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ecopiensa | Deriv DEMO local ligero</title><link rel="stylesheet" href="/style.css"/><script src="/app.js" defer></script></head>
 <body><main>
- <header><div><p class="eyebrow">Fundación Ecopiensa Evolution · solo en este computador</p><h1 id="version-title">Deriv DEMO · aplicación local v11.7</h1><p>Datos oficiales de Deriv y análisis de ticks. Sin Cloudflare, sin PAPER y sin órdenes automáticas.</p></div><span id="online" class="pill">Cargando...</span></header>
+ <header><div><p class="eyebrow">Fundación Ecopiensa Evolution · solo en este computador</p><h1 id="version-title">Deriv DEMO · aplicación local v11.8</h1><p>Datos oficiales de Deriv y análisis de ticks. Sin Cloudflare, sin PAPER y sin órdenes automáticas.</p></div><span id="online" class="pill">Cargando...</span></header>
  <div class="warning" id="pending-update" hidden><b>Actualización disponible en GitHub.</b> Cierra el servidor con el acceso directo del Escritorio y vuelve a abrir Ecopiensa para instalarla de forma segura.</div>
- <div class="warning">Esta instalación es <b>solo lectura</b>. No compra ni vende contratos. Las señales SMA/RSI y el historial pasado no garantizan resultados. No opera la cuenta REAL.</div>
+ <div class="warning"><b>DEMO:</b> piloto manual de un contrato, con señal reciente, saldo verificado y confirmación expresa. <b>REAL:</b> operaciones y retiros deshabilitados. El historial pasado no garantiza resultados.</div>
  <section class="cards"><article><span>Versión local</span><strong id="version">—</strong><small id="github-version" style="display:block;margin-top:6px;opacity:.8">GitHub pc-local: comprobando...</small></article><article><span>Saldo DEMO verificado</span><strong id="balance">Sin conexión</strong></article><article><span>Estado OAuth</span><strong id="connection">Sin verificar</strong></article><article><span>Origen de precios</span><strong id="feed">Conectando...</strong></article></section>
  <section><h2>1. Conectar cuenta oficial DEMO</h2><p>Introduce el App ID público que ya tenías en Deriv. Registra como redirección <code>http://localhost:8765/api/oauth/callback</code> en el portal de la aplicación. Las credenciales se cifran y quedan exclusivamente en el PC.</p>
   <div class="actions"><label>App ID público <input id="app-id" placeholder="App ID OAuth 2.0 o PAT" maxlength="128" autocomplete="off"></label><button id="authorize">Autorizar OAuth 2.0</button><button id="refresh" class="outline">Actualizar saldo</button><button id="history" class="outline">Consultar últimos contratos</button></div>
@@ -18,5 +18,19 @@
  <section><h2>3. Historial y entrenamiento experimental</h2><p>Datos de las 48 operaciones recuperadas; la fuente fue observada desde navegador y no está conciliada de forma independiente. No existe todavía un modelo entrenado y validado.</p>
  <div id="training" class="training"></div></section>
  <section><h2>4. Cotización sin comprar</h2><div class="actions"><label>Índice <select id="quote-symbol"><option>R_100</option><option>R_75</option><option>R_10</option><option>1HZ100V</option></select></label><label>Dirección <select id="quote-dir"><option>CALL</option><option>PUT</option></select></label><label>Apuesta virtual <select id="quote-stake"><option value="0.35">US$0,35</option><option value="0.5">US$0,50</option><option value="0.75">US$0,75</option><option value="0.9">US$0,90</option><option value="1">US$1,00</option></select></label><button id="quote-btn" class="outline">Consultar propuesta oficial</button></div><p id="quote-message" class="msg"></p></section>
+ <section><h2>5. Piloto de compras DEMO y MCP local</h2>
+  <p>Solo se permite comprar un contrato DEMO a la vez, con señal fresca y saldo oficial verificado. Si no hay confirmación del broker, las nuevas compras quedan bloqueadas hasta conciliación. El canal REAL no está implementado.</p>
+  <div class="actions">
+   <button id="demo-intent" class="outline">Preparar UNA compra DEMO</button>
+   <button id="demo-refresh" class="outline">Ver órdenes y solicitudes MCP</button>
+   <label>Confirmar <input id="demo-confirm-text" placeholder="CONFIRMAR COMPRA DEMO" autocomplete="off" spellcheck="false"></label>
+   <button id="demo-confirm" disabled>Confirmar compra DEMO</button>
+  </div>
+  <div class="actions"><button id="demo-cancel" class="outline" disabled>Cancelar solicitud no enviada</button><button id="demo-reconcile" class="outline">Revisar contrato pendiente</button></div>
+  <p class="msg" id="demo-message">Sin autorización DEMO no se envían compras.</p>
+  <div class="training" id="demo-order-stats"></div>
+  <p><small>La herramienta MCP instalada en este PC permite consultar señales, balance e historial y crear una <b>solicitud</b> de compra. ChatGPT no puede completar una compra automáticamente: se exige confirmación local y autenticación a través del túnel MCP seguro.</small></p>
+  <div class="warning">Hasta validar las operaciones DEMO, no hay automatización, aumento de apuestas, acceso a REAL ni retiros.</div>
+ </section>
  <footer>Ejecuta solo desde el PC. Versión oficial de código: GitHub, rama <code>pc-local</code> (actualizaciones al cerrar/abrir). Bases de datos, App ID y secretos <b>nunca</b> se suben a GitHub.</footer>
 </main></body></html>
