@@ -62,16 +62,20 @@
 </div>
 <div class="divider"></div>
 <h3>Tanda DEMO · compras independientes, hasta 10 contratos</h3>
-<p class="note">Una tanda de hasta diez compras auténticas en cuenta DEMO, cada una por US$1 virtual, R_100, duración 5 ticks. Presupuesto bruto máximo US$10 por tanda. El bot analiza CALL / PUT / ESPERAR y, si hay señal vigente, la conserva para esta tanda. NO es una compra de US$10 ni una simulación PAPER. Solo cuentan las compras cuyo contrato haya sido confirmado por Deriv. Si ya existen operaciones en la tanda, se respeta el presupuesto y los cupos restantes.</p>
+<p class="note">Una tanda solicita hasta diez contratos independientes de Deriv DEMO (5 ticks). Tú eliges el importe permitido y el número de compras, con máximo US$10 de apuestas brutas por tanda. El bot consulta los índices admitidos, compara señales SMA/RSI y puede elegir CALL, PUT o ESPERAR para cada contrato. Las señales no son probabilidades calibradas ni garantizan rentabilidad. La cuenta REAL no se utiliza.</p>
+<div class="tools"><button id="demo-market-scan" type="button">Analizar índices disponibles (sin comprar)</button></div>
+<p id="demo-market-scan-status" class="note" role="status">Mercados con propuestas públicas verificadas: R_100, R_75, R_10 y 1HZ100V. Los símbolos admiten cotización DEMO, pero se vuelven a comprobar antes de cualquier compra.</p>
+<div class="table-scroll"><table><thead><tr><th>Índice</th><th>Último precio</th><th>Señal</th><th>SMA 8 / SMA 21</th><th>RSI</th><th>Score técnico</th></tr></thead><tbody id="demo-market-scan-rows"></tbody></table></div>
 <div class="tools">
  <label>Compras DEMO a solicitar <input id="demo-burst-count" type="number" min="1" max="10" step="1" value="10" inputmode="numeric" style="width:82px"></label>
+ <label>Apuesta por contrato <select id="demo-burst-stake"><option value="35">US$0,35</option><option value="50">US$0,50</option><option value="75">US$0,75</option><option value="90">US$0,90</option><option value="100" selected>US$1,00</option></select></label>
  <button id="demo-burst-start" disabled>Bot decide y compra hasta 10 contratos DEMO</button>
  <button id="demo-burst-stop" disabled>Detener siguientes compras</button>
  <button id="demo-burst-reconcile" disabled>Verificar liquidaciones de la tanda</button>
 </div>
 <p id="demo-burst-plan" class="note" role="status">Tanda no preparada. Se comprobarán la cantidad disponible y los US$10 de límite.</p>
 <p id="demo-burst-live" class="note" role="status">Órdenes confirmadas: 0. Ninguna compra se genera al cargar el panel.</p><p id="demo-burst-diagnosis" class="note" role="status">Diagnóstico de la última tanda: pendiente de resultados DEMO.</p><div class="tools"><a id="demo-burst-inline-csv" href="/api/deriv/demo/burst.csv">Descargar análisis CSV de esta tanda DEMO</a><a href="/api/deriv/demo/trades.csv">Historial completo de contratos DEMO CSV</a></div>
-<div class="table-scroll"><table><thead><tr><th>Contrato DEMO confirmado</th><th>Dirección</th><th>Importe</th><th>Estado</th><th>Resultado neto</th></tr></thead><tbody id="demo-burst-rows"></tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th>Contrato DEMO confirmado</th><th>Mercado</th><th>Dirección</th><th>Importe</th><th>Estado</th><th>Resultado neto</th></tr></thead><tbody id="demo-burst-rows"></tbody></table></div>
 <div class="divider"></div>
 <h3>Ensayo secuencial comparativo · 5 CALL / 5 PUT</h3>
 <p class="note">Cinco CALL y cinco PUT, alternados, de 5 ticks, uno tras otro. Máximo US$10 de apuestas virtuales en esta prueba. Detener ante 3 pérdidas consecutivas, resultado acumulado de -US$3, un contrato sin confirmar, falta de saldo verificado o si se oculta la pestaña. Requiere confirmación expresa y mantener abierto este navegador. No demuestra ventaja predictiva ni activa operaciones reales.</p>
@@ -125,6 +129,8 @@ let mcpIntentCurrent=null,mcpIntentBusy=false;
 let browserBotSignal=null,browserBotBusy=false;
 let demoBalancedRunning=false,demoBalancedStop=false;
 let demoBurstRunning=false,demoBurstStopRequested=false,demoBurstSettling=false;
+const demoScanSymbols=['R_100','R_75','R_10','1HZ100V'];
+let demoMarketScanBusy=false,demoMarketLastScan=[],demoMarketLastAt=0;
 let historyMode='DEMO'; // Never persists across reloads; server verifies a one-use approval too.
 const money=c=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'USD'}).format(c/100);
 const price=v=>Number.isFinite(v)?new Intl.NumberFormat('es-CO',{maximumFractionDigits:5}).format(v):'—';
