@@ -77,6 +77,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.7 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:01:25.837Z (UTC).
+- **Commit de origen:** `c5e7bdd56576`.
+- Servir archivos CSV privados de todas las compras DEMO o solo de última tanda, con cuentas protegidas
+- Permitir exportar CSV íntegro del libro DEMO y CSV exclusivo de la última tanda, sin datos PAPER
+
 ## v8.6 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:00:50.368Z (UTC).

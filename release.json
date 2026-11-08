@@ -1,11 +1,11 @@
 {
-  "version": "8.6",
-  "updatedAt": "2026-11-08T01:00:50.368Z",
-  "summary": "Crear exportador auditado de contratos DEMO con hora de compra/liquidación, indicadores y diagnóstico de pérdidas",
+  "version": "8.7",
+  "updatedAt": "2026-11-08T01:01:25.837Z",
+  "summary": "Servir archivos CSV privados de todas las compras DEMO o solo de última tanda, con cuentas protegidas",
   "changes": [
-    "Crear exportador auditado de contratos DEMO con hora de compra/liquidación, indicadores y diagnóstico de pérdidas",
-    "Registrar fechas reales de compra y de liquidación para tablas y CSV DEMO con migración conservadora"
+    "Servir archivos CSV privados de todas las compras DEMO o solo de última tanda, con cuentas protegidas",
+    "Permitir exportar CSV íntegro del libro DEMO y CSV exclusivo de la última tanda, sin datos PAPER"
   ],
-  "sourceCommit": "4107178a8a8b466c7e1a61e34e1990ab51cef26e",
+  "sourceCommit": "c5e7bdd565762f4dd53a5e9bbb029d9153059b6c",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
