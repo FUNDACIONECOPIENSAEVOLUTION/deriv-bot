@@ -21,7 +21,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const columns=new Set(db.prepare("PRAGMA table_info(demo_local_orders)").all().map(x=>x.name));
  for(const [name,sqlType] of Object.entries({batch_id:'TEXT',created_at_ms:'INTEGER',bought_at_ms:'INTEGER',
   settled_at_ms:'INTEGER',proposal_latency_ms:'INTEGER',buy_latency_ms:'INTEGER',
-  signal_age_ms:'INTEGER',signal_rsi:'REAL',signal_sma_fast:'REAL',signal_sma_slow:'REAL'})){
+  signal_age_ms:'INTEGER',signal_rsi:'REAL',signal_sma_fast:'REAL',signal_sma_slow:'REAL',
+  signal_ema20:'REAL',signal_ema50:'REAL',signal_atr14:'REAL',signal_momentum5:'REAL',
+  signal_strength:'INTEGER',proposal_payout_cents:'INTEGER'})){
   if(!columns.has(name))db.exec('ALTER TABLE demo_local_orders ADD COLUMN '+name+' '+sqlType);
  }
  // Any interrupted BUY may have reached the broker. Do NOT send another until reconciled.
@@ -37,10 +39,13 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const reserved=db.prepare("SELECT COUNT(*) AS n,COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN','SETTLED')");
  const exposure=db.prepare("SELECT COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN') AND id<>?");
  const losses=db.prepare("SELECT COALESCE(SUM(CASE WHEN pnl_cents<0 THEN -pnl_cents ELSE 0 END),0) AS loss FROM demo_local_orders WHERE state='SETTLED' AND created_at>=?");
- const list=db.prepare('SELECT id,created_at AS createdAt,created_at_ms AS createdAtMs,bought_at_ms AS boughtAtMs,settled_at_ms AS settledAtMs,batch_id AS batchId,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode,proposal_latency_ms AS proposalLatencyMs,buy_latency_ms AS buyLatencyMs,signal_age_ms AS signalAgeMs,signal_rsi AS rsi,signal_sma_fast AS smaFast,signal_sma_slow AS smaSlow FROM demo_local_orders ORDER BY created_at DESC,id DESC LIMIT 60');
+ const list=db.prepare('SELECT id,created_at AS createdAt,created_at_ms AS createdAtMs,bought_at_ms AS boughtAtMs,settled_at_ms AS settledAtMs,batch_id AS batchId,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode,proposal_latency_ms AS proposalLatencyMs,buy_latency_ms AS buyLatencyMs,signal_age_ms AS signalAgeMs,signal_rsi AS rsi,signal_sma_fast AS smaFast,signal_sma_slow AS smaSlow,
+  signal_ema20 AS ema20,signal_ema50 AS ema50,signal_atr14 AS atr14,
+  signal_momentum5 AS momentum5,signal_strength AS signalStrength,
+  proposal_payout_cents AS proposalPayoutCents FROM demo_local_orders ORDER BY created_at DESC,id DESC LIMIT 60');
  const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents) VALUES(?,?,?,?,?,?,?,?)');
  const change=db.prepare('UPDATE demo_local_orders SET state=?,updated_at=?,error_code=? WHERE id=?');
- const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=? WHERE id=?");
+ const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=? WHERE id=?");
  const markBatch=db.prepare("UPDATE demo_local_orders SET batch_id=? WHERE id=?");
  const purchasedAt=db.prepare("UPDATE demo_local_orders SET created_at_ms=? WHERE id=?");
  const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=?,settled_at_ms=? WHERE id=?");
@@ -175,7 +180,13 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   // Must verify the official DEMO USD balance again immediately before purchase.
   const fresh=await accountLookup(creds,a.accountId);
   if(fresh.accountId!==a.accountId)throw Error('DEMO_ACCOUNT_MISMATCH');
-  riskCheck(row.symbol,row.direction,row.stake_cents,cents(fresh.balance),id);
+  try{
+   riskCheck(row.symbol,row.direction,row.stake_cents,cents(fresh.balance),id);
+  }catch(e){
+   const code=cleanError(e);
+   change.run('REJECTED',epoch(),code,id);
+   return {id,state:'REJECTED',error:code,brokerOrders:0,accountType:'demo'};
+  }
   change.run('PREPARING',epoch(),null,id);
   let socket=null,dispatched=false,acknowledged=false;
   try{
@@ -205,7 +216,10 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    const contractId=String(buy.buy.contract_id),paid=Number(buy.buy.buy_price);
    recordBuy.run(epoch(),contractId,Number.isFinite(paid)?cents(paid):row.stake_cents,Date.now(),
     proposalLatency,Math.round(performance.now()-buyStart),
-    observed?.ageReceivedMs??null,observed?.rsi14??null,observed?.sma8??null,observed?.sma21??null,id);
+    observed?.ageReceivedMs??null,observed?.rsi14??null,observed?.sma8??null,observed?.sma21??null,
+     observed?.ema20??null,observed?.ema50??null,observed?.atr14??null,
+     observed?.momentum5??null,observed?.signalStrength??null,
+     Number.isFinite(Number(proposal.payout))?cents(proposal.payout):null,id);
    audit('DEMO_BUY_CONFIRMED','Contrato DEMO confirmado por broker');
    const result=await readSettlement(socket,contractId);
    if(result.settled){
@@ -246,7 +260,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const rows=list.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
-  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','errorCode'];
+  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','errorCode'];
    const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(x[h])).join(',')).join('\r\n')+'\r\n';
  }
