@@ -1,0 +1,81 @@
+name: PC local · probar y publicar versión (+0.1)
+on:
+  push:
+    branches: [pc-local]
+    paths:
+      - 'local-demo/**'
+      - 'scripts/build_pc_local_release.py'
+      - '.github/workflows/pc-local-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: ecopiensa-pc-local-releases
+  cancel-in-progress: false
+jobs:
+  verify-and-publish:
+    # Evita reversionar el propio commit automático.
+    if: "!contains(github.event.head_commit.message, '[pc-auto-version]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Descargar fuentes de pc-local
+        uses: actions/checkout@v4
+        with:
+          ref: pc-local
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Comprobar sintaxis y controles de seguridad antes de publicar
+        run: |
+          set -euo pipefail
+          node --check local-demo/server.mjs
+          node --check local-demo/public/app.js
+          node --check local-demo/demo-trading.mjs
+          node --check local-demo/demo-burst.mjs
+          node --check local-demo/mcp-local.mjs
+          node --test local-demo/test/*.test.mjs
+      - name: Incrementar v+0.1 y preparar paquete para Windows
+        run: python3 scripts/build_pc_local_release.py
+      - name: Comprobar que el paquete final coincide con su manifiesto
+        run: |
+          set -euo pipefail
+          node --test local-demo/test/*.test.mjs
+          python3 - <<'PY'
+          import base64, hashlib, json, pathlib, zipfile, io
+          manifest=json.loads(pathlib.Path('pc-release.json').read_text())
+          local=json.loads(pathlib.Path('local-demo/local-release.json').read_text())
+          assert manifest['version']==local['version']
+          assert manifest['trading']=='demo-owner-authorized-bursts'
+          version=manifest['version']
+          pieces=[pathlib.Path(f'pc-bundles/ecopiensa-local-{version}.zip.b64.part{i:02}').read_text().strip() for i in range(manifest['parts'])]
+          payload=base64.b64decode(''.join(pieces),validate=True)
+          assert hashlib.sha256(payload).hexdigest()==manifest['archiveSha256']
+          with zipfile.ZipFile(io.BytesIO(payload)) as bundle:
+              files=set(bundle.namelist())
+              for f in ('local-demo/server.mjs','local-demo/demo-trading.mjs','local-demo/demo-burst.mjs',
+                        'local-demo/mcp-local.mjs','local-demo/public/app.js','local-demo/public/index.html',
+                        'local-demo/Actualizar-Desde-GitHub.ps1'):
+                  assert f in files, f
+              assert not any('/data/' in f or f.endswith('.sqlite') for f in files)
+          print('PACKAGE_VERIFIED',version,manifest['archiveSha256'])
+          PY
+      - name: Guardar paquete versionado sin tocar main ni Cloudflare
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pc-release.json pc-bundles/ local-demo/local-release.json local-demo/package.json \
+            local-demo/CHANGELOG-LOCAL.md local-demo/public/index.html
+          git commit -m "[pc-auto-version] Publicar paquete Windows v$(python3 -c "import json;print(json.load(open('pc-release.json'))['version'])") (+0.1)"
+          git push origin HEAD:pc-local
+      - name: Resumen
+        run: |
+          echo "## Ecopiensa PC · Código de Windows" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Versión: $(python3 -c "import json;print(json.load(open('pc-release.json'))['version'])")" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Rama origen: pc-local (solo respaldo y actualizaciones)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Runtime operativo: D:\\deriv-bot\\programa (PC del usuario)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Operaciones REALES: BLOQUEADAS" >> "$GITHUB_STEP_SUMMARY"
