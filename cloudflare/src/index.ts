@@ -243,7 +243,7 @@ export default {
         demo:demoReady?'ready':'unavailable',
         // A ready storage service is NOT the same as an authenticated broker session.
         brokerAuthorization:'not_checked',noOrders:true},
-        paperReady&&demoReady?200:503,{'Cache-Control':'no-store'});
+        demoReady?200:503,{'Cache-Control':'no-store'});
     }
     if(url.pathname==='/api/health/deriv-socket'&&request.method==='GET'){
       const result=await readDerivSocketTransport();
