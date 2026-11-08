@@ -592,7 +592,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const a=analyzeSignal(prices);
     const direction=a.direction===1?'UP':a.direction===-1?'DOWN':'HOLD';
     const record={direction,reason:a.reason,quoteAgeSeconds:n-times[149],
-      at:n,symbol:h.symbol,source:'OWNER_BROWSER_REPORTED_PUBLIC_'+h.symbol,
+      at:n,lastTickEpoch:times[149],symbol:h.symbol,
+      source:'OWNER_BROWSER_REPORTED_PUBLIC_'+h.symbol,
       verifiedIndependently:false,valid:direction!=='HOLD',
       lastPrice:prices[prices.length-1],
       indicator:{fast:a.fast,slow:a.slow,rsi:a.rsi,volatility:a.volatility}};
@@ -604,7 +605,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
   getBrowserSignal(symbol:DemoSymbol='R_100'){
     const saved=this.read<{
       direction:'UP'|'DOWN'|'HOLD';reason:string;quoteAgeSeconds:number;
-      at:number;source:string;verifiedIndependently:boolean;valid:boolean;
+      at:number;lastTickEpoch?:number;source:string;verifiedIndependently:boolean;valid:boolean;
       indicator:{fast:number|null;slow:number|null;rsi:number|null;volatility:number|null}
     }>(symbol==='R_100'?'demo-browser-signal':'demo-browser-signal:'+symbol);
     if(!saved||epoch()-saved.at>10||saved.at>epoch())return {
@@ -803,6 +804,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
     askPrice:number;payout:number;direction?:'UP'|'DOWN';symbol?:DemoSymbol;evidence?:{
       fast?:number|null;slow?:number|null;rsi?:number|null;
       volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
+      proposalRttMs?:number|null;signalAgeAtProposalSec?:number|null;
+      pageLoadedEpoch?:number|null;browserNavigationType?:string;pageSessionId?:string;
       reason?:string}}){
     const b=this.burstState();
     // Freeze a single owner-approved direction for at most 45 seconds.
@@ -818,7 +821,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       throw Error('DEMO_BURST_SYMBOL_OR_DIRECTION_INVALID');
     const latestSignal=this.getBrowserSignal(symbol);
     if(!latestSignal.valid||latestSignal.direction!==direction||
-       latestSignal.quoteAgeSeconds===null||latestSignal.quoteAgeSeconds>5)
+       latestSignal.quoteAgeSeconds===null||latestSignal.quoteAgeSeconds>3)
       throw Error('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
     const credentials=await this.verifiedDemoCredentials();
     if(credentials.accountId!==b.accountId)throw Error('DEMO_ONLY');
@@ -852,6 +855,11 @@ export class DerivDemoConnection extends DurableObject<Env> {
         throw Error('DEMO_BURST_ATOMIC_LOCK');
       if(epoch()-(this.read<number>('demo-last-balance-at')||0)>30)
         throw Error('DEMO_BALANCE_REFRESH_REQUIRED');
+      // Recheck freshness atomically: authorization/crypto may take time.
+      const atReserveSignal=this.getBrowserSignal(symbol);
+      if(!atReserveSignal.valid||atReserveSignal.direction!==direction||
+         atReserveSignal.quoteAgeSeconds===null||atReserveSignal.quoteAgeSeconds>3)
+        throw Error('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
       const limits=planDemoBurst(1,{
         pilotPurchases:snap.pilotPurchases,
         pilotCommittedCents:snap.pilotCommittedCents,
@@ -879,6 +887,19 @@ export class DerivDemoConnection extends DurableObject<Env> {
           volatility:researchNumber(d.volatility,0,100),
           entryQuote:researchNumber(d.entryQuote,0,1000000),
           quoteAgeSeconds:researchNumber(d.quoteAgeSeconds,0,3600),
+          // Server reservation age (based on browser-supplied public market timestamps).
+          analysisAtEpoch:Number.isSafeInteger(atReserveSignal.at)?atReserveSignal.at:null,
+          lastSourceTickEpoch:Number.isSafeInteger(atReserveSignal.lastTickEpoch)?
+            atReserveSignal.lastTickEpoch:null,
+          quoteAgeAtReserveSeconds:atReserveSignal.quoteAgeSeconds,
+          signalAgeAtProposalSec:researchNumber(d.signalAgeAtProposalSec,0,30),
+          proposalRttMs:researchNumber(d.proposalRttMs,0,30000),
+          pageLoadedEpoch:researchNumber(d.pageLoadedEpoch,0,2100000000),
+          browserNavigationType:['reload','navigate','back_forward','unknown'].includes(d.browserNavigationType||'')?
+            d.browserNavigationType:'unknown',
+          pageSessionId:typeof d.pageSessionId==='string'&&/^[0-9a-f-]{36}$/.test(d.pageSessionId)?
+            d.pageSessionId:null,
+          sourceIndicators:'150_public_ticks_not_minute_candles',
           reason:typeof d.reason==='string'&&/^[A-Z_]{1,45}$/.test(d.reason)
             ?d.reason:'UNVERIFIED',recordedAt:epoch()})
       );

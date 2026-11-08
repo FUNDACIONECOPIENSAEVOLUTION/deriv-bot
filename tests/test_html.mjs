@@ -30,6 +30,11 @@ for(const id of ['demo-apply-stake','demo-stake-selection-status','official-demo
 }
 assert.ok(panel.includes("ticks:symbol,subscribe:1"),'El índice elegido debe recibir ticks públicos en vivo');
 assert.ok(panel.includes('syncBrokerBalance()'),'El saldo oficial debe refrescarse automáticamente');
+assert.ok(panel.includes('DEMO_BURST_FRESHNESS_SECONDS=3')&&
+  panel.includes('demoAgeSinceSignal(fresh,signalReceivedAtMs)'),
+  'Cada compra DEMO debe comprobar la edad real de la señal también después de la cotización');
+for(const field of ['proposalRttMs','demoPageNavigationType','demoPageSessionId','demoPageLoadedEpoch'])
+ assert.ok(panel.includes(field),'La trazabilidad DEMO debe incluir '+field);
 assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<(demoBurstActive()?5000:20000)'),
   'La sincronización de saldo debe estar acotada: 5 segundos en tanda y 20 en reposo');
 assert.ok(panel.includes('demoLoadBusy') && panel.includes('cache:\'no-store\''),

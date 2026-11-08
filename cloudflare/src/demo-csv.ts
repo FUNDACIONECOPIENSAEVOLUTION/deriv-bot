@@ -12,7 +12,12 @@ export const DEMO_CSV_COLUMNS=[
  'pago_derivado_de_pnl_usd','ganancia_neta_usd',
  'precio_entrada','precio_salida','estrategia','senal','sma_8','sma_21',
  'rsi','volatilidad','edad_cotizacion_seg','precio_senal',
- 'razon_senal','diagnostico','verificacion'
+ 'razon_senal','diagnostico','verificacion',
+ // Added in v11.0: client-observed navigation and quote timing; historical fields stay blank.
+ 'analisis_epoch','ultimo_tick_epoch','edad_cotizacion_reserva_seg',
+ 'edad_cotizacion_tras_propuesta_seg','latencia_propuesta_ms',
+ 'navegacion_pagina','inicio_pagina_epoch','sesion_pagina',
+ 'base_indicadores','desviacion_entrada_vs_senal_pct'
 ] as const;
 const number=(x:unknown)=>typeof x==='number'&&Number.isFinite(x)?x:null;
 const cell=(x:unknown)=>{
@@ -49,6 +54,9 @@ export function demoTradesCsv(rows:DemoCsvRow[]):string{
    if(x&&typeof x==='object'&&!Array.isArray(x))d=x;
   }catch{d={};}
   const nums=(key:string)=>number(d[key]);
+  const signalPrice=nums('entryQuote');
+  const entryDeviationPct=row.entry_spot!==null&&signalPrice!==null&&signalPrice>0
+    ?(row.entry_spot/signalPrice-1)*100:null;
   const verification=row.code==='CLIENT_OBSERVED'?
    'OBSERVADO_NAVEGADOR_NO_VERIFICADO_INDEPENDIENTEMENTE':
     row.state==='UNKNOWN'?'ACEPTACION_INCIERTA_NO_REINTENTAR':
@@ -63,7 +71,12 @@ export function demoTradesCsv(rows:DemoCsvRow[]):string{
    asUsd(row.pnl_cents),
    row.entry_spot,row.exit_spot,d.strategy,d.direction,nums('fast'),
    nums('slow'),nums('rsi'),nums('volatility'),nums('quoteAgeSeconds'),
-   nums('entryQuote'),d.reason,reason(row),verification
+   nums('entryQuote'),d.reason,reason(row),verification,
+   nums('analysisAtEpoch'),nums('lastSourceTickEpoch'),
+   nums('quoteAgeAtReserveSeconds'),nums('signalAgeAtProposalSec'),
+   nums('proposalRttMs'),d.browserNavigationType,d.pageLoadedEpoch,d.pageSessionId,
+   d.sourceIndicators,
+   entryDeviationPct
   ];
   return v.map(cell).join(',');
  });

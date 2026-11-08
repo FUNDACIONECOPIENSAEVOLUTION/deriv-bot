@@ -143,6 +143,15 @@ let demoBalancedRunning=false,demoBalancedStop=false;
 let demoBurstRunning=false,demoBurstStopRequested=false,demoBurstSettling=false;
 const demoScanSymbols=['R_100','R_75','R_10','1HZ100V'];
 let demoMarketScanBusy=false,demoMarketLastScan=[],demoMarketLastAt=0;
+const demoPageSessionId=crypto.randomUUID();
+const demoPageLoadedEpoch=Math.floor(Date.now()/1000);
+const demoPageNavigationType=(()=>{
+ const type=performance.getEntriesByType('navigation')[0]?.type;
+ return ['reload','navigate','back_forward'].includes(type)?type:'unknown';
+})();
+const DEMO_BURST_FRESHNESS_SECONDS=3;
+const demoAgeSinceSignal=(signal,receivedAtMs)=>Number(signal?.quoteAgeSeconds)+
+ (performance.now()-receivedAtMs)/1000;
 let historyMode='DEMO'; // Never persists across reloads; server verifies a one-use approval too.
 const money=c=>new Intl.NumberFormat('es-CO',{style:'currency',currency:'USD'}).format(c/100);
 const price=v=>Number.isFinite(v)?new Intl.NumberFormat('es-CO',{maximumFractionDigits:5}).format(v):'—';
@@ -1441,7 +1450,8 @@ function presentMarketScan(rows){
   'Se revisaron '+rows.length+' índices públicos. '+rows.filter(x=>x.valid).length+
   ' señales técnicas aceptadas, '+rows.filter(x=>!x.valid).length+
   ' mercados ESPERAR/no verificables. Score comparativo SMA/RSI, NO porcentaje de aciertos. '+
-  'Antes de comprar se pide una propuesta auténtica de Deriv para el mercado elegido.';
+  'Antes de BUY se valida que la señal tenga máximo 3 s en reserva, '+
+  'sin recargar la página. No garantiza sincronización subsegundo.';
 }
 async function scanDemoMarkets(){
  if(demoMarketScanBusy)return [];
@@ -1908,21 +1918,32 @@ $('demo-burst-start').onclick=async()=>{
     output.textContent='ESPERAR: ninguna señal válida para el contrato '+(i+1)+
       '. Se mantiene el saldo y no se fuerza la compra.';break;
    }
-   let selected=null,quote=null;
+   let selected=null,quote=null,staleSkipped=0;
    for(const candidate of ranked){
     if(demoBurstStopRequested||document.hidden)break;
     const key=candidate.symbol+':'+candidate.direction;
     if((pairCounts.get(key)||0)>=2)continue;
     let fresh;
-    try{fresh=await fetchFreshBrowserBotSignal(candidate.symbol);}
+    let signalReceivedAtMs;
+    try{fresh=await fetchFreshBrowserBotSignal(candidate.symbol);signalReceivedAtMs=performance.now();}
     catch{continue;}
     if(!fresh||fresh.valid!==true||fresh.direction!==candidate.direction||
-       fresh.quoteAgeSeconds>5||!['UP','DOWN'].includes(fresh.direction))continue;
+       !Number.isSafeInteger(fresh.at)||!Number.isFinite(fresh.quoteAgeSeconds)||
+       !['UP','DOWN'].includes(fresh.direction))continue;
+    if(demoAgeSinceSignal(fresh,signalReceivedAtMs)>DEMO_BURST_FRESHNESS_SECONDS){
+      staleSkipped++;continue;
+    }
     if(scoreDemoMarketSignal(fresh)<35)continue;
     let proposed;
+    const proposalStartedAtMs=performance.now();
     try{proposed=await brokerMessage(ws,
       proposalRequest(fresh.direction,stakeCents,candidate.symbol),8500);}
     catch{continue;}
+    const proposalRttMs=Math.max(0,Math.round(performance.now()-proposalStartedAtMs));
+    const signalAgeAtProposalSec=demoAgeSinceSignal(fresh,signalReceivedAtMs);
+    if(signalAgeAtProposalSec>DEMO_BURST_FRESHNESS_SECONDS){
+      staleSkipped++;continue;
+    }
     const p=proposed.proposal||{},ask=Number(p.ask_price),
       payout=Number(p.payout);
     if(proposed.msg_type!=='proposal'||proposed.error||proposed.errors||
@@ -1934,13 +1955,15 @@ $('demo-burst-start').onclick=async()=>{
       lastPrice:Number.isFinite(fresh.lastPrice)?fresh.lastPrice:null,
       indicator:fresh.indicator,
       quoteAgeSeconds:fresh.quoteAgeSeconds,reason:fresh.reason,
+      signalAgeAtProposalSec,proposalRttMs,
       score:scoreDemoMarketSignal(fresh),breakEvenWinPct:Math.round(10000*ask/payout)/100};
     quote=proposed;
     break;
    }
    if(!selected||!quote){
-    output.textContent='ESPERAR: ninguna cotización cumplió señal, pago mínimo y '+
-      'límite de concentración. Confirmadas: '+confirmed+'.';break;
+    output.textContent='ESPERAR: no hubo cotización con señal, pago, frescura y '+
+      'límite de concentración aceptables. Descartes por señal vieja (>3 s): '+
+      staleSkipped+'. Confirmadas: '+confirmed+'.';break;
    }
    const p=quote.proposal,e=selected.indicator||{};
    output.textContent='Bot eligió '+selected.symbol+' '+(selected.direction==='UP'?'CALL':'PUT')+
@@ -1953,6 +1976,9 @@ $('demo-burst-start').onclick=async()=>{
     proposalId:p.id,askPrice:Number(p.ask_price),payout:Number(p.payout),
     evidence:{fast:e.fast,slow:e.slow,rsi:e.rsi,volatility:e.volatility,
       entryQuote:selected.lastPrice,quoteAgeSeconds:selected.quoteAgeSeconds,
+      proposalRttMs:selected.proposalRttMs,signalAgeAtProposalSec:selected.signalAgeAtProposalSec,
+      browserNavigationType:demoPageNavigationType,
+      pageSessionId:demoPageSessionId,pageLoadedEpoch:demoPageLoadedEpoch,
       reason:selected.reason}
    });
    if(reserved.mode!=='DEMO_BURST_RESERVED'||reserved.accountType!=='demo'||

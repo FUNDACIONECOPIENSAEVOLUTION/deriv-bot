@@ -416,7 +416,36 @@ it('records ten distinct confirmed broker DEMO contract IDs, one buy reservation
  expect(session.stakeCents).toBe(100);
  expect(session.autoRetry).toBe(false);
  expect(session.wsUrl).toContain('/ws/demo?otp=');
+ // An old browser-reported tick must not reserve a demo order.
+ await runInDurableObject(stub,(_instance,ctx)=>{
+  ctx.storage.sql.exec('UPDATE demo_connection SET data=? WHERE slot=?',
+    JSON.stringify({direction:'UP',reason:'TREND_AND_MOMENTUM',
+      quoteAgeSeconds:5,at:now-5,source:'OWNER_BROWSER_REPORTED_PUBLIC_R_100',
+      verifiedIndependently:false,valid:true,
+      indicator:{fast:551,slow:550,rsi:59,volatility:0.02}}),'demo-browser-signal');
+ });
+ expect(await errorFrom(stub,instance=>instance.reserveDemoBurst({
+   nonce:session.nonce,proposalId:'0'.repeat(36),askPrice:1,payout:1.80
+ }))).toBe('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
+ expect((await stub.demoBurstStatus()).confirmed).toBe(0);
+ await runInDurableObject(stub,(_instance,ctx)=>{
+  ctx.storage.sql.exec('UPDATE demo_connection SET data=? WHERE slot=?',
+    JSON.stringify({direction:'UP',reason:'TREND_AND_MOMENTUM',
+      quoteAgeSeconds:0,at:Math.floor(Date.now()/1000),
+      source:'OWNER_BROWSER_REPORTED_PUBLIC_R_100',
+      verifiedIndependently:false,valid:true,
+      indicator:{fast:551,slow:550,rsi:59,volatility:0.02}}),'demo-browser-signal');
+ });
  for(let i=0;i<10;i++){
+  // Browser refreshes public ticks for EACH purchase; the fixture must as well.
+  await runInDurableObject(stub,(_instance,ctx)=>{
+   ctx.storage.sql.exec('UPDATE demo_connection SET data=? WHERE slot=?',
+     JSON.stringify({direction:'UP',reason:'TREND_AND_MOMENTUM',
+       quoteAgeSeconds:0,at:Math.floor(Date.now()/1000),
+       source:'OWNER_BROWSER_REPORTED_PUBLIC_R_100',verifiedIndependently:false,
+       valid:true,indicator:{fast:551,slow:550,rsi:59,volatility:0.02}}),
+     'demo-browser-signal');
+  });
   const reservation=await stub.reserveDemoBurst({
    nonce:session.nonce,proposalId:String(i+1).padStart(36,'0'),
    askPrice:1,payout:1.80,
