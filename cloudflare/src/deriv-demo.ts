@@ -389,7 +389,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       tradeReport:this.reportDemo(),
       demoBurst:this.demoBurstStatus(),
       demoBurstPlan:this.planDemoBurst(10),
-      demoBurstPlans:DEMO_STAKES_CENTS.map(stakeCents=>({stakeCents,...this.planDemoBurst(10,stakeCents)}))};
+      demoBurstPlans:DEMO_STAKES_CENTS.map(stakeCents=>this.planDemoBurst(10,stakeCents))};
   }
   async refresh(){
     const sealed=this.read<{iv:string;data:string}>('credentials');if(!sealed)throw Error('DERIV_NOT_CONNECTED');
