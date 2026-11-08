@@ -92,7 +92,7 @@ it('rejects a real-only authorization without storing a connected balance',async
   expect(JSON.stringify(await stub.status())).not.toContain('4321.99');
 });
 it('guards the demo routes with owner auth, same-origin controls and a browser-bound OAuth state cookie',async()=>{
-  for(const path of ['/api/deriv/status','/api/deriv/callback','/api/deriv/connect','/api/deriv/refresh'])expect((await request(path)).r.status).toBe(401);
+  for(const path of ['/api/deriv/status','/api/deriv/storage-status','/api/deriv/callback','/api/deriv/connect','/api/deriv/refresh'])expect((await request(path)).r.status).toBe(401);
   expect((await request('/api/deriv/connect',{method:'POST',headers:{...headers,Origin:'https://other.example'},body:'{}'})).r.status).toBe(403);
   const start=await request('/api/deriv/connect',{method:'POST',headers,body:JSON.stringify({clientId:'app-123'})});
   expect(start.r.status).toBe(200);const cookie=start.r.headers.get('Set-Cookie')!;expect(cookie).toContain('HttpOnly');expect(cookie).toContain('Secure');
@@ -102,6 +102,11 @@ it('guards the demo routes with owner auth, same-origin controls and a browser-b
   expect((await request(callback,{headers:{...headers,Cookie:cookie.split(';')[0]}})).r.status).toBe(303);
   const status=JSON.parse((await request('/api/deriv/status',{headers})).body);
   expect(status.connected).toBe(true);expect(status.aiConnected).toBe(false);expect(status.executionEnabled).toBe(false);
+  const audit=JSON.parse((await request('/api/deriv/storage-status',{headers})).body);
+  expect(audit).toMatchObject({storage:'ready',hasAppId:true,hasEncryptedCredentials:true,
+    hasSavedSnapshot:true,totalHistoricalRows:0,noOrders:true});
+  expect(JSON.stringify(audit)).not.toContain('fixture-demo-access');
+  expect(JSON.stringify(audit)).not.toContain('app-123');
 });
 it('bounds request bodies and refuses invalid ids, overwritten state and arbitrary callback origins',async()=>{
   expect((await request('/api/deriv/connect',{method:'POST',headers,body:'x'.repeat(2000)})).r.status).toBe(413);
