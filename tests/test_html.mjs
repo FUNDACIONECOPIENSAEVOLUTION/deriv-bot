@@ -41,7 +41,7 @@ assert.ok(panel.includes('void syncBrokerBalance(true)'), 'Actualizar saldo ofic
 assert.ok(panel.includes('if(demoBurstStopRequested||document.hidden)'),
   'La pestaña oculta nunca debe enviar más órdenes DEMO');
 assert.ok(panel.includes("for(let i=0;i<count;i++)"),'Abrir hasta N contratos individuales');
-assert.ok(panel.includes('contractId:c.contractId'), 'Guardar los identificadores distintos devueltos por Deriv');
+assert.ok(panel.includes("c.contractId??'SIN CONFIRMAR'"), 'Mostrar los identificadores por contrato devueltos por Deriv');
 
 
 
