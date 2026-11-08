@@ -79,6 +79,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.9 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:02:49.284Z (UTC).
+- **Commit de origen:** `9c6ecf46f19f`.
+- Reparar tabla superior: vista DEMO auténtica predeterminada con fuente, contrato y precio, PAPER solo en otra pestaña
+
 ## v8.8 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:01:58.100Z (UTC).

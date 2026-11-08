@@ -1,10 +1,10 @@
 {
-  "version": "8.8",
-  "updatedAt": "2026-11-08T01:01:58.100Z",
-  "summary": "Separar en la parte superior tabla DEMO del broker y simulación PAPER, y restaurar CSV última tanda y completo",
+  "version": "8.9",
+  "updatedAt": "2026-11-08T01:02:49.284Z",
+  "summary": "Reparar tabla superior: vista DEMO auténtica predeterminada con fuente, contrato y precio, PAPER solo en otra pestaña",
   "changes": [
-    "Separar en la parte superior tabla DEMO del broker y simulación PAPER, y restaurar CSV última tanda y completo"
+    "Reparar tabla superior: vista DEMO auténtica predeterminada con fuente, contrato y precio, PAPER solo en otra pestaña"
   ],
-  "sourceCommit": "73c74c80b1e062e5694c83d7e064cdb6f5ce96b8",
+  "sourceCommit": "9c6ecf46f19fd3adeb443a96fd0972ebb64bb368",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
