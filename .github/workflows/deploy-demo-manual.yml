@@ -48,7 +48,7 @@ jobs:
           grep -F 'DEMO_STAKES_CENTS=Object.freeze([35,50,75,90,100]' src/demo-risk-policy.ts
           grep -F 'DEMO_AUTOMATIC_STAKES_CENTS=Object.freeze([35,50,75,100]' src/demo-risk-policy.ts
           grep -F 'DEMO_STAKES_CENTS.some(allowed=>allowed===stakeCents)' src/index.ts
-          grep -F "for(const stakeCents of [35,50,75,100])" test/deriv-demo.test.ts
+          grep -F "for(const stakeCents of [35,50,75,90,100])" test/deriv-demo.test.ts
           grep -F "for(const stakeCents of [10,25,30,200])" test/deriv-demo.test.ts
       - name: Comprobar controles DEMO y activación automática solo tras consentimiento persistente
         run: |
