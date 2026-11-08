@@ -93,6 +93,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.3 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:41:54.352Z (UTC).
+- **Commit de origen:** `8d27f9246db6`.
+- Aclarar pago informado versus pago inferido de ganancia neta: en pérdidas no presentar payout cotizado como dinero recibido
+
 ## v10.2 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:41:14.932Z (UTC).

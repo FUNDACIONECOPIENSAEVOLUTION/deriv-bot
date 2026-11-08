@@ -1,11 +1,10 @@
 {
-  "version": "10.2",
-  "updatedAt": "2026-11-08T01:41:14.932Z",
-  "summary": "Calcular P&L total y tasa de aciertos por tanda DEMO, y agrupar historial por runId real",
+  "version": "10.3",
+  "updatedAt": "2026-11-08T01:41:54.352Z",
+  "summary": "Aclarar pago informado versus pago inferido de ganancia neta: en pérdidas no presentar payout cotizado como dinero recibido",
   "changes": [
-    "Calcular P&L total y tasa de aciertos por tanda DEMO, y agrupar historial por runId real",
-    "Destacar total neto, monto apostado, tasa de aciertos y estado de última tanda DEMO; tabla de resultados por tanda"
+    "Aclarar pago informado versus pago inferido de ganancia neta: en pérdidas no presentar payout cotizado como dinero recibido"
   ],
-  "sourceCommit": "234c4f5d4b6a88f72d3961486102f5911665dac8",
+  "sourceCommit": "8d27f9246db6351d304b95ab4329218bc70cd65b",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
