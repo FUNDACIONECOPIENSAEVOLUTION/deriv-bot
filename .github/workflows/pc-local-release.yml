@@ -31,6 +31,7 @@ jobs:
         shell: pwsh
         run: |
           node --check local-demo/server.mjs
+          node --check local-demo/market-analysis.mjs
           node --check local-demo/public/app.js
           node --test local-demo/test/*.test.mjs
   verify-and-publish:
@@ -57,6 +58,7 @@ jobs:
           node --check local-demo/public/app.js
           node --check local-demo/demo-trading.mjs
           node --check local-demo/demo-burst.mjs
+          node --check local-demo/market-analysis.mjs
           node --check local-demo/mcp-local.mjs
           node --test local-demo/test/*.test.mjs
       - name: Incrementar v+0.1 y preparar paquete para Windows
@@ -77,7 +79,7 @@ jobs:
           assert hashlib.sha256(payload).hexdigest()==manifest['archiveSha256']
           with zipfile.ZipFile(io.BytesIO(payload)) as bundle:
               files=set(bundle.namelist())
-              for f in ('local-demo/server.mjs','local-demo/demo-trading.mjs','local-demo/demo-burst.mjs',
+              for f in ('local-demo/server.mjs','local-demo/market-analysis.mjs','local-demo/demo-trading.mjs','local-demo/demo-burst.mjs',
                         'local-demo/mcp-local.mjs','local-demo/public/app.js','local-demo/public/index.html',
                         'local-demo/Actualizar-Desde-GitHub.ps1'):
                   assert f in files, f
