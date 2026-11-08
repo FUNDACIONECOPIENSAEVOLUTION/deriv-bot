@@ -84,6 +84,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.4 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:10:51.614Z (UTC).
+- **Commit de origen:** `205edae8c7ef`.
+- Alimentar tarjetas principales con P&L, contratos abiertos, comprados y liquidados del libro Deriv DEMO
+- Priorizar saldo, P&L, compras y exposición del broker DEMO; mover PAPER a laboratorio plegable
+
 ## v9.3 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:07:30.170Z (UTC).
