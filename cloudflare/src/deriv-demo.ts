@@ -1,4 +1,4 @@
-import { dayAt } from '../../runtime/core.mjs';
+import { dayAt, analyzeSignal } from '../../runtime/core.mjs';
 import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
@@ -510,6 +510,55 @@ export class DerivDemoConnection extends DurableObject<Env> {
    * MCP does not buy Deriv contracts. It may queue ONE strictly DEMO intent.
    * The owner must click an explicit confirmation in the private browser.
    */
+  /**
+   * Evaluate real public tick HISTORY supplied by the owner's authenticated
+   * browser. Cloudflare cannot reliably open the Deriv public WebSocket.
+   * This source is CLIENT-OBSERVED, not independent server verification.
+   */
+  analyzeBrowserPrices(history:unknown) {
+    if(!history||typeof history!=='object'||Array.isArray(history))
+      throw Error('DEMO_BROWSER_PRICES_INVALID');
+    const h=history as {symbol?:unknown;prices?:unknown;times?:unknown};
+    if(h.symbol!=='R_100'||!Array.isArray(h.prices)||!Array.isArray(h.times)
+      ||h.prices.length!==150||h.times.length!==150)
+      throw Error('DEMO_BROWSER_PRICES_INVALID');
+    const n=epoch(),prices:number[]=[],times:number[]=[];
+    for(let i=0;i<150;i++){
+      const raw=h.prices[i],t=h.times[i];
+      if((typeof raw!=='number'&&typeof raw!=='string')
+        ||(typeof t!=='number'&&typeof t!=='string'))
+        throw Error('DEMO_BROWSER_PRICES_INVALID');
+      const v=Number(raw),at=Number(t);
+      if(!Number.isFinite(v)||v<=0||!Number.isSafeInteger(at)
+        ||at<n-900||at>n+5||(i>0&&at<times[i-1]))
+        throw Error('DEMO_BROWSER_PRICES_INVALID');
+      prices.push(v);times.push(at);
+    }
+    if(n-times[149]>10)throw Error('DEMO_BROWSER_PRICES_STALE');
+    const a=analyzeSignal(prices);
+    const direction=a.direction===1?'UP':a.direction===-1?'DOWN':'HOLD';
+    const record={direction,reason:a.reason,quoteAgeSeconds:n-times[149],
+      at:n,source:'OWNER_BROWSER_REPORTED_PUBLIC_R_100',
+      verifiedIndependently:false,valid:direction!=='HOLD',
+      indicator:{fast:a.fast,slow:a.slow,rsi:a.rsi,volatility:a.volatility}};
+    this.write('demo-browser-signal',record);
+    return record;
+  }
+
+  getBrowserSignal(){
+    const saved=this.read<{
+      direction:'UP'|'DOWN'|'HOLD';reason:string;quoteAgeSeconds:number;
+      at:number;source:string;verifiedIndependently:boolean;valid:boolean;
+      indicator:{fast:number|null;slow:number|null;rsi:number|null;volatility:number|null}
+    }>('demo-browser-signal');
+    if(!saved||epoch()-saved.at>10||saved.at>epoch())return {
+      direction:'HOLD' as const,reason:'NO_FRESH_BROWSER_PRICE_FEED',
+      source:'OWNER_BROWSER_PUBLIC_R_100',quoteAgeSeconds:null,
+      valid:false,verifiedIndependently:false
+    };
+    return {...saved,quoteAgeSeconds:saved.quoteAgeSeconds+(epoch()-saved.at)};
+  }
+
   getMcpDemoIntent(){
     const x=this.read<{id:string;createdAt:number;expiresAt:number;
       state:'PENDING'|'CLAIMED'|'SETTLED'|'CANCELLED';signal:'UP'|'DOWN';
