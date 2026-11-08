@@ -97,7 +97,7 @@ test('Market watchlist and new UI remain read-only without any public connection
  assert.ok(markets.markets.length>=10);
  assert.ok(markets.markets.every(x=>x.direction==='ESPERAR'));
  const external=await (await fetch(base+'/api/watchlist')).json();
- assert.equal(external.assets.length,4);
+ assert.equal(external.assets.length,5);
  assert.equal(external.realEnabled,false);
  assert.ok(external.assets.every(x=>x.tradableFromThisPanel===false));
  const html=await (await fetch(base+'/')).text();
