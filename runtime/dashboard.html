@@ -599,6 +599,83 @@ async function refresh(){
 }
 $('provider').onchange=async()=>{marketView=null;marketError='';marketFetched=0;render();await loadMarket(true);render();};$('window').onchange=drawCandles;
 for(const action of ['start','stop'])$('paper-'+action).onclick=async()=>{const out=$('paper-control-status');$('paper-start').disabled=true;$('paper-stop').disabled=true;try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},body:'{}',signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error();out.textContent=action==='start'?'Deriv: simulación iniciada.':'Deriv: simulación pausada.';await refresh();}catch{out.textContent='No se pudo confirmar el cambio. Comprueba el estado antes de reintentar.';}};
+function renderBurstContracts(burst){
+ const rows=$('demo-burst-rows');rows.replaceChildren();
+ for(const c of burst.contracts||[]){
+  const tr=document.createElement('tr');
+  const values=[c.contractId??'SIN CONFIRMAR',c.direction??'—',
+    Number.isInteger(c.stakeCents)?money(c.stakeCents):'—',c.state,
+    c.state==='SETTLED'&&Number.isInteger(c.pnlCents)?money(c.pnlCents):'Pendiente'];
+  for(const value of values){
+   const td=document.createElement('td');td.textContent=String(value);tr.appendChild(td);
+  }
+  if(c.state==='SETTLED')tr.lastElementChild.className=c.pnlCents>=0?'positive':'negative';
+  rows.appendChild(tr);
+ }
+ if(!demoBurstRunning&&!demoBurstSettling){
+  $('demo-burst-live').textContent='Estado: '+String(burst.status||'EMPTY')+
+    ' · compras solicitadas: '+(burst.requested||0)+
+    ' · confirmadas individualmente por Deriv: '+(burst.confirmed||0)+
+    ' · abiertos: '+(burst.opened||0)+' · liquidados: '+(burst.settled||0)+
+    ' · apuestas confirmadas: '+money(burst.commitmentCents||0)+
+    ' · neto realizado registrado: '+money(burst.realizedPnlCents||0)+
+    (burst.uncertain?' · COMPRA SIN RESPUESTA: no reintentar.':'')+
+    '. Estas compras son distintas de las simulaciones PAPER.';
+ }
+}
+async function demoBurstPost(action,payload={}){
+ const r=await fetch('/api/deriv/demo/burst/'+action,{
+  method:'POST',headers:{'Content-Type':'application/json','X-Paper-Control':'1'},
+  body:JSON.stringify(payload),signal:AbortSignal.timeout(16000)});
+ if(!r.ok){const e=await demoResponseError(r);throw Error(e.code);}
+ return r.json();
+}
+async function demoBurstCurrent(){
+ const r=await fetch('/api/deriv/demo/burst/status',{signal:AbortSignal.timeout(8500)});
+ if(!r.ok)throw Error('DEMO_BURST_STATUS_UNAVAILABLE');
+ const current=await r.json();
+ if(current.accountType!=='demo')throw Error('DEMO_BURST_ACCOUNT_INVALID');
+ renderBurstContracts(current);
+ return current;
+}
+function burstSummary(r){
+ return (r.confirmed||0)+'/'+(r.requested||0)+
+   ' contratos confirmados, '+(r.settled||0)+' liquidados, '+
+   'apuestas '+money(r.commitmentCents||0)+', P&L realizado '+money(r.realizedPnlCents||0);
+}
+/** Read-only reconciliation: no second buys and no retry on an unknown ACK. */
+async function settleBurstKnownContracts(ws,nonce){
+ let status=await demoBurstCurrent();
+ for(let iteration=0;iteration<7;iteration++){
+  if(status.uncertain){
+   $('demo-burst-live').textContent='Existe una compra cuya aceptación se desconoce. '+
+      burstSummary(status)+'. NO repetir; comprobar historial oficial de Deriv.';
+  }
+  const unresolved=(status.contracts||[]).filter(c=>c.state==='OPEN'&&c.contractId);
+  if(!unresolved.length)break;
+  for(const c of unresolved){
+   if(!ws||ws.readyState!==WebSocket.OPEN)throw Error('DEMO_BURST_SETTLEMENT_SOCKET_LOST');
+   const ans=await brokerMessage(ws,{
+     proposal_open_contract:1,contract_id:c.contractId,req_id:3
+   },8500);
+   if(ans.error||ans.errors||ans.msg_type!=='proposal_open_contract')
+     throw Error('DEMO_BURST_SETTLEMENT_UNAVAILABLE');
+   if([1,true].includes(ans.proposal_open_contract?.is_sold)){
+    const settled=await demoBurstPost('settle',{nonce,id:c.id,response:ans});
+    if(settled.state!=='SETTLED')throw Error('DEMO_BURST_SETTLEMENT_UNVERIFIED');
+    status=settled.run;
+    renderBurstContracts(status);
+    // Reflect official cash movements as soon as the broker closes a contract.
+    void syncBrokerBalance(true);
+   }
+  }
+  status=await demoBurstCurrent();
+  if(!(status.opened>0))break;
+  if(iteration<6)await new Promise(resolve=>setTimeout(resolve,1100));
+ }
+ return status;
+}
+
 function renderDemo(data){
   demoCurrent=data;
   chip('demo-state',data.connected?'Demo verificada':'Sin conexión demo',data.connected?'live':'warn');
