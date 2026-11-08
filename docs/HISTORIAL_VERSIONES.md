@@ -64,6 +64,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.4 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:11:25.119Z (UTC).
+- **Commit de origen:** `24f46a43ddd7`.
+- Agregar señales del mercado leídas en navegador cuando Cloudflare no tiene WebSocket público
+- Permitir que el bot evalúe señales CALL/PUT desde historial público recibido por navegador autorizado
+
 ## v7.3 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:10:19.686Z (UTC).

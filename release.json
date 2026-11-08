@@ -1,10 +1,11 @@
 {
-  "version": "7.3",
-  "updatedAt": "2026-11-08T00:10:19.686Z",
-  "summary": "Documentar MCP DEMO en Worker, secreto separado, OAuth futuro y aprobación de compra por navegador",
+  "version": "7.4",
+  "updatedAt": "2026-11-08T00:11:25.119Z",
+  "summary": "Agregar señales del mercado leídas en navegador cuando Cloudflare no tiene WebSocket público",
   "changes": [
-    "Documentar MCP DEMO en Worker, secreto separado, OAuth futuro y aprobación de compra por navegador"
+    "Agregar señales del mercado leídas en navegador cuando Cloudflare no tiene WebSocket público",
+    "Permitir que el bot evalúe señales CALL/PUT desde historial público recibido por navegador autorizado"
   ],
-  "sourceCommit": "9208c0fd9b75651f5c16cda8706ab75d3c2a3843",
+  "sourceCommit": "24f46a43ddd75c8a05ea32f1321c8093839cc225",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
