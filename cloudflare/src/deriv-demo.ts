@@ -779,7 +779,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
     }
   }
   async reserveDemoBurst(input:{nonce:string;proposalId:string;
-    askPrice:number;payout:number;evidence?:{
+    askPrice:number;payout:number;direction?:'UP'|'DOWN';symbol?:DemoSymbol;evidence?:{
       fast?:number|null;slow?:number|null;rsi?:number|null;
       volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
       reason?:string}}){
@@ -789,10 +789,14 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(!b||b.state!=='BUYING'||input?.nonce!==b.nonce||
       b.pendingId!==null||b.ids.length>=b.count||epoch()-b.startedAt>45)
       throw Error('DEMO_BURST_RESERVATION_NOT_ALLOWED');
-    // Recalculate against the last authenticated browser-reported public ticks
-    // for EVERY proposal, not only the first one in this burst.
-    const latestSignal=this.getBrowserSignal();
-    if(!latestSignal.valid||latestSignal.direction!==b.signal||
+    // An AUTO campaign authorizes the bot to choose a validated market and side
+    // for EACH separate contract. Fixed-direction legacy batches keep R_100.
+    const symbol=b.signal==='AUTO'?input.symbol:'R_100';
+    const direction=b.signal==='AUTO'?input.direction:b.signal;
+    if(!isDemoSymbol(symbol)||(direction!=='UP'&&direction!=='DOWN'))
+      throw Error('DEMO_BURST_SYMBOL_OR_DIRECTION_INVALID');
+    const latestSignal=this.getBrowserSignal(symbol);
+    if(!latestSignal.valid||latestSignal.direction!==direction||
        latestSignal.quoteAgeSeconds===null||latestSignal.quoteAgeSeconds>5)
       throw Error('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
     const credentials=await this.verifiedDemoCredentials();
@@ -804,13 +808,13 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const quote:DemoQuoteForBuy={
       id:input.proposalId,askPrice:input.askPrice,payout:input.payout,
       quotedAt:epoch(),stakeCents:b.stakeCents,
-      symbol:'R_100',durationTicks:5,contractType:b.signal==='UP'?'CALL':'PUT'
+      symbol,durationTicks:5,contractType:direction==='UP'?'CALL':'PUT'
     };
     const risk=this.getRiskSnapshot();
     if(risk.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
     const buy=buildDemoBuyRequest({
       accountType:'demo',currency:'USD',userEnabledDemoExecution:true,
-      socketUrl:verified.url,signal:b.signal,quote,now:epoch(),
+      socketUrl:verified.url,signal:direction,quote,now:epoch(),
       openContracts:risk.openContracts,unknownCount:risk.unknownCount,
       exposureCents:risk.exposureCents,lifetimeNetCents:risk.lifetimeNetCents,
       brokerBalanceCents:risk.brokerBalanceCents,
@@ -836,14 +840,14 @@ export class DerivDemoConnection extends DurableObject<Env> {
         balanceCheckedAt:this.read<number>('demo-last-balance-at')||0,now:epoch(),
         demoConnected:true,autoActive:false,batchSettlementPending:snap.batchSettlementPending,
         halted:snap.halted
-      });
+      },b.stakeCents);
       if(!limits.allowed)throw Error(limits.reason||'DEMO_BURST_RISK_LIMIT');
       const d=input.evidence||{};
       this.ctx.storage.sql.exec(
-        "INSERT INTO demo_trades(date,created_at,state,buy_cents,contract_type,decision_json,code) VALUES(?,?,'UNKNOWN',?,?,?,'CLIENT_PENDING')",
-        dayAt(epoch()),epoch(),b.stakeCents,quote.contractType,
+        "INSERT INTO demo_trades(date,created_at,state,buy_cents,contract_type,symbol,decision_json,code) VALUES(?,?,'UNKNOWN',?,?,?,?,'CLIENT_PENDING')",
+        dayAt(epoch()),epoch(),b.stakeCents,quote.contractType,symbol,
         JSON.stringify({strategy:'owner-browser-burst-v1',
-          runId:b.id,source:'owner-browser-unverified',direction:b.signal,
+          runId:b.id,source:'owner-browser-unverified',direction,symbol,
           stakeCents:b.stakeCents,contractType:quote.contractType,
           fast:researchNumber(d.fast,0,1000000),slow:researchNumber(d.slow,0,1000000),
           rsi:researchNumber(d.rsi,0,100),
@@ -858,7 +862,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
       return id;
     });
     return {mode:'DEMO_BURST_RESERVED',accountType:'demo',id,request:buy,
-      contractCountRequested:b.count,buyOrdersInThisResponse:0};
+      contractCountRequested:b.count,chosenSymbol:symbol,chosenDirection:direction,
+      buyOrdersInThisResponse:0};
   }
   acknowledgeDemoBurst(input:{nonce:string;id:number;response:unknown}){
     const b=this.burstState();
