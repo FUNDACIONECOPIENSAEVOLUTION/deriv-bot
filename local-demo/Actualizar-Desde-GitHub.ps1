@@ -26,7 +26,7 @@ try {
  if($versionLocal -notmatch '^\d+\.\d$'){throw 'VERSION_LOCAL_INVALIDA'}
  # A GitHub 403 on PUSH is irrelevant: updates use public READ-only HTTPS.
  try {
-  $manifest=Invoke-RestMethod -Uri ($baseGithub+'/pc-release.json') -TimeoutSec 18 -Headers @{'User-Agent'='Ecopiensa-PC-Updater'}
+  $manifest=Invoke-RestMethod -Uri ($baseGithub+'/pc-release.json?cb='+[guid]::NewGuid().ToString('N')) -TimeoutSec 18 -Headers @{'Cache-Control'='no-cache';'User-Agent'='Ecopiensa-PC-Updater'}
  } catch {
   [pscustomobject]@{version=$versionLocal;status='offline';checkedAt=(Get-Date).ToString('o')} |
     ConvertTo-Json | Set-Content -LiteralPath (Join-Path $data 'github-release-status.json') -Encoding UTF8
@@ -75,7 +75,15 @@ try {
   $download=Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20
   [void]$chunks.Append(($download.Content -replace '\s',''))
  }
- $tmp=Join-Path ([System.IO.Path]::GetTempPath()) ('Ecopiensa-Patch-'+[guid]::NewGuid().ToString('N'))
+ # Usar el mismo disco de la aplicación para ZIP, extracciones y pruebas Node.
+ # Si C: está lleno, TEMP de Windows no debe bloquear la actualización.
+ $drive=[System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($Ruta))
+ if($drive.AvailableFreeSpace -lt 200MB){Registrar 'Espacio insuficiente en el disco del programa: mínimo 200 MB libres.';return}
+ $previousTemp=$env:TEMP;$previousTmp=$env:TMP
+ $temporaryRoot=Join-Path $Ruta '_temporales-actualizacion'
+ New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
+ $env:TEMP=$temporaryRoot;$env:TMP=$temporaryRoot
+ $tmp=Join-Path $temporaryRoot ('Ecopiensa-Patch-'+[guid]::NewGuid().ToString('N'))
  New-Item -ItemType Directory -Path $tmp -Force | Out-Null
  try {
   $zip=Join-Path $tmp 'bundle.zip'
@@ -192,6 +200,7 @@ try {
    }
   }
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  $env:TEMP=$previousTemp;$env:TMP=$previousTmp
  }
 }finally{
  if($acquired){$mutex.ReleaseMutex()}
