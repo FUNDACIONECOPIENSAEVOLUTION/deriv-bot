@@ -91,6 +91,11 @@ assert.ok(panel.includes("c.contractId??'SIN CONFIRMAR'"), 'Mostrar los identifi
 
 
 for(const script of panel.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(script[1]);
+assert.ok(panel.includes("$('demo-connection').hidden=false"),
+ 'Deriv DEMO controls must remain visible if PAPER fails');
+assert.ok(panel.includes('void loadDemo();')&&panel.includes('await loadDemo();'),
+ 'DEMO status must load on page initialization independently of PAPER');
+assert.ok(panel.includes("HTTP_'+r.status"),'DEMO failure should expose a safe status code');
 const paper10Html=readFileSync('ensayo-paper-10.html','utf8');
 const paper10Browser=readFileSync('scripts/paper_ten_browser.mjs','utf8');
 assert.ok(paper10Html.includes('id="start"')&&paper10Html.includes('id="results"'),
