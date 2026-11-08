@@ -64,13 +64,18 @@ export class PaperExperiment extends DurableObject<Env> {
       if(saved) {
         if(saved.fingerprint!==JSON.stringify(this.config))throw Error('EXPERIMENT_CONFIG_CHANGED');
         const record=JSON.parse(saved.data);
-        this.state=record.state;this.running=record.running===true;
+        this.state=record.state;
+        // Historical PAPER data remains; DEMO-priority deployments never
+        // restart the always-on WebSocket (which consumes DO GB-seconds).
+        this.running=record.running===true&&String(env.PAPER_BACKGROUND_ENABLED)==='true';
         if(record.candles?.length){try{this.candles=validateCandles(record.candles,now());this.chartHistoryStatus='cached';}catch{this.candles=[];}}
         const recovered=invalidatePosition(this.state,'OBJECT_RESTART',now());
         this.market={state:this.running?'recovering':'stopped',at:now()};
         this.persist(recovered.state,recovered.events);
       } else this.persist(initialState(this.config,now()));
-      if(this.running&&await ctx.storage.getAlarm()===null)await ctx.storage.setAlarm(Date.now()+CHECKPOINT_MS);
+      if(String(env.PAPER_BACKGROUND_ENABLED)!=='true')await ctx.storage.deleteAlarm();
+      else if(this.running&&await ctx.storage.getAlarm()===null)
+        await ctx.storage.setAlarm(Date.now()+CHECKPOINT_MS);
     });
   }
 
@@ -90,7 +95,7 @@ export class PaperExperiment extends DurableObject<Env> {
   }
 
   private ensureFeed() {
-    if(!this.running||this.feed)return;
+    if(String(this.env.PAPER_BACKGROUND_ENABLED)!=='true'||!this.running||this.feed)return;
     this.feed=new PublicFeed({symbol:this.config.symbol,
       socketFactory:url=>new PublicSocket(url,this.ctx),
       onHistory:prices=>{this.state=seedHistory(this.state,prices);},
@@ -115,6 +120,8 @@ export class PaperExperiment extends DurableObject<Env> {
   }
 
   async start() {
+    if(String(this.env.PAPER_BACKGROUND_ENABLED)!=='true')
+      return {mode:'PAPER',running:false,reason:'PAPER_BACKGROUND_PAUSED_DEMO_PRIORITY'};
     if(!this.running)this.persist(this.state,[{type:'paper_started',epoch:now()}],true);
     await this.ctx.storage.setAlarm(Date.now()+CHECKPOINT_MS);
     this.ensureFeed();return {mode:'PAPER',running:true};
@@ -127,6 +134,12 @@ export class PaperExperiment extends DurableObject<Env> {
     return {mode:'PAPER',running:false};
   }
   async watchdog() {
+    if(String(this.env.PAPER_BACKGROUND_ENABLED)!=='true'){
+      this.feed?.stop();this.feed=null;
+      if(this.running)this.persist(this.state,[{type:'paper_paused_demo_priority',epoch:now()}],false);
+      await this.ctx.storage.deleteAlarm();
+      return {running:false,reason:'DEMO_PRIORITY_NO_BACKGROUND_FEED'};
+    }
     if(!this.running)return {running:false};
     await this.ctx.storage.setAlarm(Date.now()+CHECKPOINT_MS);
     this.ensureFeed();this.persist(this.state);return {running:true};
@@ -642,7 +655,7 @@ export default {
     catch{console.log(JSON.stringify({type:'demo_balance_check_pending'}));}
     try{await demo.reconcileOpenDemoOnly();}
     catch{console.log(JSON.stringify({type:'demo_settlement_check_pending'}));}
-    try{await env.PAPER.getByName(EXPERIMENT).watchdog();}
-    catch{console.log(JSON.stringify({type:'paper_maintenance_failed',demoUnaffected:true}));}
+    // PAPER is not part of unattended DEMO trading. Do not wake an
+    // expensive, persistent public WebSocket via the scheduled trigger.
   },
 } satisfies ExportedHandler<Env>;
