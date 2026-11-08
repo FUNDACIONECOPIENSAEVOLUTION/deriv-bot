@@ -83,6 +83,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.3 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:07:30.170Z (UTC).
+- **Commit de origen:** `cc0d18a2d3e3`.
+- Corregir test de CSV: dividir por saltos de línea CRLF reales, no caracteres escapados
+- Verificar CSV privado completo y de última tanda con 10 contratos, sin PAPER ni credenciales
+
 ## v9.2 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:05:45.663Z (UTC).
