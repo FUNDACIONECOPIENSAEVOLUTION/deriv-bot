@@ -78,6 +78,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.8 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:01:58.100Z (UTC).
+- **Commit de origen:** `73c74c80b1e0`.
+- Separar en la parte superior tabla DEMO del broker y simulación PAPER, y restaurar CSV última tanda y completo
+
 ## v8.7 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:01:25.837Z (UTC).

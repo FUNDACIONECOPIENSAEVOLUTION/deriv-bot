@@ -1,11 +1,10 @@
 {
-  "version": "8.7",
-  "updatedAt": "2026-11-08T01:01:25.837Z",
-  "summary": "Servir archivos CSV privados de todas las compras DEMO o solo de última tanda, con cuentas protegidas",
+  "version": "8.8",
+  "updatedAt": "2026-11-08T01:01:58.100Z",
+  "summary": "Separar en la parte superior tabla DEMO del broker y simulación PAPER, y restaurar CSV última tanda y completo",
   "changes": [
-    "Servir archivos CSV privados de todas las compras DEMO o solo de última tanda, con cuentas protegidas",
-    "Permitir exportar CSV íntegro del libro DEMO y CSV exclusivo de la última tanda, sin datos PAPER"
+    "Separar en la parte superior tabla DEMO del broker y simulación PAPER, y restaurar CSV última tanda y completo"
   ],
-  "sourceCommit": "c5e7bdd565762f4dd53a5e9bbb029d9153059b6c",
+  "sourceCommit": "73c74c80b1e062e5694c83d7e064cdb6f5ce96b8",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
