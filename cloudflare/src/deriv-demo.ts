@@ -753,11 +753,13 @@ export class DerivDemoConnection extends DurableObject<Env> {
       volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
       reason?:string}}){
     const b=this.burstState();
+    // Freeze a single owner-approved direction for at most 45 seconds.
+    // Do not switch sides mid-campaign or require 10 separate user approvals.
     if(!b||b.state!=='BUYING'||input?.nonce!==b.nonce||
-      b.pendingId!==null||b.ids.length>=b.count||epoch()-b.startedAt>120)
+      b.pendingId!==null||b.ids.length>=b.count||epoch()-b.startedAt>45)
       throw Error('DEMO_BURST_RESERVATION_NOT_ALLOWED');
-    if(!this.getBrowserSignal().valid||
-       this.getBrowserSignal().direction!==b.signal)
+    if(b.ids.length===0&&(!this.getBrowserSignal().valid||
+       this.getBrowserSignal().direction!==b.signal))
       throw Error('DEMO_BURST_SIGNAL_STALE');
     const credentials=await this.verifiedDemoCredentials();
     if(credentials.accountId!==b.accountId)throw Error('DEMO_ONLY');
@@ -1081,6 +1083,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
     reason?:string;fast?:number|null;slow?:number|null;rsi?:number|null;
     volatility?:number|null;entryQuote?:number|null;quoteAgeSeconds?:number|null;
   },source:'manual'|'auto'='manual') {
+    if(['PREPARING','BUYING','RECONCILING','REVIEW'].includes(this.burstState()?.state||''))
+      throw Error('DEMO_BURST_ALREADY_ACTIVE');
     if(String(this.env.DEMO_BUY_ENABLED)!=='true')throw Error('DEMO_EXECUTION_DISABLED');
     if(paperSignal!=='UP'&&paperSignal!=='DOWN')throw Error('NO_APPROVED_SIGNAL');
     const creds=await this.verifiedDemoCredentials();
