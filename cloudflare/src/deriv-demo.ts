@@ -520,7 +520,11 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(typeof enabled!=='boolean')throw Error('DEMO_AUTO_INVALID');
     const chosen=maxConcurrent??this.chosenMaxConcurrent();
     if(!Number.isSafeInteger(chosen)||chosen<1||chosen>10)throw Error('DEMO_CONCURRENCY_INVALID');
-    if(enabled)throw Error('DEMO_AUTO_PAPER_SIGNAL_DISABLED');
+    if(enabled){
+      if(String(this.env.DEMO_AUTO_ENABLED)!=='true'||String(this.env.DEMO_BUY_ENABLED)!=='true')
+        throw Error('DEMO_AUTO_DISABLED');
+      throw Error('DEMO_AUTO_PAPER_SIGNAL_DISABLED');
+    }
     this.write('demo-max-concurrent',chosen);
     this.write('demo-auto',enabled);
     return {mode:'DERIV_DEMO',autoEnabled:enabled,maxConcurrent:chosen,tradeReport:this.reportDemo()};
