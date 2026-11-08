@@ -317,12 +317,16 @@ export default {
       return handleMcpRequest(request,{
         getStatus:async()=>{
           const r=await demo.status();
+          // Never advertise MCP trading decisions if the broker's historic
+          // contract ledger cannot be read and its risk cannot be assessed.
+          const report=r.tradeReport;
+          if(!report)throw Error('DEMO_LEDGER_UNAVAILABLE');
           return {mode:r.mode,connected:r.connected,account:r.account,
-            risk:r.tradeReport.risk,settled:r.tradeReport.settled,
-            wins:r.tradeReport.wins,losses:r.tradeReport.losses,
-            pnlCents:r.tradeReport.pnlCents,
-            browserObservedSettled:r.tradeReport.browserObservedSettled,
-            brokerVerifiedSettled:r.tradeReport.brokerVerifiedSettled,
+            risk:report.risk,settled:report.settled,
+            wins:report.wins,losses:report.losses,
+            pnlCents:report.pnlCents,
+            browserObservedSettled:report.browserObservedSettled,
+            brokerVerifiedSettled:report.brokerVerifiedSettled,
             nextStakeCents:r.nextManualStakeCents,accountType:'demo',
             directBrokerOrdersFromMcp:0};
         },
