@@ -346,6 +346,11 @@ export default {
               evidence:{fast:num('fast'),slow:num('slow'),rsi:num('rsi'),
                 volatility:num('volatility'),entryQuote:num('entryQuote'),
                 quoteAgeSeconds:num('quoteAgeSeconds'),
+                proposalRttMs:num('proposalRttMs'),
+                signalAgeAtProposalSec:num('signalAgeAtProposalSec'),
+                pageLoadedEpoch:num('pageLoadedEpoch'),
+                browserNavigationType:typeof e.browserNavigationType==='string'?e.browserNavigationType:'unknown',
+                pageSessionId:typeof e.pageSessionId==='string'?e.pageSessionId:'',
                 reason:typeof e.reason==='string'?e.reason:'UNVERIFIED'}
             }));
           }
