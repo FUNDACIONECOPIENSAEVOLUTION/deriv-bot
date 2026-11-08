@@ -15,6 +15,9 @@ const TERMINAL=new Set(['SETTLED','REJECTED','CANCELLED','EXPIRED']);
 const epoch=()=>Math.floor(Date.now()/1000);
 const cents=value=>Math.round(Number(value)*100);
 const cleanError=error=>String(error?.message||'DEMO_BROKER_ERROR').replace(/[^A-Za-z0-9_]/g,'').slice(0,80);
+const optionalNumber=x=>x===undefined||x===null||x===''?null:Number.isFinite(Number(x))?Number(x):null;
+const settlementFields=c=>[optionalNumber(c?.entry_tick),optionalNumber(c?.exit_tick),
+ optionalNumber(c?.entry_tick_time),optionalNumber(c?.exit_tick_time)];
 
 export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,accountLookup,otpLookup,marketSnapshot,audit}) {
  db.exec("CREATE TABLE IF NOT EXISTS demo_local_orders (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, state TEXT NOT NULL, source TEXT NOT NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL, stake_cents INTEGER NOT NULL, contract_id TEXT, buy_cents INTEGER, pnl_cents INTEGER, error_code TEXT)");
@@ -23,7 +26,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   settled_at_ms:'INTEGER',proposal_latency_ms:'INTEGER',buy_latency_ms:'INTEGER',
   signal_age_ms:'INTEGER',signal_rsi:'REAL',signal_sma_fast:'REAL',signal_sma_slow:'REAL',
   signal_ema20:'REAL',signal_ema50:'REAL',signal_atr14:'REAL',signal_momentum5:'REAL',
-  signal_strength:'INTEGER',proposal_payout_cents:'INTEGER'})){
+  signal_strength:'INTEGER',proposal_payout_cents:'INTEGER',signal_quote:'REAL',
+  entry_tick:'REAL',exit_tick:'REAL',entry_tick_epoch:'INTEGER',exit_tick_epoch:'INTEGER'})){
   if(!columns.has(name))db.exec('ALTER TABLE demo_local_orders ADD COLUMN '+name+' '+sqlType);
  }
  // Any interrupted BUY may have reached the broker. Do NOT send another until reconciled.
@@ -42,13 +46,15 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const list=db.prepare(`SELECT id,created_at AS createdAt,created_at_ms AS createdAtMs,bought_at_ms AS boughtAtMs,settled_at_ms AS settledAtMs,batch_id AS batchId,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode,proposal_latency_ms AS proposalLatencyMs,buy_latency_ms AS buyLatencyMs,signal_age_ms AS signalAgeMs,signal_rsi AS rsi,signal_sma_fast AS smaFast,signal_sma_slow AS smaSlow,
   signal_ema20 AS ema20,signal_ema50 AS ema50,signal_atr14 AS atr14,
   signal_momentum5 AS momentum5,signal_strength AS signalStrength,
-  proposal_payout_cents AS proposalPayoutCents FROM demo_local_orders ORDER BY created_at DESC,id DESC LIMIT 60`);
+  proposal_payout_cents AS proposalPayoutCents,signal_quote AS signalQuote,
+  entry_tick AS entryTick,exit_tick AS exitTick,
+  entry_tick_epoch AS entryTickEpoch,exit_tick_epoch AS exitTickEpoch FROM demo_local_orders ORDER BY created_at DESC,id DESC LIMIT 60`);
  const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents) VALUES(?,?,?,?,?,?,?,?)');
  const change=db.prepare('UPDATE demo_local_orders SET state=?,updated_at=?,error_code=? WHERE id=?');
- const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=? WHERE id=?");
+ const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=? WHERE id=?");
  const markBatch=db.prepare("UPDATE demo_local_orders SET batch_id=? WHERE id=?");
  const purchasedAt=db.prepare("UPDATE demo_local_orders SET created_at_ms=? WHERE id=?");
- const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=?,settled_at_ms=? WHERE id=?");
+ const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=?,settled_at_ms=?,entry_tick=COALESCE(?,entry_tick),exit_tick=COALESCE(?,exit_tick),entry_tick_epoch=COALESCE(?,entry_tick_epoch),exit_tick_epoch=COALESCE(?,exit_tick_epoch) WHERE id=?");
 
  function getSummary(){
   const stats=summary.get(),rows=list.all(),closed=rows.filter(x=>x.state==='SETTLED');
@@ -159,7 +165,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
     if(c.is_sold===1||c.is_sold===true){
      const profit=Number(c.profit);
      if(!Number.isFinite(profit))throw Error('DEMO_SETTLEMENT_MONEY_INVALID');
-     finish(null,{settled:true,pnlCents:cents(profit)});
+     finish(null,{settled:true,pnlCents:cents(profit),fields:settlementFields(c)});
     }
    }catch(err){finish(err);}}
    const onClose=()=>finish(null,{settled:false}),onError=()=>finish(null,{settled:false});
@@ -219,11 +225,12 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
     observed?.ageReceivedMs??null,observed?.rsi14??null,observed?.sma8??null,observed?.sma21??null,
      observed?.ema20??null,observed?.ema50??null,observed?.atr14??null,
      observed?.momentum5??null,observed?.signalStrength??null,
-     Number.isFinite(Number(proposal.payout))?cents(proposal.payout):null,id);
+     Number.isFinite(Number(proposal.payout))?cents(proposal.payout):null,
+     observed?.quote??null,id);
    audit('DEMO_BUY_CONFIRMED','Contrato DEMO confirmado por broker');
    const result=await readSettlement(socket,contractId);
    if(result.settled){
-    recordSettlement.run(epoch(),result.pnlCents,Date.now(),id);audit('DEMO_SETTLED','Resultado DEMO verificado');
+    recordSettlement.run(epoch(),result.pnlCents,Date.now(),...(result.fields||[null,null,null,null]),id);audit('DEMO_SETTLED','Resultado DEMO verificado');
    }
    return {state:result.settled?'SETTLED':'OPEN',id,contractId,
     pnlCents:result.settled?result.pnlCents:null,accountType:'demo',brokerOrders:1};
@@ -250,7 +257,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    if(contract?.is_sold===1||contract?.is_sold===true){
     const profit=Number(contract.profit);
     if(!Number.isFinite(profit))throw Error('DEMO_PROFIT_INVALID');
-    recordSettlement.run(epoch(),cents(profit),Date.now(),id);
+    recordSettlement.run(epoch(),cents(profit),Date.now(),...settlementFields(contract),id);
     return {id,state:'SETTLED',pnlCents:cents(profit)};
    }
    return {id,state:'OPEN',note:'La liquidación no ha sido confirmada.'};
@@ -260,7 +267,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const rows=list.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
-  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','errorCode'];
+  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','errorCode'];
    const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(x[h])).join(',')).join('\r\n')+'\r\n';
  }
