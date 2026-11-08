@@ -763,6 +763,24 @@ function renderDemo(data){
   $('deriv-quote').disabled=!data.connected;
   $('demo-apply-stake').disabled=!data.connected||!data.demoTradingEnabled;
   const report=data.tradeReport||{},pending=report.unresolved;
+  // The top metrics use ONLY the authenticated Deriv DEMO ledger.
+  const connected=!!data.connected;
+  $('demo-main-pnl').textContent=connected?money(report.pnlCents||0):'Sin conectar';
+  $('demo-main-pnl').className='value '+((report.pnlCents||0)>=0?'positive':'negative');
+  $('demo-main-wins').textContent=connected
+    ?(report.wins||0)+' ganadas · '+(report.losses||0)+' perdidas · '+(report.winRatePct??'—')+
+       '% de aciertos · liquidaciones observadas en navegador pendientes de verificación independiente'
+    :'No se debe usar el P&L de PAPER aquí.';
+  $('demo-main-settled').textContent=connected?String(report.settled||0):'—';
+  $('demo-main-counts').textContent=connected
+    ?'Contratos DEMO liquidados · '+(report.openCount||0)+' abiertos · '+
+      (report.unknownCount||0)+' órdenes sin confirmación':'Sin sesión DEMO';
+  $('demo-main-purchases').textContent=connected?String(report.pilotPurchases||0):'—';
+  $('demo-main-exposure').textContent=connected
+    ?'Compras confirmadas del piloto · exposición abierta '+money(report.activeExposureCents||0)+
+      ' · importe bruto del piloto '+money(report.pilotCommittedCents||0)
+    :'Saldo y contratos disponibles solo con cuenta DEMO conectada';
+
   const burst=data.demoBurst||{},plan=data.demoBurstPlan||{};
   const activeBurst=['PREPARING','BUYING','RECONCILING','REVIEW'].includes(burst.status);
   const countField=$('demo-burst-count');
