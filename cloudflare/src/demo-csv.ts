@@ -3,12 +3,12 @@ export type DemoCsvRow={
  id:number;date:string;created_at:number;bought_at:number|null;settled_at:number|null;
  state:string;contract_id:number|null;buy_cents:number|null;payout_cents:number|null;
  pnl_cents:number|null;code:string|null;decision_json:string|null;
- entry_spot:number|null;exit_spot:number|null;contract_type:string|null
+ entry_spot:number|null;exit_spot:number|null;contract_type:string|null;symbol?:string|null
 };
 export const DEMO_CSV_COLUMNS=[
  'fuente','tanda_id','id_registro','contrato_deriv','fecha_colombia',
  'reserva_epoch','compra_deriv_epoch','liquidacion_observada_epoch',
- 'estado','direccion','apuesta_usd','pago_usd','ganancia_neta_usd',
+ 'estado','mercado','direccion','apuesta_usd','pago_usd','ganancia_neta_usd',
  'precio_entrada','precio_salida','estrategia','senal','sma_8','sma_21',
  'rsi','volatilidad','edad_cotizacion_seg','precio_senal',
  'razon_senal','diagnostico','verificacion'
@@ -55,7 +55,7 @@ export function demoTradesCsv(rows:DemoCsvRow[]):string{
   const v=[
    'DERIV_DEMO',typeof d.runId==='string'?d.runId:'',
    row.id,row.contract_id,colombia(row.created_at),row.created_at,
-   row.bought_at,row.settled_at,row.state,direction(row),
+   row.bought_at,row.settled_at,row.state,row.symbol||'R_100',direction(row),
    asUsd(row.buy_cents),asUsd(row.payout_cents),asUsd(row.pnl_cents),
    row.entry_spot,row.exit_spot,d.strategy,d.direction,nums('fast'),
    nums('slow'),nums('rsi'),nums('volatility'),nums('quoteAgeSeconds'),
