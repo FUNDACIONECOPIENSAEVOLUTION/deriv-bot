@@ -82,6 +82,9 @@
 </div>
 <p id="demo-burst-live" class="note" role="status">Órdenes confirmadas: 0. Ninguna compra se genera al cargar el panel.</p><p id="demo-burst-diagnosis" class="note" role="status">Diagnóstico de la última tanda: pendiente de resultados DEMO.</p><div class="tools"><a id="demo-burst-inline-csv" href="/api/deriv/demo/burst.csv">Descargar análisis CSV de esta tanda DEMO</a><a href="/api/deriv/demo/trades.csv">Historial completo de contratos DEMO CSV</a></div>
 <div class="table-scroll"><table><thead><tr><th>Contrato DEMO confirmado</th><th>Mercado</th><th>Dirección</th><th>Importe</th><th>Estado</th><th>Resultado neto</th></tr></thead><tbody id="demo-burst-rows"></tbody></table></div>
+<h4>Análisis de la última tanda por mercado y dirección</h4>
+<div class="table-scroll"><table><thead><tr><th>Índice</th><th>Tipo</th><th>Ganadas</th><th>Perdidas</th><th>Operaciones liquidadas</th><th>Resultado neto</th></tr></thead><tbody id="demo-burst-market-rows"></tbody></table></div>
+<p class="note" id="demo-burst-market-note">Estos son resultados realizados; no prueban que el mercado con más aciertos vaya a seguir ganando.</p>
 <div class="divider"></div><h3>Resultados de cada tanda DEMO</h3>
 <p class="note" id="demo-batches-note">Historial de tandas identificado por su código de ejecución. No incluye PAPER.</p>
 <div class="table-scroll"><table><thead><tr><th>Tanda</th><th>Compra inicial · Colombia</th><th>Compras confirmadas</th><th>Liquidadas</th><th>Ganadas / perdidas</th><th>Total apostado</th><th>Resultado neto</th></tr></thead><tbody id="demo-batches-rows"></tbody></table></div>
@@ -949,6 +952,33 @@ function renderBurstContracts(burst){
      'Se necesita revisar los indicadores y los spots de cada contrato antes de concluir qué falló; '+
      'las operaciones DEMO no reentrenan automáticamente el modelo.'
    :'Sin operaciones liquidadas en la última tanda. No hay rendimiento que evaluar.';
+ const marketGroups=new Map();
+ for(const c of settled){
+  const symbol=c.symbol||'R_100',side=c.direction||'SIN_DIRECCION',key=symbol+'|'+side;
+  if(!marketGroups.has(key))marketGroups.set(key,{symbol,side,wins:0,losses:0,
+    settled:0,net:0});
+  const g=marketGroups.get(key);g.settled++;g.net+=c.pnlCents;
+  if(c.pnlCents>0)g.wins++;if(c.pnlCents<0)g.losses++;
+ }
+ const groupRows=$('demo-burst-market-rows');groupRows.replaceChildren();
+ for(const g of marketGroups.values()){
+  const tr=document.createElement('tr');
+  [g.symbol,g.side,String(g.wins),String(g.losses),String(g.settled),
+   money(g.net)].forEach((value,i)=>{
+    const td=document.createElement('td');td.textContent=value;
+    if(i===5)td.className=g.net<0?'negative':g.net>0?'positive':'';
+    tr.appendChild(td);
+  });groupRows.appendChild(tr);
+ }
+ if(!marketGroups.size){
+  const tr=document.createElement('tr'),td=document.createElement('td');
+  td.colSpan=6;td.textContent='Todavía no hay contratos DEMO liquidados en esta tanda.';
+  tr.appendChild(td);groupRows.appendChild(tr);
+ }
+ $('demo-burst-market-note').textContent='La muestra actual contiene '+settled.length+
+  ' contratos liquidados. Los resultados de unos pocos contratos NO predicen '+
+  'la rentabilidad futura. Los cierres reportados por navegador aún requieren '+
+  'verificación independiente del servidor.';
  const rows=$('demo-burst-rows');rows.replaceChildren();
  for(const c of burst.contracts||[]){
   const tr=document.createElement('tr');
