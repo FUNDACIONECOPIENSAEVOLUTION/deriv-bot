@@ -557,6 +557,58 @@ function drawEquity(){
   $('equity-note').textContent='Saldo al liquidar cada operación visible. La curva empieza en '+money(points[0].value)+'; no incluye resultados futuros ni proyectados.';
 }
 function entryExplanation(trade){const d=trade.decision;if(!d)return 'Entrada anterior sin indicadores registrados';return 'SMA 8 '+price(d.fast)+(trade.direction>0?' > ':' < ')+'SMA 21 '+price(d.slow)+' · RSI '+price(d.rsi)+' · volatilidad '+price(d.volatility)+' %';}
+function renderDemoTopTrades(){
+ const body=$('trades');body.replaceChildren();
+ const history=demoCurrent?.tradeReport?.history;
+ $('trade-source-note').textContent='DERIV DEMO: cada fila es un contrato, no una operación PAPER. '+
+   'La fecha de compra confirmada por Deriv se muestra cuando existe; registros antiguos usan hora de reserva. '+
+   'Si falta la hora de liquidación antigua, se indica sin inventarla. '+
+   'Los cierres observados en navegador aún no tienen verificación independiente del servidor.';
+ if(!demoCurrent?.connected||!Array.isArray(history)||history.length===0){
+  const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=7;
+  td.textContent=demoCurrent?.connected?'Sin contratos DEMO registrados.':'Conecta la cuenta DEMO para mostrar las compras del broker.';
+  tr.appendChild(td);body.appendChild(tr);return;
+ }
+ for(const t of history){
+  const d=t.decision||{},tr=document.createElement('tr');
+  const original=Number.isInteger(t.boughtAt),opened=t.boughtAt??t.createdAt;
+  const entry=(original?'Compra ': 'Registro ')+date(opened);
+  const exit=t.settledAt?date(t.settledAt):
+    t.state==='SETTLED'?'Liquidada · sin hora registrada':'Pendiente';
+  const side=t.contractType==='CALL'?'CALL (alza)':t.contractType==='PUT'?'PUT (baja)':'—';
+  const spot=(typeof t.entrySpot==='number'?price(t.entrySpot):'—')+
+    ' → '+(typeof t.exitSpot==='number'?price(t.exitSpot):'—');
+  const pnl=t.state==='SETTLED'&&Number.isInteger(t.pnlCents)?money(t.pnlCents):'—';
+  const analysis='Contrato '+(t.contractId??'sin acuse')+
+   (typeof d.runId==='string'?' · Tanda '+d.runId.slice(0,8):'')+
+   ' · '+(d.reason||'Señal sin detalle')+
+   (typeof d.fast==='number'?' · SMA8 '+price(d.fast):'')+
+   (typeof d.slow==='number'?' · SMA21 '+price(d.slow):'')+
+   (typeof d.rsi==='number'?' · RSI '+price(d.rsi):'')+
+   (typeof d.volatility==='number'?' · volatilidad '+price(d.volatility):'')+
+   (t.code==='CLIENT_OBSERVED'?' · liquidación observada en navegador':'');
+  [entry,exit,t.state||'—',side,spot,pnl,analysis].forEach((value,i)=>{
+   const td=document.createElement('td');td.textContent=String(value);
+   if(i===6)td.className='reason';
+   if(i===5&&t.state==='SETTLED')td.className=t.pnlCents>=0?'positive':'negative';
+   tr.appendChild(td);
+  });
+  body.appendChild(tr);
+ }
+}
+function selectHistory(mode){
+ if(!['PAPER','DEMO'].includes(mode))return;
+ historyMode=mode;
+ $('history-mode-demo').className=mode==='DEMO'?'primary':'';
+ $('history-mode-paper').className=mode==='PAPER'?'primary':'';
+ $('history-mode-demo').setAttribute('aria-pressed',String(mode==='DEMO'));
+ $('history-mode-paper').setAttribute('aria-pressed',String(mode==='PAPER'));
+ if(state)render();
+ else if(mode==='DEMO')renderDemoTopTrades();
+}
+$('history-mode-demo').onclick=()=>selectHistory('DEMO');
+$('history-mode-paper').onclick=()=>selectHistory('PAPER');
+
 function render(){
   if(!state)return;const x=state,provider=$('provider').value;
   const live=x.market.state==='live'&&x.quoteAgeSeconds!==null&&x.quoteAgeSeconds<=15&&x.quoteAgeSeconds>=-3;
@@ -580,13 +632,16 @@ function render(){
     $('platform-note').textContent='Solo consulta pública de velas cada 30 segundos. La simulación automática sigue vinculada a Deriv; esta vista no coloca operaciones en '+(selected?.name||provider)+'.';
     chip('chart-status',marketError?'Datos no disponibles':marketView?.state==='recent'?'Consulta pública · 30 s':marketView?'Datos antiguos':'Cargando velas',marketError?'offline':marketView?.state==='recent'?'live':'warn');
   }
-  const rows=$('trades');rows.replaceChildren();
+  if(historyMode==='PAPER'){
+  $('trade-source-note').textContent='Simulaciones PAPER: no son contratos del broker. Entra en «Contratos DEMO del broker» para ver compras y resultados reales de la cuenta virtual.';
+    const rows=$('trades');rows.replaceChildren();
   if(!x.trades.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=7;td.textContent='Todavía no hay operaciones simuladas. Las marcas aparecerán cuando el motor abra una posición.';tr.appendChild(td);rows.appendChild(tr);}
   for(const t of x.trades){const tr=document.createElement('tr');const status={OPEN:'Abierta',CLOSED:'Liquidada',VOID:'No evaluable'}[t.status]||t.status;
     const why=entryExplanation(t)+(t.status==='CLOSED'?' · Salida: horizonte de ticks':t.status==='VOID'?' · Interrupción: '+(t.reason||'sin detalle'):'');
     [date(t.entryEpoch),date(t.exitEpoch),status,t.direction>0?'Alcista':'Bajista',price(t.entryQuote)+' → '+price(t.exitQuote),t.status==='CLOSED'?money(t.pnlCents):'—',why].forEach((v,i)=>{const td=document.createElement('td');td.textContent=v;if(i===6)td.className='reason';if(i===5&&t.status==='CLOSED')td.className=t.pnlCents>=0?'positive':'negative';tr.appendChild(td);});
     tr.tabIndex=0;tr.title='Ver entrada en el gráfico';const locate=()=>{$('provider').value='deriv';$('window').value='180';render();$('candles').scrollIntoView({block:'center',behavior:'smooth'});$('ohlc').textContent='Entrada virtual '+date(t.entryEpoch)+' · '+price(t.entryQuote)+(activeBars.some(b=>Math.floor(t.entryEpoch/60)*60===b.time)?' · Marca E en la vela correspondiente.':' · Fuera de las últimas 180 velas.');};tr.onclick=locate;tr.onkeydown=e=>{if(e.key==='Enter')locate();};rows.appendChild(tr);
   }
+  }else renderDemoTopTrades();
   drawCandles();drawEquity();
 }
 async function loadMarket(force=false){
@@ -859,6 +914,7 @@ function renderDemo(data){
     $('demo-loss-cases').textContent='Diagnóstico preliminar de pérdidas: '+(top||'Sin pérdidas verificadas')
       +'. Se conservan RSI/volatilidad por contrato para comparar patrones; no se modifican las reglas del bot automáticamente.';
   }
+  if(historyMode==='DEMO')renderDemoTopTrades();
   const history=$('demo-trade-history');history.replaceChildren();
   for(const item of report.history||[]){
     const tr=document.createElement('tr');
