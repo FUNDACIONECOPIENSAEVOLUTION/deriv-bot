@@ -31,7 +31,9 @@ function draw(){const m=markets.get(chosen),cv=$('chart'),ctx=cv.getContext('2d'
   ' · EMA50 '+fmt(m?.ema50)+' · RSI '+fmt(m?.rsi14)+
   ' · ATR '+fmt(m?.atr14)+' · pendiente '+fmt(m?.slope10)+
   ' · señal '+(m?.direction||'ESPERAR')+' ('+(m?.reason||'SIN_DATOS')+
-  '). Intensidad descriptiva '+(m?.signalStrength??'—')+'/100; no es probabilidad de ganar.';
+  '). Intensidad descriptiva '+(m?.signalStrength??'—')+'/100; NO es probabilidad de ganar. '+
+  'Próximo tick (proyección experimental): '+fmt(m?.projectedNextTick)+
+  ' · MAE modelo '+fmt(m?.modelMae)+' vs persistencia '+fmt(m?.naiveMae)+'.';
 }
 function drawCandles(candles){
  const canvas=$('candles');if(!canvas)return;
