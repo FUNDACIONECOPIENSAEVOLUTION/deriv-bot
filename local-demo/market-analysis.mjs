@@ -22,6 +22,20 @@ function rsi(values,n=14){
 export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}={}){
  const valid=ticks.filter(x=>Number.isFinite(x?.price)&&x.price>0&&Number.isInteger(x?.epoch));
  const prices=valid.map(x=>x.price);
+ // Proyección ingenua del siguiente tick para INVESTIGACIÓN; no interviene en BUY.
+ const n=prices.length,lookback=10;
+ const projectedNextTick=n>lookback?prices[n-1]+(prices[n-1]-prices[n-1-lookback])/lookback:null;
+ let modelMae=null,naiveMae=null;
+ if(n>=120){
+  let modelError=0,naiveError=0,observations=0;
+  for(let i=Math.max(lookback+1,n-100);i<n;i++){
+   const prediction=prices[i-1]+(prices[i-1]-prices[i-1-lookback])/lookback;
+   modelError+=Math.abs(prices[i]-prediction);
+   naiveError+=Math.abs(prices[i]-prices[i-1]);
+   observations++;
+  }
+  modelMae=modelError/observations;naiveMae=naiveError/observations;
+ }
  const all=[];
  const whole=Math.floor(prices.length/TICKS_PER_CANDLE);
  for(let i=0;i<whole;i++){
@@ -57,6 +71,7 @@ export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}
   Math.min(100,Math.round(Math.abs(ema20-ema50)/atr14*40)):null;
  return {candles,candleCount:candles.length,requiredCandles:CANDLES_VISIBLE,
   ticksAnalyzed:prices.length,ema20,ema50,rsi14,atr14,momentum5,slope10,
+  projectedNextTick,modelMae,naiveMae,projectionIsResearchOnly:true,
   sma8:prices.length>=8?mean(prices.slice(-8)):null,
   sma21:prices.length>=21?mean(prices.slice(-21)):null,
   direction,reason,signalStrength:strength,ready,fresh,
