@@ -1,10 +1,10 @@
 {
-  "version": "7.0",
-  "updatedAt": "2026-11-08T00:05:42.139Z",
-  "summary": "Crear servidor MCP HTTP en Cloudflare con herramientas DEMO seguras y cola de aprobación en navegador",
+  "version": "7.1",
+  "updatedAt": "2026-11-08T00:06:19.073Z",
+  "summary": "Registrar propuestas MCP DEMO con aprobación del dueño, límites de riesgo y conciliación en DO",
   "changes": [
-    "Crear servidor MCP HTTP en Cloudflare con herramientas DEMO seguras y cola de aprobación en navegador"
+    "Registrar propuestas MCP DEMO con aprobación del dueño, límites de riesgo y conciliación en DO"
   ],
-  "sourceCommit": "cd5884edb2d1e0c7599aad1ad61f812e9e2cb857",
+  "sourceCommit": "55b19bce49665b0fee6c835829e6afbdcb43d100",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

@@ -61,6 +61,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.1 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:06:19.073Z (UTC).
+- **Commit de origen:** `55b19bce4966`.
+- Registrar propuestas MCP DEMO con aprobación del dueño, límites de riesgo y conciliación en DO
+
 ## v7.0 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:05:42.139Z (UTC).
