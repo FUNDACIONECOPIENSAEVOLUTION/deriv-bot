@@ -248,10 +248,22 @@ export default {
         const valid=status.running===true&&status.config.symbol==='R_100'
           &&status.market.state==='live'&&typeof quoteAge==='number'
           &&quoteAge>=0&&quoteAge<=10&&[1,-1].includes(d.direction);
-        const direction=valid?(d.direction===1?'UP':'DOWN'):'HOLD';
-        return {direction,reason:valid?d.reason:'NO_VERIFIED_LIVE_BOT_SIGNAL',
-          valid,source:'PUBLIC_R_100_BOT_ENGINE',quoteAgeSeconds:quoteAge,
-          indicator:{fast:d.fast,slow:d.slow,rsi:d.rsi,volatility:d.volatility}};
+        if(valid){
+          return {direction:d.direction===1?'UP':'DOWN',reason:d.reason,
+            valid:true,source:'SERVER_PUBLIC_R_100_ENGINE',
+            quoteAgeSeconds:quoteAge,
+            indicator:{fast:d.fast,slow:d.slow,rsi:d.rsi,volatility:d.volatility}};
+        }
+        const fromBrowser=await demo.getBrowserSignal();
+        if(fromBrowser.valid&&fromBrowser.quoteAgeSeconds!==null
+          &&fromBrowser.quoteAgeSeconds<=10){
+          return {direction:fromBrowser.direction,reason:fromBrowser.reason,
+            valid:true,source:'CLIENT_OBSERVED_PUBLIC_R_100_NOT_INDEPENDENT',
+            quoteAgeSeconds:fromBrowser.quoteAgeSeconds,
+            indicator:fromBrowser.indicator};
+        }
+        return {direction:'HOLD',reason:'NO_FRESH_VERIFIABLE_BOT_SIGNAL',
+          valid:false,source:'NO_CURRENT_FEED',quoteAgeSeconds:null};
       };
       return handleMcpRequest(request,{
         getStatus:async()=>{
@@ -274,7 +286,7 @@ export default {
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback','/api/deriv/demo/mcp-intent'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -284,6 +296,14 @@ export default {
         const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
         if(url.pathname==='/api/deriv/status')return json(await demo.status());
         if(url.pathname==='/api/deriv/refresh')return json(await demo.refresh());
+        if(url.pathname==='/api/deriv/demo/signal'&&request.method==='POST'){
+          const raw=await request.text();
+          if(raw.length>24000)return json({code:'DEMO_BROWSER_PRICES_TOO_LARGE'},413);
+          let source:unknown;
+          try{source=JSON.parse(raw);}catch{return json({code:'DEMO_BROWSER_PRICES_INVALID'},400);}
+          return json(await demo.analyzeBrowserPrices(source));
+        }
+
         if(url.pathname==='/api/deriv/demo/mcp-intent'&&request.method==='GET')
           return json(await demo.getMcpDemoIntent());
         if(url.pathname.startsWith('/api/deriv/demo/mcp-intent/')&&request.method==='POST'){
