@@ -383,6 +383,19 @@ export class DerivDemoConnection extends DurableObject<Env> {
       "SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name='demo_connection'").one();
     return {storage:row?.n===1?'ready':'schema_missing',noOrders:true};
   }
+  /** Owner-only: safe existence flags for ORIGINAL named DEMO namespace. No secret values. */
+  connectionStorageAudit(){
+    const slots=this.ctx.storage.sql.exec<{slot:string}>(
+      "SELECT slot FROM demo_connection WHERE slot IN ('clientId','credentials','snapshot')"
+    ).toArray();
+    const present=new Set(slots.map(r=>r.slot));
+    const trades=this.ctx.storage.sql.exec<{n:number}>(
+      'SELECT COUNT(*) AS n FROM demo_trades').one().n;
+    return {storage:'ready',hasAppId:present.has('clientId'),
+      hasEncryptedCredentials:present.has('credentials'),
+      hasSavedSnapshot:present.has('snapshot'),
+      totalHistoricalRows:trades,readOnly:true,noOrders:true};
+  }
   status(){
     const saved=this.read<{account:DemoAccount;checkedAt:number;expiresAt:number}>('snapshot');
     const connected=!!saved&&saved.expiresAt>epoch()&&!!this.read('credentials');
