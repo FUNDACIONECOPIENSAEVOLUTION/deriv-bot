@@ -30,9 +30,14 @@ for(const id of ['demo-apply-stake','demo-stake-selection-status','official-demo
 }
 assert.ok(panel.includes("ticks:symbol,subscribe:1"),'El índice elegido debe recibir ticks públicos en vivo');
 assert.ok(panel.includes('syncBrokerBalance()'),'El saldo oficial debe refrescarse automáticamente');
-assert.ok(panel.includes('DEMO_BURST_FRESHNESS_SECONDS=3')&&
+assert.ok(panel.includes('DEMO_BURST_FRESHNESS_SECONDS=1')&&
   panel.includes('demoAgeSinceSignal(fresh,signalReceivedAtMs)'),
   'Cada compra DEMO debe comprobar la edad real de la señal también después de la cotización');
+assert.ok(panel.includes('demoTickMatchesSignal')&&
+  panel.includes('openDemoBurstMarketTicks')&&panel.includes("demoBurstPost('cancel'"),
+  'Every BUY needs a fresh live tick and safe cancel-before-send path');
+assert.ok(panel.includes('preBuyAgeSec>=1')&&panel.includes('reserveRttMs>=1000'),
+  'Stale signals or >=1000ms reservation must cancel before BUY');
 for(const field of ['proposalRttMs','demoPageNavigationType','demoPageSessionId','demoPageLoadedEpoch'])
  assert.ok(panel.includes(field),'La trazabilidad DEMO debe incluir '+field);
 assert.ok(panel.includes('Date.now()-lastBrokerSyncAt<(demoBurstActive()?5000:20000)'),
@@ -91,6 +96,11 @@ assert.ok(panel.includes("c.contractId??'SIN CONFIRMAR'"), 'Mostrar los identifi
 
 
 for(const script of panel.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new Function(script[1]);
+assert.ok(panel.includes("$('demo-connection').hidden=false"),
+ 'Deriv DEMO controls must remain visible if PAPER fails');
+assert.ok(panel.includes('void loadDemo();')&&panel.includes('await loadDemo();'),
+ 'DEMO status must load on page initialization independently of PAPER');
+assert.ok(panel.includes("HTTP_'+r.status"),'DEMO failure should expose a safe status code');
 const paper10Html=readFileSync('ensayo-paper-10.html','utf8');
 const paper10Browser=readFileSync('scripts/paper_ten_browser.mjs','utf8');
 assert.ok(paper10Html.includes('id="start"')&&paper10Html.includes('id="results"'),

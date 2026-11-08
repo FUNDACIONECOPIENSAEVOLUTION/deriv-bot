@@ -436,6 +436,15 @@ it('records ten distinct confirmed broker DEMO contract IDs, one buy reservation
       verifiedIndependently:false,valid:true,
       indicator:{fast:551,slow:550,rsi:59,volatility:0.02}}),'demo-browser-signal');
  });
+ // If newer market data invalidates a proposal, cancel UNSENT buy reservation.
+ const unsent=await stub.reserveDemoBurst({
+  nonce:session.nonce,proposalId:'9'.repeat(36),askPrice:1,payout:1.80
+ });
+ expect((await stub.cancelUnsentDemoBurst({nonce:session.nonce,id:unsent.id})))
+  .toMatchObject({mode:'DEMO_BURST_PREBUY_CANCELLED',brokerOrders:0,confirmed:0});
+ expect(await errorFrom(stub,x=>x.cancelUnsentDemoBurst({nonce:session.nonce,id:unsent.id})))
+  .toBe('DEMO_PREBUY_CANCEL_NOT_ALLOWED');
+ expect((await stub.status()).tradeReport.unknownCount).toBe(0);
  for(let i=0;i<10;i++){
   // Browser refreshes public ticks for EACH purchase; the fixture must as well.
   await runInDurableObject(stub,(_instance,ctx)=>{
@@ -455,6 +464,7 @@ it('records ten distinct confirmed broker DEMO contract IDs, one buy reservation
     request:{price:1,req_id:2}});
   const ack=await stub.acknowledgeDemoBurst({
    nonce:session.nonce,id:reservation.id,
+   timing:{preBuyAgeMs:220,reserveRttMs:140,buyAckRttMs:360},
    response:{msg_type:'buy',req_id:2,buy:{contract_id:900000+i,
      buy_price:1,purchase_time:now}}
   });
@@ -487,10 +497,16 @@ it('records ten distinct confirmed broker DEMO contract IDs, one buy reservation
  expect(batchCsv.count).toBe(10);
  expect(batchCsv.csv).toContain('"DERIV_DEMO"');
  expect(batchCsv.csv).toContain('"900000"');
+ expect(batchCsv.csv).toContain('"edad_senal_antes_buy_ms"');
+ expect(batchCsv.csv).toContain('"latencia_reserva_ms"');
+ expect(batchCsv.csv).toContain('"latencia_acuse_deriv_ms"');
+ expect(batchCsv.csv).toContain('"220"');
+ expect(batchCsv.csv).toContain('"360"');
  expect(batchCsv.csv).not.toContain('"PAPER"');
  expect(batchCsv.csv.split(/\r?\n/).filter(x=>x.includes('"DERIV_DEMO"')).length).toBe(10);
  const allCsv=await stub.exportDemoCsv('all');
- expect(allCsv.count).toBe(10);
+ expect(allCsv.count).toBe(11); // ten BUYs and one canceled UNSENT attempt
+ expect(allCsv.csv).toContain('"PREBUY_STALE_NOT_SENT"');
  expect(allCsv.csv).toContain('"TREND_AND_MOMENTUM"');
  expect(calls).not.toContain('buy');
 });

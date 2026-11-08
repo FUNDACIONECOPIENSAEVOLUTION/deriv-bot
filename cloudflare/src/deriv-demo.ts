@@ -2,7 +2,7 @@ import { dayAt, analyzeSignal } from '../../runtime/core.mjs';
 import {planDemoBurst,DEMO_BURST_STAKE_CENTS} from './demo-burst-policy';
 import {demoTradesCsv,type DemoCsvRow} from './demo-csv';
 import {DEMO_SUPPORTED_SYMBOLS,isDemoSymbol,type DemoSymbol} from './demo-symbols';
-import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
+import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, validManualDemoApproval } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
 import { buildDemoBuyRequest, parseDemoBuyResponse, parseDemoSettlement, type DemoBuyAck, type DemoQuoteForBuy } from './demo-trade-guards';
@@ -384,8 +384,8 @@ export class DerivDemoConnection extends DurableObject<Env> {
       account:connected&&saved?{type:'demo',currency:'USD',label:'Demo · …'+saved.account.account_id.slice(-4),balance:saved.account.balance,checkedAt:saved.checkedAt}:null,
       discovery:this.read<Discovery>('discovery'),state:connected?'DEMO_VERIFIED':saved?'AUTHORIZATION_EXPIRED':this.read('discovery')?'DEMO_ACCOUNT_NOT_VERIFIED':'NOT_CONNECTED',
       demoTradingEnabled:String(this.env.DEMO_BUY_ENABLED)==='true',
-      demoAutomationAvailable:String(this.env.DEMO_AUTO_ENABLED)==='true',
-      demoAutomationRequested:this.read<boolean>('demo-auto')===true,
+      demoAutomationAvailable:false,
+      demoAutomationRequested:false,
       demoMaxConcurrent:this.chosenMaxConcurrent(),
       nextManualStakeCents:this.currentManualStakeCents(),
       allowedManualStakesCents:DEMO_STAKES_CENTS,
@@ -523,31 +523,14 @@ export class DerivDemoConnection extends DurableObject<Env> {
     if(enabled){
       if(String(this.env.DEMO_AUTO_ENABLED)!=='true'||String(this.env.DEMO_BUY_ENABLED)!=='true')
         throw Error('DEMO_AUTO_DISABLED');
-      // Never launch the 50-trade campaign until a real broker DEMO settlement
-      // from a single owner-approved manual order has been reconciled.
-      // Browser-supplied acknowledgements are not independent broker evidence.
-       const verified=this.ctx.storage.sql.exec<{n:number}>(
-         "SELECT COUNT(*) AS n FROM demo_trades WHERE state='SETTLED' AND COALESCE(code,'')!='CLIENT_OBSERVED'"
-       ).one().n;
-       requireFirstDemoSettlement(verified);
-      await this.verifiedDemoCredentials();
-      const next=pickDemoStakeCents(this.read<number>('demo-stake-index')||0);
-      const snapshot=this.getRiskSnapshot();
-      if(snapshot.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
-      const safety=evaluateDemoRisk({...snapshot,brokerBalanceCents:snapshot.brokerBalanceCents,stakeCents:next,maxConcurrent:chosen});
-      if(!safety.allowed)throw Error(safety.reason);
+      throw Error('DEMO_AUTO_PAPER_SIGNAL_DISABLED');
     }
     this.write('demo-max-concurrent',chosen);
     this.write('demo-auto',enabled);
     return {mode:'DERIV_DEMO',autoEnabled:enabled,maxConcurrent:chosen,tradeReport:this.reportDemo()};
   }
 
-  isDemoAutoEnabled(){
-    return this.read<boolean>('demo-auto')===true
-      &&String(this.env.DEMO_AUTO_ENABLED)==='true'
-      &&String(this.env.DEMO_BUY_ENABLED)==='true'
-      &&this.read<boolean>('demo-loss-halt')!==true;
-  }
+  isDemoAutoEnabled(){return false;/* Legacy PAPER-derived auto orders disabled. */}
 
   /**
    * Browser-side one-contract recovery bridge for an origin that rejects
@@ -751,7 +734,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       exposureCents:snapshot.exposureCents,brokerBalanceCents:snapshot.brokerBalanceCents,
       balanceCheckedAt:this.read<number>('demo-last-balance-at')||0,now:epoch(),
       demoConnected:!!saved&&saved.expiresAt>epoch()&&!!this.read('credentials'),
-      autoActive:this.read<boolean>('demo-auto')===true,
+      autoActive:false,
       batchSettlementPending:snapshot.batchSettlementPending,halted:snapshot.halted
     },stakeCents);
     return blocked?{...planning,allowed:false,reason:'DEMO_BURST_ALREADY_ACTIVE'}:planning;
@@ -821,7 +804,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       throw Error('DEMO_BURST_SYMBOL_OR_DIRECTION_INVALID');
     const latestSignal=this.getBrowserSignal(symbol);
     if(!latestSignal.valid||latestSignal.direction!==direction||
-       latestSignal.quoteAgeSeconds===null||latestSignal.quoteAgeSeconds>3)
+       latestSignal.quoteAgeSeconds===null||latestSignal.quoteAgeSeconds>2)
       throw Error('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
     const credentials=await this.verifiedDemoCredentials();
     if(credentials.accountId!==b.accountId)throw Error('DEMO_ONLY');
@@ -858,7 +841,7 @@ export class DerivDemoConnection extends DurableObject<Env> {
       // Recheck freshness atomically: authorization/crypto may take time.
       const atReserveSignal=this.getBrowserSignal(symbol);
       if(!atReserveSignal.valid||atReserveSignal.direction!==direction||
-         atReserveSignal.quoteAgeSeconds===null||atReserveSignal.quoteAgeSeconds>3)
+         atReserveSignal.quoteAgeSeconds===null||atReserveSignal.quoteAgeSeconds>2)
         throw Error('DEMO_BURST_SIGNAL_STALE_OR_REVERSED');
       const limits=planDemoBurst(1,{
         pilotPurchases:snap.pilotPurchases,
@@ -911,16 +894,52 @@ export class DerivDemoConnection extends DurableObject<Env> {
       contractCountRequested:b.count,chosenSymbol:symbol,chosenDirection:direction,
       buyOrdersInThisResponse:0};
   }
-  acknowledgeDemoBurst(input:{nonce:string;id:number;response:unknown}){
+  /** Cancel a reserved UNKNOWN row only if the owner did NOT send BUY. */
+  cancelUnsentDemoBurst(input:{nonce:string;id:number}){
+    const b=this.burstState();
+    if(!b||b.nonce!==input?.nonce||b.state!=='BUYING'||
+       b.pendingId!==input?.id||!Number.isSafeInteger(input.id))
+      throw Error('DEMO_PREBUY_CANCEL_NOT_ALLOWED');
+    return this.ctx.storage.transactionSync(()=>{
+      const current=this.burstState();
+      const row=this.ctx.storage.sql.exec<{state:string;code:string|null;contract_id:number|null}>(
+        'SELECT state,code,contract_id FROM demo_trades WHERE id=?',input.id).toArray()[0];
+      if(!current||current.nonce!==input.nonce||current.pendingId!==input.id||
+         current.state!=='BUYING'||!row||row.state!=='UNKNOWN'||
+         row.code!=='CLIENT_PENDING'||row.contract_id!==null)
+        throw Error('DEMO_PREBUY_CANCEL_NOT_ALLOWED');
+      this.ctx.storage.sql.exec(
+        "UPDATE demo_trades SET state='REJECTED',code='PREBUY_STALE_NOT_SENT' WHERE id=? AND state='UNKNOWN'",input.id);
+      this.write('demo-burst',{...current,pendingId:null});
+      return {mode:'DEMO_BURST_PREBUY_CANCELLED',id:input.id,
+        accountType:'demo',brokerOrders:0,confirmed:current.ids.length};
+    });
+  }
+
+  acknowledgeDemoBurst(input:{nonce:string;id:number;response:unknown;
+    timing?:{preBuyAgeMs?:number;reserveRttMs?:number;buyAckRttMs?:number}}){
     const b=this.burstState();
     if(!b||b.state!=='BUYING'||b.nonce!==input?.nonce||
        b.pendingId!==input.id)throw Error('DEMO_BURST_ACK_NOT_ALLOWED');
-    const row=this.ctx.storage.sql.exec<{buy_cents:number}>(
-      "SELECT buy_cents FROM demo_trades WHERE id=? AND state='UNKNOWN'",input.id
+    const row=this.ctx.storage.sql.exec<{buy_cents:number;decision_json:string|null}>(
+      "SELECT buy_cents,decision_json FROM demo_trades WHERE id=? AND state='UNKNOWN'",input.id
     ).toArray()[0];
     if(!row)throw Error('DEMO_BURST_ACK_NOT_ALLOWED');
     const ack=parseDemoBuyResponse(input.response,row.buy_cents);
     this.ctx.storage.transactionSync(()=>{
+      if(input.timing&&row.decision_json){
+        let previous:Record<string,unknown>={};
+        try{previous=JSON.parse(row.decision_json) as Record<string,unknown>;}catch{}
+        const boundedMs=(n:unknown)=>typeof n==='number'&&Number.isFinite(n)&&
+          Number.isSafeInteger(n)&&n>=0&&n<=30000?n:null;
+        const newEvidence={...previous,
+          preBuyAgeMs:boundedMs(input.timing.preBuyAgeMs),
+          reserveRttMs:boundedMs(input.timing.reserveRttMs),
+          buyAckRttMs:boundedMs(input.timing.buyAckRttMs)};
+        this.ctx.storage.sql.exec(
+          "UPDATE demo_trades SET decision_json=? WHERE id=? AND state='UNKNOWN'",
+          JSON.stringify(newEvidence),input.id);
+      }
       if(!ack.accepted){
         this.ctx.storage.sql.exec(
           "UPDATE demo_trades SET state='REJECTED',code=? WHERE id=? AND state='UNKNOWN'",
