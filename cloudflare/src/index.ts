@@ -311,7 +311,7 @@ export default {
     if(!env.ADMIN_TOKEN||env.ADMIN_TOKEN.length<32)return json({error:'Acceso privado pendiente de configurar'},503);
     if(!await authorized(request,env.ADMIN_TOKEN))return json({error:'Acceso privado'},401,{'WWW-Authenticate':'Basic realm="Ecopiensa PAPER", charset="UTF-8"'});
     const validGet=request.method==='GET'&&['/','/api/status','/api/trades.csv','/api/market','/api/arbitrage','/api/deriv/status','/api/deriv/callback','/api/deriv/demo/mcp-intent','/api/deriv/demo/burst/status','/api/deriv/demo/trades.csv','/api/deriv/demo/burst.csv'].includes(url.pathname);
-    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal','/api/deriv/demo/manual-stake','/api/deriv/demo/burst/begin','/api/deriv/demo/burst/reserve','/api/deriv/demo/burst/ack','/api/deriv/demo/burst/halt','/api/deriv/demo/burst/reconcile','/api/deriv/demo/burst/settle'].includes(url.pathname);
+    const validPost=request.method==='POST'&&['/api/start','/api/stop','/api/arbitrage/refresh','/api/deriv/connect','/api/deriv/refresh','/api/deriv/quote','/api/deriv/market-check','/api/deriv/demo/buy-once','/api/deriv/demo/check','/api/deriv/demo/auto-start','/api/deriv/demo/auto-stop','/api/deriv/demo/browser/begin','/api/deriv/demo/browser/reserve','/api/deriv/demo/browser/ack','/api/deriv/demo/browser/settle','/api/deriv/demo/browser/check','/api/deriv/demo/mcp-intent/claim','/api/deriv/demo/mcp-intent/complete','/api/deriv/demo/mcp-intent/cancel','/api/deriv/demo/signal','/api/deriv/demo/manual-stake','/api/deriv/demo/burst/begin','/api/deriv/demo/burst/reserve','/api/deriv/demo/burst/ack','/api/deriv/demo/burst/cancel','/api/deriv/demo/burst/halt','/api/deriv/demo/burst/reconcile','/api/deriv/demo/burst/settle'].includes(url.pathname);
     if(!validGet&&!validPost)return json({error:'Ruta o método no permitido'},404);
     if(validPost&&(request.headers.get('X-Paper-Control')!=='1'||request.headers.get('Content-Type')!=='application/json'
       ||(request.headers.has('Origin')&&request.headers.get('Origin')!==url.origin)))return json({error:'Origen o control inválido'},403);
@@ -354,6 +354,11 @@ export default {
           const nonce=typeof d.nonce==='string'&&/^[A-Za-z0-9_-]{43}$/.test(d.nonce)
             ?d.nonce:null;
           if(!nonce)return json({code:'DEMO_BURST_NONCE_INVALID'},400);
+          if(action==='cancel'){
+            if(typeof d.id!=='number'||!Number.isSafeInteger(d.id)||d.id<=0)
+              return json({code:'DEMO_PREBUY_CANCEL_INVALID'},400);
+            return json(await demo.cancelUnsentDemoBurst({nonce,id:d.id}));
+          }
           if(action==='reserve'){
             if(typeof d.proposalId!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(d.proposalId)
               ||typeof d.askPrice!=='number'||typeof d.payout!=='number'
@@ -589,39 +594,14 @@ export default {
     }
   },
   async scheduled(_event:ScheduledController,env:Env){
-    const paper=env.PAPER.getByName(EXPERIMENT);
-    await paper.watchdog();
+    // Broker DEMO maintenance first. PAPER status must never block this.
+    // No autonomous scheduled BUY from the PAPER strategy.
     const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
-    // Update authoritative DEMO balance and enforce the cumulative US$100
-    // loss stop on every scheduled check while the virtual bot is enabled.
     try{await demo.refreshDemoRisk();}
     catch{console.log(JSON.stringify({type:'demo_balance_check_pending'}));}
-    // Read-only broker settlement, regardless of automation state.
     try{await demo.reconcileOpenDemoOnly();}
     catch{console.log(JSON.stringify({type:'demo_settlement_check_pending'}));}
-    // Binance/Coinbase scanning is intentionally paused for this Deriv-only stage.
-    if(String(env.DEMO_AUTO_ENABLED)==='true'&&String(env.DEMO_BUY_ENABLED)==='true'){
-      try{
-        if(!await demo.isDemoAutoEnabled())return;
-        const snapshot=await paper.status();
-        if(snapshot.running!==true||snapshot.market.state!=='live'
-          ||snapshot.config.symbol!=='R_100'
-          ||(snapshot.decision.direction!==1&&snapshot.decision.direction!==-1)
-          ||typeof snapshot.quoteAgeSeconds!=='number'
-          ||snapshot.quoteAgeSeconds<0||snapshot.quoteAgeSeconds>10)return;
-        const direction=snapshot.decision.direction===1?'UP':'DOWN';
-        await demo.buyDemoOnce(direction,{
-          reason:snapshot.decision.reason,fast:snapshot.decision.fast,
-          slow:snapshot.decision.slow,rsi:snapshot.decision.rsi,
-          volatility:snapshot.decision.volatility,entryQuote:snapshot.lastQuote,
-          quoteAgeSeconds:snapshot.quoteAgeSeconds
-        },'auto');
-      }catch(error){
-        // Logs only trusted bounded domain codes, never broker tokens or OTP URLs.
-        const code=error instanceof Error&&/^(?:DEMO|DERIV)_[A-Z0-9_]+$/.test(error.message)?
-          error.message:'DEMO_AUTO_CHECK_PENDING';
-        console.log(JSON.stringify({type:'demo_auto_check',code}));
-      }
-    }
+    try{await env.PAPER.getByName(EXPERIMENT).watchdog();}
+    catch{console.log(JSON.stringify({type:'paper_maintenance_failed',demoUnaffected:true}));}
   },
 } satisfies ExportedHandler<Env>;
