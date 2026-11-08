@@ -102,6 +102,13 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v11.2 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T18:21:12.115Z (UTC).
+- **Commit de origen:** `fbc5db3dbe06`.
+- fix(DEMO): recuperar App ID y diagnosticar Durable Objects sin borrar sesiones
+
 ## v11.1 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T18:00:22.661Z (UTC).

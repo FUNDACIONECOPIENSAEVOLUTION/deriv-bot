@@ -1,10 +1,10 @@
 {
-  "version": "11.1",
-  "updatedAt": "2026-11-08T18:00:22.661Z",
-  "summary": "fix(DEMO): conexión independiente, tick vivo y cancelación de señal 1 s",
+  "version": "11.2",
+  "updatedAt": "2026-11-08T18:21:12.115Z",
+  "summary": "fix(DEMO): recuperar App ID y diagnosticar Durable Objects sin borrar sesiones",
   "changes": [
-    "fix(DEMO): conexión independiente, tick vivo y cancelación de señal 1 s"
+    "fix(DEMO): recuperar App ID y diagnosticar Durable Objects sin borrar sesiones"
   ],
-  "sourceCommit": "f9a9be9ce9202b2d39475398e41120509dc4ac4d",
+  "sourceCommit": "fbc5db3dbe0641613d35f49e340c07218d9d79eb",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
