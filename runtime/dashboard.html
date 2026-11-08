@@ -1540,41 +1540,16 @@ $('demo-balanced-stop').onclick=()=>{
 document.addEventListener('visibilitychange',()=>{
  if(document.hidden&&demoBalancedRunning)demoBalancedStop=true;
 });
-$('demo-export-csv').onclick=async()=>{
- try{
- const response=await fetch('/api/deriv/status',{signal:AbortSignal.timeout(10000)});
- if(!response.ok)throw Error('DEMO_EXPORT_UNAVAILABLE');
- const info=await response.json(),rows=info.tradeReport?.history||[];
- if(!info.connected||!Array.isArray(rows)||!rows.length){
-  $('demo-balanced-status').textContent='No hay operaciones DEMO disponibles para exportar.';return;
- }
- const columns=['date','createdAt','contractId','state','contractType','buyCents','payoutCents','pnlCents',
-  'entrySpot','exitSpot','verification','strategy','direction','fast','slow','rsi',
-  'volatility','entryQuote','quoteAgeSeconds','reason'];
- const safeCell=x=>{
-  const value=x===null||x===undefined?'':String(x);
-  const formula=/^[=+@]/.test(value)?"'"+value:value;
-  return '"'+formula.replaceAll('"','""')+'"';
- };
- const records=rows.map(r=>{
-  const d=r.decision||{};
-  return [r.date,r.createdAt,r.contractId,r.state,r.contractType,
-   r.buyCents,r.payoutCents,r.pnlCents,r.entrySpot,r.exitSpot,
-   r.code==='CLIENT_OBSERVED'?'BROWSER_OBSERVED_NOT_INDEPENDENTLY_VERIFIED':r.code||'SERVER_RECORD',
-   d.strategy,d.direction,d.fast,d.slow,d.rsi,d.volatility,d.entryQuote,d.quoteAgeSeconds,d.reason]
-   .map(safeCell).join(',');
- });
- const csv='\uFEFF'+columns.map(safeCell).join(',')+'\r\n'+records.join('\r\n')+'\r\n';
- const file=new Blob([csv],{type:'text/csv;charset=utf-8'});
- const url=URL.createObjectURL(file),link=document.createElement('a');
- link.href=url;link.download='deriv-demo-auditoria-'+new Date().toISOString().slice(0,10)+'.csv';
- document.body.appendChild(link);link.click();link.remove();
- setTimeout(()=>URL.revokeObjectURL(url),1000);
- $('demo-balanced-status').textContent='Auditoría privada exportada: '+rows.length+
-   ' registros DEMO. Puedes compartir el CSV para comparar CALL, PUT, RSI y ganancias.';
- }catch{
-  $('demo-balanced-status').textContent='La auditoría DEMO no pudo exportarse desde el servidor privado.';
- }
+$('demo-export-csv').onclick=()=>{
+ // The canonical export comes directly from the full private DEMO SQL ledger,
+ // not from the 50-row status preview and never from PAPER.
+ const a=document.createElement('a');
+ a.href='/api/deriv/demo/trades.csv';
+ a.download='deriv-demo-historial-completo.csv';
+ document.body.appendChild(a);a.click();a.remove();
+ $('demo-balanced-status').textContent='Descarga solicitada del historial completo DEMO '+
+  'desde el servidor privado. Incluye contratos, horarios disponibles, SMA, RSI '+
+  'y diagnóstico; no incluye las operaciones PAPER.';
 };
 
 $('demo-buy-once').onclick=async()=>{
