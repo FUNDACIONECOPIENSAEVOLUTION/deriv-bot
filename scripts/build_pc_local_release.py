@@ -32,9 +32,9 @@ local.update(
     summary="Compras DEMO 1-10, OHLC, P&L, CSV, MCP privado y actualización automática",
     notes=[
         "Solo el PC ejecuta el bot; GitHub es fuente y respaldo del código.",
-        "Compras secuenciales DEMO con aprobación local explícita; REAL inaccesible.",
+        "Compras paralelas de hasta cinco contratos DEMO con clic local explícito; REAL inaccesible.",
         "MCP localhost con Bearer privado permite análisis y solicitudes, NO compras directas.",
-        "Velas OHLC de 10 ticks, historial SQLite, cronología de compras y CSV.",
+        "60 velas OHLC, indicadores multifactoriales, historial SQLite, cronología y CSV.",
         "Actualización en reposo con SHA-256 y reinicio supervisado; nunca durante contrato abierto.",
         "No hay garantías de rentabilidad, tasa de acierto ni latencia.",
     ],
@@ -83,6 +83,7 @@ assert len(paths) >= 22, "Faltan fuentes necesarias en el paquete"
 assert (app / "server.mjs") in paths
 assert (app / "demo-trading.mjs") in paths
 assert (app / "demo-burst.mjs") in paths
+assert (app / "market-analysis.mjs") in paths, "Falta módulo de 60 velas en paquete"
 assert (app / "mcp-local.mjs") in paths
 assert (app / "Actualizar-Desde-GitHub.ps1") in paths
 archive_bytes = io.BytesIO()

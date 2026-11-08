@@ -49,7 +49,7 @@ try{
  $source=Join-Path $stage 'local-demo'
  $newVersion=[string]((Get-Content -LiteralPath (Join-Path $source 'local-release.json') -Raw | ConvertFrom-Json).version)
  if($newVersion -ne $remote){throw 'VERSION_EN_PAQUETE_NO_COINCIDE'}
- foreach($name in @('server.mjs','demo-trading.mjs','demo-burst.mjs','mcp-local.mjs',
+ foreach($name in @('server.mjs','market-analysis.mjs','demo-trading.mjs','demo-burst.mjs','mcp-local.mjs',
   'Tarea-Oculta.vbs','Instalar-TareasOcultas.ps1','Actualizar-Desde-GitHub.ps1','public\app.js')){
   if(-not(Test-Path (Join-Path $source $name))){throw 'PAQUETE_INCOMPLETO'}
  }
