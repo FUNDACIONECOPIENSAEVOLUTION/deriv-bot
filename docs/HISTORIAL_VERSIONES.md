@@ -65,6 +65,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v7.5 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:12:04.865Z (UTC).
+- **Commit de origen:** `00c288708f58`.
+- Implementar decisión CALL/PUT/ESPERAR con ticks Deriv en navegador y una compra DEMO explícitamente autorizada
+- Incorporar botón de análisis CALL/PUT y compra DEMO autorizada decidida por el bot
+
 ## v7.4 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:11:25.119Z (UTC).
