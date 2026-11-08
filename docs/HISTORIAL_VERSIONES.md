@@ -80,6 +80,14 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.0 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:03:30.641Z (UTC).
+- **Commit de origen:** `83fa649bb38f`.
+- Bloquear cada compra DEMO sin señal pública reciente o cuando la dirección cambia durante la tanda
+- Validar una señal SMA/RSI reciente para CADA compra DEMO y detener tanda si se debilita o cambia de dirección
+
 ## v8.9 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:02:49.284Z (UTC).

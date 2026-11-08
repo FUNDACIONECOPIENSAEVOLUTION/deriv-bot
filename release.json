@@ -1,10 +1,11 @@
 {
-  "version": "8.9",
-  "updatedAt": "2026-11-08T01:02:49.284Z",
-  "summary": "Reparar tabla superior: vista DEMO auténtica predeterminada con fuente, contrato y precio, PAPER solo en otra pestaña",
+  "version": "9.0",
+  "updatedAt": "2026-11-08T01:03:30.641Z",
+  "summary": "Bloquear cada compra DEMO sin señal pública reciente o cuando la dirección cambia durante la tanda",
   "changes": [
-    "Reparar tabla superior: vista DEMO auténtica predeterminada con fuente, contrato y precio, PAPER solo en otra pestaña"
+    "Bloquear cada compra DEMO sin señal pública reciente o cuando la dirección cambia durante la tanda",
+    "Validar una señal SMA/RSI reciente para CADA compra DEMO y detener tanda si se debilita o cambia de dirección"
   ],
-  "sourceCommit": "9c6ecf46f19fd3adeb443a96fd0972ebb64bb368",
+  "sourceCommit": "83fa649bb38f3646c0a01adcc2e787ae36c40c5d",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
