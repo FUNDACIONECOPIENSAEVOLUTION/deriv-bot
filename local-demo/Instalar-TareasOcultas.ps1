@@ -7,6 +7,11 @@ if(-not(Test-Path $vbs)){throw 'TAREA_OCULTA_NO_INSTALADA'}
 if(-not(Test-Path (Join-Path $app 'server.mjs'))){throw 'ECOPIENSA_SERVER_NO_INSTALADO'}
 $wscript=Join-Path $env:WINDIR 'System32\wscript.exe'
 if(-not(Test-Path $wscript)){throw 'WSCRIPT_WINDOWS_NO_DISPONIBLE'}
+$isAdmin=([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if(-not $isAdmin){
+ Write-Warning 'TAREAS_NO_INSTALADAS: Ejecutar Reparar-Tareas-PC.ps1 como administrador.'
+ exit 2
+}
 function CrearTarea([string]$Nombre,[string]$Accion,[int]$Minutos,[string]$Descripcion){
   $argumentos='/B "'+$vbs+'" '+$Accion+' "'+$Ruta+'"'
   $action=New-ScheduledTaskAction -Execute $wscript -Argument $argumentos -WorkingDirectory $app
