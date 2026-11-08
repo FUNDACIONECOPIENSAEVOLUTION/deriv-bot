@@ -221,6 +221,24 @@ export default {
       demoAutomationEnabled:String(env.DEMO_AUTO_ENABLED)==='true',
       note:'Estado técnico del Worker. No confirma sesión Deriv ni operaciones DEMO.'
     });
+    if(url.pathname==='/api/health/dependencies'&&request.method==='GET'){
+      // Only publish booleans for storage reachability; never return user account,
+      // balances, internal errors, OAuth data, or private DO state.
+      const results=await Promise.allSettled([
+        env.PAPER.getByName(EXPERIMENT).status(),
+        env.DERIV_DEMO.getByName('owner-deriv-demo-v1').status()
+      ]);
+      const paperReady=results[0].status==='fulfilled';
+      const demoReady=results[1].status==='fulfilled';
+      if(!paperReady)console.error(JSON.stringify({type:'readiness_failed',component:'PAPER'}));
+      if(!demoReady)console.error(JSON.stringify({type:'readiness_failed',component:'DERIV_DEMO'}));
+      return json({version:release.version+'.0',
+        paper:paperReady?'ready':'unavailable',
+        demo:demoReady?'ready':'unavailable',
+        // A ready storage service is NOT the same as an authenticated broker session.
+        brokerAuthorization:'not_checked',noOrders:true},
+        paperReady&&demoReady?200:503,{'Cache-Control':'no-store'});
+    }
     if(url.pathname==='/api/health/deriv-socket'&&request.method==='GET'){
       const result=await readDerivSocketTransport();
       return json({readOnly:true,version:release.version+'.0',...result},result.status==='CONNECTED'?200:503);
