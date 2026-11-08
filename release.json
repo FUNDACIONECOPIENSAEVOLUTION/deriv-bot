@@ -1,10 +1,12 @@
 {
-  "version": "9.6",
-  "updatedAt": "2026-11-08T01:12:14.493Z",
-  "summary": "Probar mínimo US$0.10 y propuestas CALL/PUT de cuatro índices sin operaciones ni cuenta Deriv",
+  "version": "9.7",
+  "updatedAt": "2026-11-08T01:12:59.324Z",
+  "summary": "Validar cuatro símbolos DEMO permitidos en buy/settlement y mantener bloqueo real",
   "changes": [
-    "Probar mínimo US$0.10 y propuestas CALL/PUT de cuatro índices sin operaciones ni cuenta Deriv"
+    "Validar cuatro símbolos DEMO permitidos en buy/settlement y mantener bloqueo real",
+    "Permitir cuatro símbolos de índices comprobados en cotizaciones DEMO, sin habilitar cuenta real",
+    "Permitir stakes DEMO US$0.35–1 por contrato en tandas, cálculo de exposición y presupuesto US$10"
   ],
-  "sourceCommit": "6dfaf992f0fb4ea64a06f6ee416e3be583f1d260",
+  "sourceCommit": "0ed77460bc7583533e08816914743b4d6a810669",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

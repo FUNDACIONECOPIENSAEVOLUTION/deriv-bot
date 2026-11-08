@@ -87,6 +87,15 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v9.7 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:12:59.324Z (UTC).
+- **Commit de origen:** `0ed77460bc75`.
+- Validar cuatro símbolos DEMO permitidos en buy/settlement y mantener bloqueo real
+- Permitir cuatro símbolos de índices comprobados en cotizaciones DEMO, sin habilitar cuenta real
+- Permitir stakes DEMO US$0.35–1 por contrato en tandas, cálculo de exposición y presupuesto US$10
+
 ## v9.6 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:12:14.493Z (UTC).
