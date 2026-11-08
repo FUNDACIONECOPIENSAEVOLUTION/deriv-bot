@@ -1,5 +1,6 @@
 import { dayAt, analyzeSignal } from '../../runtime/core.mjs';
 import {planDemoBurst,DEMO_BURST_STAKE_CENTS} from './demo-burst-policy';
+import {demoTradesCsv,type DemoCsvRow} from './demo-csv';
 import { evaluateDemoRisk, pickDemoStakeCents, DEMO_STAKES_CENTS, DEMO_MAX_OPEN, DEMO_BASELINE_EXPECTED_CENTS, DEMO_MAX_LOSS_CENTS, DEMO_PILOT_BUDGET_CENTS, DEMO_PILOT_MAX_PURCHASES, DEMO_BATCH_COUNT, DEMO_BATCH_BUDGET_CENTS, DEMO_REVIEW_INTERVAL, requireFirstDemoSettlement, validManualDemoApproval } from './demo-risk-policy';
 import { analyzeBrokerDemoHistory } from '../../runtime/demo-postmortem.mjs';
 import { buySingleDemoContract, readDemoSettlement } from './demo-broker-session';
@@ -260,6 +261,24 @@ export class DerivDemoConnection extends DurableObject<Env> {
     const s=this.getRiskSnapshot();
     if(s.brokerBalanceCents===null)throw Error('DEMO_BROKER_BALANCE_UNVERIFIED');
     return evaluateDemoRisk({...s,brokerBalanceCents:s.brokerBalanceCents,stakeCents,maxConcurrent:this.chosenMaxConcurrent()});
+  }
+
+  /** Export the account's own DEMO ledger, never PAPER simulations or credentials. */
+  exportDemoCsv(scope:'all'|'last-burst'){
+    if(scope!=='all'&&scope!=='last-burst')throw Error('DEMO_CSV_SCOPE_INVALID');
+    let rows:DemoCsvRow[];
+    if(scope==='all'){
+      rows=this.ctx.storage.sql.exec<DemoCsvRow>(
+        'SELECT * FROM demo_trades ORDER BY id DESC LIMIT 1000').toArray();
+    }else{
+      const burst=this.burstState();
+      rows=(burst?.ids||[]).map(id=>this.ctx.storage.sql.exec<DemoCsvRow>(
+        'SELECT * FROM demo_trades WHERE id=?',id).toArray()[0]).filter(
+          (r):r is DemoCsvRow=>r!==undefined
+      ).sort((a,b)=>a.created_at-b.created_at||a.id-b.id);
+    }
+    return {csv:demoTradesCsv(rows),count:rows.length,scope,
+      source:'DERIV_DEMO_LEDGER',independentVerification:false};
   }
 
   private reportDemo() {
