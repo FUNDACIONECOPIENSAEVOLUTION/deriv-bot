@@ -72,6 +72,21 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.2 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:45:49.360Z (UTC).
+- **Commit de origen:** `cd85a5c67187`.
+- Probar que 10 contratos DEMO significan 10 órdenes, máximo US$10, sin duplicados ni superar cupos
+- Corregir tipo opcional de lista de contratos en conciliación DEMO
+- Implementar botón real de N compras DEMO individuales con un socket, acuse por contrato, paradas y saldo al comprar
+- Registrar y mostrar N contratos DEMO individuales, compromiso total y reconciliación de liquidaciones
+- Distinguir cupos reales, compras confirmadas y riesgo para botón de lote DEMO hasta diez contratos
+- Mostrar tanda DEMO hasta 10 contratos distintos, presupuesto US$10, contador de acuses y resultados por contrato
+- Acotar tanda a 45 s y bloquear operaciones manuales paralelas durante lote DEMO
+- Exponer endpoints autenticados para N compras independientes en lote DEMO, acuses y conciliación, sin cuenta real
+- Preparar compra de hasta 10 contratos DEMO distintos en un solo websocket, reserva atómica, confirmaciones y conciliación
+
 ## v8.1 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:41:03.333Z (UTC).

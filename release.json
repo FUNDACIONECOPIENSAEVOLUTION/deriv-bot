@@ -1,10 +1,18 @@
 {
-  "version": "8.1",
-  "updatedAt": "2026-11-08T00:41:03.333Z",
-  "summary": "Definir lote DEMO con N compras independientes US$1 y límite US$10 por tanda sin exceder piloto",
+  "version": "8.2",
+  "updatedAt": "2026-11-08T00:45:49.360Z",
+  "summary": "Probar que 10 contratos DEMO significan 10 órdenes, máximo US$10, sin duplicados ni superar cupos",
   "changes": [
-    "Definir lote DEMO con N compras independientes US$1 y límite US$10 por tanda sin exceder piloto"
+    "Probar que 10 contratos DEMO significan 10 órdenes, máximo US$10, sin duplicados ni superar cupos",
+    "Corregir tipo opcional de lista de contratos en conciliación DEMO",
+    "Implementar botón real de N compras DEMO individuales con un socket, acuse por contrato, paradas y saldo al comprar",
+    "Registrar y mostrar N contratos DEMO individuales, compromiso total y reconciliación de liquidaciones",
+    "Distinguir cupos reales, compras confirmadas y riesgo para botón de lote DEMO hasta diez contratos",
+    "Mostrar tanda DEMO hasta 10 contratos distintos, presupuesto US$10, contador de acuses y resultados por contrato",
+    "Acotar tanda a 45 s y bloquear operaciones manuales paralelas durante lote DEMO",
+    "Exponer endpoints autenticados para N compras independientes en lote DEMO, acuses y conciliación, sin cuenta real",
+    "Preparar compra de hasta 10 contratos DEMO distintos en un solo websocket, reserva atómica, confirmaciones y conciliación"
   ],
-  "sourceCommit": "bb691e52c5909a963e60c1f92cbbcabf7ee842a3",
+  "sourceCommit": "cd85a5c671873eeb1c54336dfea2504136cf6bc8",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
