@@ -141,7 +141,9 @@ try {
    'Abrir-Ecopiensa.ps1','Cerrar-Ecopiensa.ps1','Vigilar-Ecopiensa.ps1',
    'Crear-AccesosDirectos.ps1','Actualizar-Desde-GitHub.ps1','Actualizar-Codigo.ps1',
    'Respaldo-GitHub.ps1','Respaldo-Privado.ps1','Diagnosticar-Ecopiensa.ps1',
-   'Arrancar-Bot.ps1','bump-local.mjs','Verificar-Version.ps1')
+   'Arrancar-Bot.ps1','bump-local.mjs','Verificar-Version.ps1',
+   'demo-trading.mjs','demo-burst.mjs','mcp-local.mjs',
+   'Tarea-Oculta.vbs','Instalar-TareasOcultas.ps1')
   foreach($name in $names){
    $from=Join-Path $source $name
    if(Test-Path $from){Copy-Item -LiteralPath $from -Destination (Join-Path $app $name) -Force}
@@ -151,6 +153,11 @@ try {
    New-Item -ItemType Directory -Path $dest -Force | Out-Null
    Get-ChildItem -LiteralPath (Join-Path $source $name) -File |
      ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dest $_.Name) -Force}
+  }
+  # Tras copiar los módulos nuevos, impedir que las tareas muestren consola.
+  try { & (Join-Path $app 'Instalar-TareasOcultas.ps1') -Ruta $Ruta | Out-Null }
+  catch {
+   Add-Content -LiteralPath (Join-Path $data 'tareas-ocultas.log') -Value ((Get-Date -Format s)+' Error de tareas: '+$_.Exception.GetType().Name)
   }
   Remove-Item -LiteralPath (Join-Path $data 'actualizacion-pendiente.txt') -Force -ErrorAction SilentlyContinue
   Registrar ('Código actualizado desde GitHub pc-local a v'+$remote+'. Datos privados preservados.')
