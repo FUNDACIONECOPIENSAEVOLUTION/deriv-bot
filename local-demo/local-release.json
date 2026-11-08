@@ -1,14 +1,15 @@
 {
-  "version": "11.7",
+  "version": "11.8",
   "channel": "pc-local",
   "execution": "windows-only",
-  "summary": "GitHub pc-local y PC con una versión común; OAuth separado y servidor supervisado",
-  "trading": "demo-read-only",
+  "summary": "Compras DEMO 1-10, OHLC, P&L, CSV, MCP privado y actualización automática",
+  "trading": "demo-owner-authorized-bursts",
   "notes": [
-    "Código completo respaldado en GitHub pc-local como paquete de distribución con SHA-256",
-    "La app presenta la versión local y la última versión conocida en GitHub",
-    "Los cambios se descargan en reposo o al siguiente inicio, sin tocar data, SQLite o OAuth",
-    "OAuth abre una ventana separada; watchdog reanuda Node si falla",
-    "BUY, SELL y REAL continúan deshabilitados hasta validación del motor local"
+    "Solo el PC ejecuta el bot; GitHub es fuente y respaldo del código.",
+    "Compras secuenciales DEMO con aprobación local explícita; REAL inaccesible.",
+    "MCP localhost con Bearer privado permite análisis y solicitudes, NO compras directas.",
+    "Velas OHLC de 10 ticks, historial SQLite, cronología de compras y CSV.",
+    "Actualización en reposo con SHA-256 y reinicio supervisado; nunca durante contrato abierto.",
+    "No hay garantías de rentabilidad, tasa de acierto ni latencia."
   ]
 }

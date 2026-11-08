@@ -1,12 +1,12 @@
 {
-  "version": "11.7",
+  "version": "11.8",
   "channel": "pc-local",
   "runtime": "Windows desktop only",
   "distribution": "versioned source archive + readable source files",
-  "parts": 1,
-  "archiveSha256": "070e050e8f39b920f849d195bc1e523fb4f75bd50ac544da5fa688123612f108",
-  "archive": "pc-bundles/ecopiensa-local-11.7.zip.b64.part00",
-  "trading": "demo-read-only",
-  "summary": "OAuth separado; servidor supervisado; PC descarga GitHub y muestra la misma versión",
+  "parts": 2,
+  "archiveSha256": "0733a852fc319e9f9ad261a201c4566d94dc87aafaff9acb419f58450aa38b26",
+  "archive": "pc-bundles/ecopiensa-local-11.8.zip.b64.part00",
+  "trading": "demo-owner-authorized-bursts",
+  "summary": "Compras DEMO 1-10, OHLC, P&L, CSV, MCP privado y actualización automática",
   "updatedAt": "2026-11-08"
 }
