@@ -64,7 +64,7 @@ it('exports navigation, tick age and proposal latency as observational audit, wi
   pageSessionId:'95f6c086-0f03-443e-9e29-146232b47b01',
   sourceIndicators:'150_public_ticks_not_minute_candles'
  })}]);
- const [head,line]=enhanced.trim().split(/\\r?\\n/);
+ const [head,line]=enhanced.trim().split(String.fromCharCode(13)+String.fromCharCode(10));
  expect(head).toContain('"latencia_propuesta_ms"');
  expect(head).toContain('"navegacion_pagina"');
  expect(head).toContain('"ultimo_tick_epoch"');
@@ -72,6 +72,6 @@ it('exports navigation, tick age and proposal latency as observational audit, wi
  expect(line).toContain('"125"');
  expect(line).toContain('"150_public_ticks_not_minute_candles"');
  expect(line).toContain('"560"');
- const older=demoTradesCsv([row]).trim().split(/\\r?\\n/)[1];
+ const older=demoTradesCsv([row]).trim().split(String.fromCharCode(13)+String.fromCharCode(10))[1];
  expect(older).not.toContain('"reload"');
 });
