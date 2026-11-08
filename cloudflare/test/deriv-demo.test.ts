@@ -459,7 +459,7 @@ it('records ten distinct confirmed broker DEMO contract IDs, one buy reservation
  expect(batchCsv.csv).toContain('"DERIV_DEMO"');
  expect(batchCsv.csv).toContain('"900000"');
  expect(batchCsv.csv).not.toContain('"PAPER"');
- expect(batchCsv.csv.split('\\r\\n').filter(x=>x.includes('"DERIV_DEMO"')).length).toBe(10);
+ expect(batchCsv.csv.split(/\r?\n/).filter(x=>x.includes('"DERIV_DEMO"')).length).toBe(10);
  const allCsv=await stub.exportDemoCsv('all');
  expect(allCsv.count).toBe(10);
  expect(allCsv.csv).toContain('"TREND_AND_MOMENTUM"');
