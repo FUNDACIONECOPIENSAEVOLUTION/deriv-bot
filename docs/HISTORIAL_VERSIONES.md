@@ -91,6 +91,17 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v10.1 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T01:22:09.568Z (UTC).
+- **Commit de origen:** `eced2f0a09a4`.
+- Despliegue verifica ticker multiíndice, scanner AUTO y plan DEMO por stake en lugar de R_100 fijo
+- Ajustar pruebas de ticker dinámico y gráficos por símbolo DEMO para evitar mezcla de mercados
+- Hacer filas DEMO navegables a su mercado y no mostrar precio R_100 cuando se inspecciona otro índice
+- Cargar velas verificadas de R_75, R_10 y 1HZ100V; marcar operaciones solo sobre índice correcto
+- Actualizar ticker y velas según índice seleccionado, evitar mostrar marcas de contratos en gráfico de otro mercado
+
 ## v10.0 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T01:20:33.422Z (UTC).

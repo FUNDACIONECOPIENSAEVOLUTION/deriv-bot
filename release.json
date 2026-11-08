@@ -1,10 +1,14 @@
 {
-  "version": "10.0",
-  "updatedAt": "2026-11-08T01:20:33.422Z",
-  "summary": "Añadir selector de índice para velas reales y marcas DEMO por mercado, sin mezclar símbolos",
+  "version": "10.1",
+  "updatedAt": "2026-11-08T01:22:09.568Z",
+  "summary": "Despliegue verifica ticker multiíndice, scanner AUTO y plan DEMO por stake en lugar de R_100 fijo",
   "changes": [
-    "Añadir selector de índice para velas reales y marcas DEMO por mercado, sin mezclar símbolos"
+    "Despliegue verifica ticker multiíndice, scanner AUTO y plan DEMO por stake en lugar de R_100 fijo",
+    "Ajustar pruebas de ticker dinámico y gráficos por símbolo DEMO para evitar mezcla de mercados",
+    "Hacer filas DEMO navegables a su mercado y no mostrar precio R_100 cuando se inspecciona otro índice",
+    "Cargar velas verificadas de R_75, R_10 y 1HZ100V; marcar operaciones solo sobre índice correcto",
+    "Actualizar ticker y velas según índice seleccionado, evitar mostrar marcas de contratos en gráfico de otro mercado"
   ],
-  "sourceCommit": "d53bf32cb768f0032f3adc9ef9c2d6f7be57d6d9",
+  "sourceCommit": "eced2f0a09a475857fb6b0edd02ec9e3f523c31d",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }
