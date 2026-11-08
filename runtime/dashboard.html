@@ -783,7 +783,7 @@ function renderBurstContracts(burst){
  const rows=$('demo-burst-rows');rows.replaceChildren();
  for(const c of burst.contracts||[]){
   const tr=document.createElement('tr');
-  const values=[c.contractId??'SIN CONFIRMAR',c.direction??'—',
+  const values=[c.contractId??'SIN CONFIRMAR',c.symbol??'R_100',c.direction??'—',
     Number.isInteger(c.stakeCents)?money(c.stakeCents):'—',c.state,
     c.state==='SETTLED'&&Number.isInteger(c.pnlCents)?money(c.pnlCents):'Pendiente'];
   for(const value of values){
@@ -881,7 +881,9 @@ function renderDemo(data){
       ' · importe bruto del piloto '+money(report.pilotCommittedCents||0)
     :'Saldo y contratos disponibles solo con cuenta DEMO conectada';
 
-  const burst=data.demoBurst||{},plan=data.demoBurstPlan||{};
+  const burst=data.demoBurst||{},stakeCents=Number($('demo-burst-stake').value),
+    plan=(data.demoBurstPlans||[]).find(p=>p.stakeCents===stakeCents)||
+       data.demoBurstPlan||{};
   const activeBurst=['PREPARING','BUYING','RECONCILING','REVIEW'].includes(burst.status);
   const countField=$('demo-burst-count');
   if(!countField.dataset.userEdited&&Number.isInteger(plan.maxAllowedNow)){
@@ -897,12 +899,12 @@ function renderDemo(data){
   $('demo-burst-stop').disabled=!demoBurstRunning||demoBurstStopRequested;
   $('demo-burst-reconcile').disabled=demoBurstRunning||demoBurstSettling||
     !data.connected||!(burst.confirmed>burst.settled);
-  $('demo-burst-plan').textContent='Compras DEMO por tanda: máximo 10, importe por contrato US$1, '+
-    'presupuesto bruto máximo US$10. Cupos disponibles de esta tanda: '+
-    (plan.maxAllowedNow??0)+' (por compras o presupuesto ya usados). '+
-    (plan.reason?'Estado: '+plan.reason+'. ':'')+
-    'La cantidad del campo es el número de contratos que se enviarán, NO el número máximo permitido. '+
-    'No se envía nada hasta confirmar.';
+  $('demo-burst-plan').textContent='Hasta diez contratos DEMO por tanda. Apuesta elegida '+
+    money(stakeCents)+' por contrato. Techo de apuestas brutas US$10; cupos disponibles: '+
+    (plan.maxAllowedNow??0)+', total de '+(Number(countField.value)||0)+' compras: '+
+    money((Number(countField.value)||0)*stakeCents)+'. '+
+    (plan.reason?'Riesgo: '+plan.reason+'. ':'')+
+    'Sin señal aceptable, el bot puede enviar menos compras de las solicitadas.';
   renderBurstContracts(burst);
 
   $('demo-next-stake').textContent='Próxima compra del bot: '
@@ -1563,12 +1565,14 @@ $('demo-quote-stake').onchange=()=>{demoManualApproval=null;};
 
 $('demo-burst-count').oninput=()=>{
  const field=$('demo-burst-count');field.dataset.userEdited='1';
- const count=Number(field.value),max=Number(demoCurrent?.demoBurstPlan?.maxAllowedNow??0);
+ const count=Number(field.value),stake=Number($('demo-burst-stake').value),
+ max=Number((demoCurrent?.demoBurstPlans||[]).find(p=>p.stakeCents===stake)?.maxAllowedNow??0);
  const out=$('demo-burst-plan');
  if(!Number.isInteger(count)||count<1||count>10){
   out.textContent='Cantidad inválida: escribe un número entero de 1 a 10. Ninguna orden enviada.';
  }else{
-  out.textContent='Solicitas '+count+' compras DEMO diferentes, cada una de US$1 · total '+money(count*100)+
+  out.textContent='Solicitas '+count+' compras DEMO diferentes, cada una de '+
+    money(stake)+' · total '+money(count*stake)+
     '. Cupos disponibles en la tanda actual: '+max+
     (count>max?'. Insuficientes: espera la siguiente tanda o reduce la cantidad.':
     '. Requiere señal vigente y confirmación; no es una orden todavía.');
@@ -1578,6 +1582,10 @@ $('demo-burst-count').oninput=()=>{
     !demoCurrent?.demoTradingEnabled||!Number.isInteger(count)||count<1||count>10||
     count>max||(demoCurrent?.tradeReport?.unknownCount||0)>0||
     (demoCurrent?.tradeReport?.openCount||0)>0;
+};
+$('demo-burst-stake').onchange=()=>{
+ $('demo-burst-count').oninput();
+ if(demoCurrent)renderDemo(demoCurrent);
 };
 $('demo-burst-stop').onclick=()=>{
  demoBurstStopRequested=true;
