@@ -1,18 +1,14 @@
 {
-  "version": "8.2",
-  "updatedAt": "2026-11-08T00:45:49.360Z",
-  "summary": "Probar que 10 contratos DEMO significan 10 órdenes, máximo US$10, sin duplicados ni superar cupos",
+  "version": "8.3",
+  "updatedAt": "2026-11-08T00:48:48.281Z",
+  "summary": "Probar tanda DEMO completa en fixture con autorización local sin habilitar compra en configuración global",
   "changes": [
-    "Probar que 10 contratos DEMO significan 10 órdenes, máximo US$10, sin duplicados ni superar cupos",
-    "Corregir tipo opcional de lista de contratos en conciliación DEMO",
-    "Implementar botón real de N compras DEMO individuales con un socket, acuse por contrato, paradas y saldo al comprar",
-    "Registrar y mostrar N contratos DEMO individuales, compromiso total y reconciliación de liquidaciones",
-    "Distinguir cupos reales, compras confirmadas y riesgo para botón de lote DEMO hasta diez contratos",
-    "Mostrar tanda DEMO hasta 10 contratos distintos, presupuesto US$10, contador de acuses y resultados por contrato",
-    "Acotar tanda a 45 s y bloquear operaciones manuales paralelas durante lote DEMO",
-    "Exponer endpoints autenticados para N compras independientes en lote DEMO, acuses y conciliación, sin cuenta real",
-    "Preparar compra de hasta 10 contratos DEMO distintos en un solo websocket, reserva atómica, confirmaciones y conciliación"
+    "Probar tanda DEMO completa en fixture con autorización local sin habilitar compra en configuración global",
+    "Alinear prueba HTML con renderización individual de identificadores de contrato DEMO",
+    "Probar escenario íntegro de 10 órdenes DEMO reservadas, 10 acuses independientes y 10 liquidaciones con proveedor simulado",
+    "Comprobar UI de diez contratos: órdenes distintas con ACK, saldo al comprar y no esperar liquidación para siguiente",
+    "Pruebas de lote DEMO requieren señal nueva, dueño autenticado, máximo 10 y cero órdenes al consultar"
   ],
-  "sourceCommit": "cd85a5c671873eeb1c54336dfea2504136cf6bc8",
+  "sourceCommit": "d2b84f4094bfa14f09d6e65faa12764db620b5fe",
   "releasePolicy": "Cada modificación publicada aumenta 0,1: v1.5 → v1.6; v1.9 → v2.0."
 }

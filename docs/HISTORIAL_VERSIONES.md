@@ -73,6 +73,17 @@ Este historial acompaña al manifiesto [release.json](../release.json), comparti
 
 
 
+
+## v8.3 — 2026-11-08
+
+- **Actualizado:** 2026-11-08T00:48:48.281Z (UTC).
+- **Commit de origen:** `d2b84f4094bf`.
+- Probar tanda DEMO completa en fixture con autorización local sin habilitar compra en configuración global
+- Alinear prueba HTML con renderización individual de identificadores de contrato DEMO
+- Probar escenario íntegro de 10 órdenes DEMO reservadas, 10 acuses independientes y 10 liquidaciones con proveedor simulado
+- Comprobar UI de diez contratos: órdenes distintas con ACK, saldo al comprar y no esperar liquidación para siguiente
+- Pruebas de lote DEMO requieren señal nueva, dueño autenticado, máximo 10 y cero órdenes al consultar
+
 ## v8.2 — 2026-11-08
 
 - **Actualizado:** 2026-11-08T00:45:49.360Z (UTC).
