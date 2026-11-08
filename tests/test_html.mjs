@@ -42,12 +42,22 @@ assert.ok(panel.includes('DEMO_BROWSER_BURST'), 'Una tanda debe abrir sesión au
 assert.ok(panel.includes('DEMO_BURST_RESERVED'), 'Cada orden debe reservarse individualmente antes de BUY');
 assert.ok(panel.includes('DEMO_BURST_ACK'), 'Solo un acuse de Deriv confirma cada contrato');
 assert.ok(panel.includes('confirmed++'), 'Los contratos se cuentan al recibir confirmación, no al cotizar');
-assert.ok(panel.includes('const brokerAck=await brokerMessage(ws,reservation.request,10000)'),
-  'Cada compra debe esperar un acuse antes de reservar otra, sin esperar liquidación');
+assert.ok(panel.includes('const brokerAck=await brokerMessage(ws,reserved.request,10000)'),
+  'Cada compra debe esperar un acuse broker separado antes de reservar otra, sin esperar liquidación');
 assert.ok(panel.includes('void syncBrokerBalance(true)'), 'Actualizar saldo oficial inmediatamente después del acuse');
 assert.ok(panel.includes('if(demoBurstStopRequested||document.hidden)'),
   'La pestaña oculta nunca debe enviar más órdenes DEMO');
 assert.ok(panel.includes("for(let i=0;i<count;i++)"),'Abrir hasta N contratos individuales');
+assert.ok(panel.includes('demo-main-pnl')&&panel.includes('demo-main-settled')&&panel.includes('demo-main-purchases'),
+  'Las tarjetas principales deben proceder de Deriv DEMO, no del saldo PAPER');
+assert.ok(panel.includes('demo-market-scan-rows')&&panel.includes('scanDemoMarkets()'),
+  'El bot debe comparar mercados con sus señales antes de enviar una orden');
+assert.ok(panel.includes("signal:'AUTO',stakeCents"),'La tanda debe aceptar señal AUTO y stake del usuario');
+assert.ok(panel.includes("selected.direction")&&panel.includes("selected.symbol"),
+  'La decisión CALL/PUT y el símbolo deben elegirse por contrato');
+assert.ok(panel.includes('demo-burst-stake'),'Las tandas deben tener importe elegido por contrato');
+assert.ok(panel.includes('scoreDemoMarketSignal'),'No presentar score SMA/RSI como probabilidad de ganancia');
+
 assert.ok(panel.includes("c.contractId??'SIN CONFIRMAR'"), 'Mostrar los identificadores por contrato devueltos por Deriv');
 
 
