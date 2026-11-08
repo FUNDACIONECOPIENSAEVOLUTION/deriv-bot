@@ -242,7 +242,7 @@ export default {
         return json({code:'MCP_ORIGIN_FORBIDDEN'},403);
       const demo=env.DERIV_DEMO.getByName('owner-deriv-demo-v1');
       const signal=async():Promise<McpSignal>=>{
-        const status=env.PAPER.getByName(EXPERIMENT).status();
+        const status=await env.PAPER.getByName(EXPERIMENT).status();
         const d=status.decision;
         const quoteAge=status.quoteAgeSeconds;
         const valid=status.running===true&&status.config.symbol==='R_100'
