@@ -539,11 +539,56 @@ function drawCandles(){
   for(let i=0;i<=4;i++){const epoch=start+(end-start)*i/4;svg(root,'text',{x:x(epoch),y:332,fill:'#9baeba','font-size':11,'text-anchor':i===0?'start':i===4?'end':'middle'},time(epoch));}
   for(const bar of bars){const color=bar.close>=bar.open?'#63dfbc':'#ff8594';svg(root,'line',{x1:x(bar.time),x2:x(bar.time),y1:y(bar.high),y2:y(bar.low),stroke:color});svg(root,'rect',{x:x(bar.time)-width/2,y:Math.min(y(bar.open),y(bar.close)),width,height:Math.max(1.2,Math.abs(y(bar.open)-y(bar.close))),fill:color,rx:.5});}
   const last=bars.at(-1);svg(root,'line',{x1:left,x2:right,y1:y(last.close),y2:y(last.close),stroke:'#769393','stroke-dasharray':'3 5','stroke-width':.7});
-  if(provider==='deriv')for(const trade of state?.trades||[]){
-    for(const entry of [{t:trade.entryEpoch,p:trade.entryQuote,label:trade.direction>0?'E↑':'E↓',color:'#84b7ff',offset:17},{t:trade.exitEpoch,p:trade.exitQuote??trade.entryQuote,label:trade.status==='VOID'?'V':'X',color:trade.status==='VOID'?'#9baeba':'#f8cf80',offset:-12}]){
-      if(!Number.isFinite(entry.t)||!Number.isFinite(entry.p)||entry.t<start||entry.t>end)continue;
-      const group=svg(root,'g',{});svg(group,'circle',{cx:x(entry.t),cy:y(entry.p),r:3.4,fill:entry.color,stroke:'#111f29','stroke-width':1});svg(group,'text',{x:x(entry.t),y:Math.max(11,Math.min(300,y(entry.p)+entry.offset)),fill:entry.color,'font-size':10,'font-weight':700,'text-anchor':'middle'},entry.label);
-      svg(group,'title',{},entry.label+' · '+date(entry.t)+' · '+(entry.label==='V'?'Sin liquidación; precio de entrada como referencia':price(entry.p))+' · '+trade.id+' · Simulación');
+  if(provider==='deriv'){
+    let marks=0,missing=0;
+    if(historyMode==='DEMO'){
+      const historical=demoCurrent?.tradeReport?.history||[];
+      for(const trade of historical){
+        const dir=trade.contractType==='PUT'?'↓':'↑';
+        // We never substitute a reservation time for the confirmed buy time.
+        const entries=[
+          {t:trade.boughtAt,p:trade.entrySpot,label:'E'+dir,color:'#84b7ff',offset:17},
+          {t:trade.settledAt,p:trade.exitSpot,label:'X',color:trade.pnlCents<0?'#ff8594':'#f8cf80',offset:-12}
+        ];
+        if((trade.boughtAt&&trade.entrySpot)|| (trade.settledAt&&trade.exitSpot))marks++;
+        else missing++;
+        for(const marker of entries){
+          if(!Number.isSafeInteger(marker.t)||!Number.isFinite(marker.p)
+            ||marker.p<=0||marker.t<start||marker.t>end)continue;
+          const group=svg(root,'g',{});
+          svg(group,'circle',{cx:x(marker.t),cy:y(marker.p),r:4,fill:marker.color,
+             stroke:'#111f29','stroke-width':1});
+          svg(group,'text',{x:x(marker.t),y:Math.max(11,Math.min(300,y(marker.p)+marker.offset)),
+             fill:marker.color,'font-size':11,'font-weight':700,'text-anchor':'middle'},marker.label);
+          svg(group,'title',{},'Contrato DEMO #'+(trade.contractId??'sin acuse')+
+            ' · '+(trade.contractType||'dirección no registrada')+' · '+marker.label+
+            ' · '+date(marker.t)+' · '+price(marker.p)+
+            (trade.state==='SETTLED'&&Number.isInteger(trade.pnlCents)?
+              ' · P&L '+money(trade.pnlCents):' · sin liquidación'));
+        }
+      }
+      $('demo-chart-marker-stats').textContent=
+       'Gráfico R_100 · '+marks+' contratos DEMO con al menos una marca respaldada por precio y hora; '+
+       missing+' registros sin marcas exactas. Las compras anteriores al periodo visible '+
+       'no se representan fuera de la ventana. El gráfico no incluye contratos de otros mercados.';
+    }else{
+      for(const trade of state?.trades||[]){
+        for(const marker of [
+          {t:trade.entryEpoch,p:trade.entryQuote,label:trade.direction>0?'E↑':'E↓',
+            color:'#84b7ff',offset:17},
+          {t:trade.exitEpoch,p:trade.exitQuote??trade.entryQuote,
+            label:trade.status==='VOID'?'V':'X',color:'#f8cf80',offset:-12}]){
+          if(!Number.isFinite(marker.t)||!Number.isFinite(marker.p)
+             ||marker.t<start||marker.t>end)continue;
+          const group=svg(root,'g',{});
+          svg(group,'circle',{cx:x(marker.t),cy:y(marker.p),r:3.4,
+             fill:marker.color,stroke:'#111f29','stroke-width':1});
+          svg(group,'text',{x:x(marker.t),y:Math.max(11,Math.min(300,y(marker.p)+marker.offset)),
+             fill:marker.color,'font-size':10,'text-anchor':'middle'},marker.label);
+          svg(group,'title',{},'Simulación PAPER · '+date(marker.t));
+        }
+      }
+      $('demo-chart-marker-stats').textContent='Vista PAPER: estas marcas NO pertenecen a compras efectuadas en Deriv.';
     }
   }
   crosshair=svg(root,'line',{x1:0,x2:0,y1:top,y2:bottom,stroke:'#8aa2b5','stroke-dasharray':'3 3',visibility:'hidden'});
@@ -552,13 +597,60 @@ function drawCandles(){
 $('candles').addEventListener('pointermove',event=>{if(!activeBars.length)return;const rect=$('candles').getBoundingClientRect(),at=(event.clientX-rect.left)/rect.width*920;const bar=activeBars.reduce((a,b)=>Math.abs(b.x-at)<Math.abs(a.x-at)?b:a);crosshair.setAttribute('x1',bar.x);crosshair.setAttribute('x2',bar.x);crosshair.setAttribute('visibility','visible');showBar(bar);});
 $('candles').addEventListener('pointerleave',()=>{crosshair?.setAttribute('visibility','hidden');if(activeBars.length)showBar(activeBars.at(-1));});
 function drawEquity(){
-  const root=$('equity');root.replaceChildren();const points=state?.equity||[];
-  if(points.length<2){svg(root,'text',{x:20,y:80,fill:'#9baeba','font-size':13},'Aún no hay liquidaciones simuladas.');return;}
-  const values=points.map(p=>p.value),min=Math.min(...values)-2,max=Math.max(...values)+2,x=i=>15+i/(points.length-1)*990,y=v=>120-(v-min)/(max-min)*95;
-  const d=points.map((p,i)=>(i?'L':'M')+x(i)+','+y(p.value)).join(' ');svg(root,'path',{d,fill:'none',stroke:'#63dfbc','stroke-width':2});
-  points.forEach((p,i)=>{const dot=svg(root,'circle',{cx:x(i),cy:y(p.value),r:3,fill:'#63dfbc'});svg(dot,'title',{},date(p.time)+' · '+money(p.value));});
-  svg(root,'text',{x:1018,y:y(points.at(-1).value)+4,fill:'#63dfbc','font-size':13},money(points.at(-1).value));
-  $('equity-note').textContent='Saldo al liquidar cada operación visible. La curva empieza en '+money(points[0].value)+'; no incluye resultados futuros ni proyectados.';
+  const root=$('equity');root.replaceChildren();
+  if(historyMode==='DEMO'){
+    const report=demoCurrent?.tradeReport;
+    const trades=(report?.history||[]).filter(x=>
+      x.state==='SETTLED'&&Number.isInteger(x.pnlCents)).slice().reverse();
+    const values=[0],times=[null];
+    for(const t of trades){values.push(values.at(-1)+t.pnlCents);times.push(t.settledAt??null);}
+    if(values.length<2){
+      svg(root,'text',{x:20,y:80,fill:'#9baeba','font-size':13},
+        'Aún no hay contratos DEMO liquidados registrados.');
+      $('equity-note').textContent='Esta curva no utiliza las simulaciones PAPER.';
+      return;
+    }
+    const lo=Math.min(...values),hi=Math.max(...values),spread=Math.max(50,hi-lo);
+    const min=lo-spread*.12,max=hi+spread*.12;
+    const x=i=>15+i/Math.max(1,values.length-1)*990;
+    const y=v=>125-(v-min)/(max-min)*95;
+    const d=values.map((v,i)=>(i?'L':'M')+x(i)+','+y(v)).join(' ');
+    svg(root,'line',{x1:15,y1:y(0),x2:1005,y2:y(0),
+      stroke:'#9baeba','stroke-dasharray':'4 4','stroke-width':.7});
+    svg(root,'path',{d,fill:'none',stroke:'#84b7ff','stroke-width':2});
+    values.forEach((v,i)=>{
+      const dot=svg(root,'circle',{cx:x(i),cy:y(v),r:3,
+        fill:i>0&&trades[i-1].pnlCents<0?'#ff8594':'#63dfbc'});
+      svg(dot,'title',{},i===0?'Base P&L US$0':
+        'Contrato '+trades[i-1].contractId+' · '+money(trades[i-1].pnlCents)+
+          ' · acumulado '+money(v)+
+          (times[i]?' · '+date(times[i]):' · hora de cierre no conservada'));
+    });
+    svg(root,'text',{x:1016,y:y(values.at(-1))+3,
+      fill:values.at(-1)>=0?'#63dfbc':'#ff8594','font-size':12},money(values.at(-1)));
+    $('equity-note').textContent='P&L acumulado registrado al liquidar cada contrato DEMO ('+
+      trades.length+' operaciones mostradas). Esta NO es la evolución oficial del saldo. '+
+      'Las liquidaciones informadas por navegador no están verificadas independientemente.';
+    $('equity-scope').textContent='Solo contratos DEMO · no incluye PAPER';
+    return;
+  }
+  $('equity-scope').textContent='Solo simulación PAPER · no es Deriv DEMO';
+  const points=state?.equity||[];
+  if(points.length<2){svg(root,'text',{x:20,y:80,fill:'#9baeba','font-size':13},
+    'Aún no hay liquidaciones simuladas.');return;}
+  const values=points.map(p=>p.value),min=Math.min(...values)-2,
+    max=Math.max(...values)+2,x=i=>15+i/(points.length-1)*990,
+    y=v=>120-(v-min)/(max-min)*95;
+  const d=points.map((p,i)=>(i?'L':'M')+x(i)+','+y(p.value)).join(' ');
+  svg(root,'path',{d,fill:'none',stroke:'#63dfbc','stroke-width':2});
+  points.forEach((p,i)=>{
+    const dot=svg(root,'circle',{cx:x(i),cy:y(p.value),r:3,fill:'#63dfbc'});
+    svg(dot,'title',{},date(p.time)+' · '+money(p.value));
+  });
+  svg(root,'text',{x:1018,y:y(points.at(-1).value)+4,fill:'#63dfbc',
+    'font-size':13},money(points.at(-1).value));
+  $('equity-note').textContent='Saldo PAPER al liquidar cada simulación visible. '+
+    'No incluye resultados de contratos Deriv DEMO.';
 }
 function entryExplanation(trade){const d=trade.decision;if(!d)return 'Entrada anterior sin indicadores registrados';return 'SMA 8 '+price(d.fast)+(trade.direction>0?' > ':' < ')+'SMA 21 '+price(d.slow)+' · RSI '+price(d.rsi)+' · volatilidad '+price(d.volatility)+' %';}
 function renderDemoTopTrades(){
@@ -953,7 +1045,10 @@ function renderDemo(data){
     $('demo-loss-cases').textContent='Diagnóstico preliminar de pérdidas: '+(top||'Sin pérdidas verificadas')
       +'. Se conservan RSI/volatilidad por contrato para comparar patrones; no se modifican las reglas del bot automáticamente.';
   }
-  if(historyMode==='DEMO')renderDemoTopTrades();
+  if(historyMode==='DEMO'){
+    renderDemoTopTrades();
+    if(state){drawCandles();drawEquity();}
+  }
   const history=$('demo-trade-history');history.replaceChildren();
   for(const item of report.history||[]){
     const tr=document.createElement('tr');
