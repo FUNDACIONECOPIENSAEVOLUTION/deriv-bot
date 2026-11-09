@@ -134,7 +134,7 @@ test('DEMO no tiene límite histórico: 75 contratos anteriores permiten iniciar
  db.close();
 });
 
-test('Tandas DEMO registran versiones y el historial previo se preserva',()=>{
+test('Tandas DEMO registran versiones y el historial previo se preserva',async()=>{
  const db=new DatabaseSync(':memory:');
  db.exec("CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)");
  const account={accountId:'DEMO-TEST',currency:'USD',balance:10000};
@@ -149,6 +149,8 @@ test('Tandas DEMO registran versiones y el historial previo se preserva',()=>{
  assert.equal(row.requested,10);
  assert.equal(row.strategyVersion,'EMA20_EMA50_RSI14_ATR14_OHLC10_V1');
  burst.stop();
- // El bucle no tuvo oportunidades de enviar BUY; la prueba no crea red ni compra.
+ for(let i=0;i<20&&burst.status().running;i++)await pause(30);
+ assert.equal(burst.status().running,false);
+ // No se crean órdenes durante la prueba.
  db.close();
 });
