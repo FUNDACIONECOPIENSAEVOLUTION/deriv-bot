@@ -479,7 +479,9 @@ server=http.createServer(async(req,res)=>{
    if(path==='/api/demo/burst/stop')return answer(res,200,program.isRunning()?program.stop():bursts.stop());
    if(path==='/api/demo/program/start')return answer(res,200,program.start({
     rounds:b.rounds,perRound:b.perRound,stakeCents:b.stakeCents,
-    concurrency:b.concurrency,symbol:b.symbol,mode:b.mode,confirmation:b.confirmation
+    concurrency:b.concurrency,symbol:b.symbol,mode:b.mode,
+     continueAfterNegativeRound:b.continueAfterNegativeRound,
+     confirmation:b.confirmation
    }));
    if(path==='/api/demo/program/stop')return answer(res,200,program.stop());
    if(path==='/api/system/update-now'){

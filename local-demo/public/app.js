@@ -303,7 +303,8 @@ async function updateDemoProgram(){
    'Programa DEMO autorizado en curso · tanda '+(p.round||1)+' de 10. '+
    'Siguiente tanda solo tras liquidación y revisión del riesgo.':
    current?'Último programa: '+current.state+' · tandas completadas '+
-    current.roundsCompleted+'/10 · '+(current.stopReason||'sin errores registrados'):
+    current.roundsCompleted+'/10 · '+(current.stopReason||'sin errores registrados')+
+    (current.continueOnNegativeRound?' · investigación extendida autorizada':''):
     'Sin programa DEMO. Autoriza localmente una secuencia de hasta 100 contratos.';
   const pct=x=>Number.isFinite(x)?x.toFixed(2)+' %':'—';
   const tbody=$('program-history');tbody.replaceChildren();
@@ -348,6 +349,7 @@ $('program-start').onclick=async()=>{
   const r=await post('/api/demo/program/start',{
    rounds:10,perRound:10,stakeCents:100,symbol:'AUTO',concurrency:5,
    mode:'RESEARCH_DEMO',
+   continueAfterNegativeRound:$('program-continue-negative').checked===true,
    confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'
   });
   $('program-status').textContent='Programa '+r.id.slice(0,8)+

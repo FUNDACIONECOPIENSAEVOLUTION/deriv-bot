@@ -138,3 +138,42 @@ test('Un programa RUNNING guardado se marca INTERRUPTED y jamás se reanuda al i
  assert.equal(restored.status().programs[0].stopReason,'PROCESS_RESTART_NO_AUTO_RESUME');
  db.close();
 });
+
+// Un modo explicito permite investigar hasta diez rondas DEMO a pesar de
+// rondas 5/5 negativas. El modo por defecto mantiene la parada protectora.
+test('10x10 extendido con autorizacion explicita sigue tras 5/5 negativos',async()=>{
+ const {db,program,counts,modes}=setup({wins:5});
+ const started=program.start({...request(),continueAfterNegativeRound:true});
+ assert.equal(started.continueAfterNegativeRound,true);
+ await done(program);
+ const row=program.status().programs[0];
+ assert.equal(row.state,'COMPLETED');
+ assert.equal(row.continueOnNegativeRound,1);
+ assert.equal(row.roundsCompleted,10);
+ assert.equal(counts().seq,10);
+ assert.equal(row.purchasesExecuted,100);
+ assert.equal(row.netCents,-1000);
+ assert.ok(modes.every(mode=>mode==='RESEARCH_DEMO'));
+ assert.match(program.exportResultsCsv(),/continueOnNegativeRound/);
+ db.close();
+});
+test('El modo extendido no permite REAL, tipos invalidos ni modo conservador',()=>{
+ const {db,program}=setup();
+ assert.throws(()=>program.start({...request(),continueAfterNegativeRound:'true'}),
+  /DEMO_CONTINUE_AFTER_NEGATIVE_BOOLEAN_REQUIRED/);
+ assert.throws(()=>program.start({...request(),mode:'VALIDATED_ONLY',
+  continueAfterNegativeRound:true}),/DEMO_CONTINUE_AFTER_NEGATIVE_RESEARCH_ONLY/);
+ assert.equal(program.status().programs.length,0);
+ db.close();
+});
+test('Programa extendido aun se detiene cuando el limite diario se activa',async()=>{
+ const {db,program,counts,setRisk}=setup({wins:5});
+ program.start({...request(),continueAfterNegativeRound:true});
+ setRisk({...validRisk(),dailyLossStopActive:true});
+ await done(program);
+ const row=program.status().programs[0];
+ assert.equal(row.state,'PAUSED');
+ assert.equal(row.stopReason,'DEMO_DAILY_NET_LOSS_STOP');
+ assert.ok(counts().seq<=1);
+ db.close();
+});

@@ -97,3 +97,12 @@ Los historicos anteriores conservan los campos nuevos vacios.
 No se inventan valores ni se exportan credenciales. Analizar las
 latencias por indice, vencimiento, payout y resultado con una
 muestra prospectiva suficiente; correlacion no demuestra causalidad.
+
+// 10x10: parada por rendimiento opcional, controles duros permanentes.
+// El selector de 10x10 ofrece "Investigación extendida". Sin marcarlo,
+// una ronda 5/5 y neto negativo detiene el programa (configuración segura).
+// Marcado expresamente en el PC, se registra la autorización por programa
+// y se omite *solo* esta parada por resultado parcial de una ronda.
+// Los bloqueos de pérdida neta diaria, saldo mínimo, órdenes UNKNOWN,
+// conciliación, cuotas, datos frescos y consentimiento DEMO siguen vigentes.
+// Los resultados anteriores permanecen PAUSED y jamás se reanudan solos.

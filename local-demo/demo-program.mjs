@@ -11,13 +11,17 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   symbol TEXT NOT NULL,stop_reason TEXT)`);
  const fields=new Set(db.prepare('PRAGMA table_info(demo_programs)').all().map(x=>x.name));
  if(!fields.has('signal_mode'))db.exec("ALTER TABLE demo_programs ADD COLUMN signal_mode TEXT DEFAULT 'VALIDATED_ONLY'");
+ if(!fields.has('continue_on_negative_round'))
+  db.exec("ALTER TABLE demo_programs ADD COLUMN continue_on_negative_round INTEGER NOT NULL DEFAULT 0");
  const now=()=>Math.floor(Date.now()/1000);
  db.prepare("UPDATE demo_programs SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART_NO_AUTO_RESUME' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(now());
- const add=db.prepare('INSERT INTO demo_programs(id,created_at,updated_at,state,rounds_requested,count_per_round,stake_cents,concurrency,symbol,signal_mode) VALUES(?,?,?,?,?,?,?,?,?,?)');
+ const add=db.prepare('INSERT INTO demo_programs(id,created_at,updated_at,state,rounds_requested,count_per_round,stake_cents,concurrency,symbol,signal_mode,continue_on_negative_round) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
  const save=db.prepare('UPDATE demo_programs SET state=?,updated_at=?,rounds_completed=?,stop_reason=? WHERE id=?');
  const recent=db.prepare(`SELECT p.id,p.created_at AS createdAt,p.updated_at AS updatedAt,p.state,
  p.rounds_requested AS roundsRequested,p.rounds_completed AS roundsCompleted,
- p.count_per_round AS countPerRound,p.stake_cents AS stakeCents,p.concurrency,p.symbol,p.signal_mode AS signalMode,p.stop_reason AS stopReason,
+ p.count_per_round AS countPerRound,p.stake_cents AS stakeCents,p.concurrency,p.symbol,
+ p.signal_mode AS signalMode,p.continue_on_negative_round AS continueOnNegativeRound,
+ p.stop_reason AS stopReason,
  (SELECT COUNT(*) FROM demo_bursts b WHERE b.program_id=p.id) AS burstsStarted,
  (SELECT COALESCE(SUM(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 ELSE 0 END),0)
  FROM demo_bursts b JOIN demo_local_orders o ON o.batch_id=b.id WHERE b.program_id=p.id) AS purchasesExecuted,
@@ -114,10 +118,17 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
      state='HALTED';reason='DEMO_ROUND_RESULTS_NOT_VERIFIED';break;
     }
     if(settledRound.netCents<0&&settledRound.wins<=settledRound.losses){
-     state='PAUSED';reason='DEMO_PERFORMANCE_STOP_NEGATIVE_ROUND';
-     audit('DEMO_PERFORMANCE_STOP',burst.id+' netCents='+settledRound.netCents+
-      ' wins='+settledRound.wins+' losses='+settledRound.losses);
-     break;
+     if(!session.continueAfterNegativeRound){
+      state='PAUSED';reason='DEMO_PERFORMANCE_STOP_NEGATIVE_ROUND';
+      audit('DEMO_PERFORMANCE_STOP',burst.id+' netCents='+settledRound.netCents+
+       ' wins='+settledRound.wins+' losses='+settledRound.losses);
+      break;
+     }
+     // Continuar solo por autorizacion expresa del usuario en el panel local.
+     // El stop diario, el saldo minimo, las ordenes UNKNOWN y señales frescas
+     // siguen bloqueando las siguientes tandas al ejecutar riskStop().
+     audit('DEMO_RESEARCH_CONTINUE_AFTER_NEGATIVE_ROUND',
+      burst.id+' netCents='+settledRound.netCents+' optIn=true');
     }
     // Cada siguiente tanda requiere análisis nuevo; evita un bucle de 100
     // órdenes sin dar al motor la oportunidad de refrescar datos.
@@ -133,11 +144,16 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   }
  }
  function start({rounds=10,perRound=10,stakeCents=100,concurrency=5,
-  symbol='AUTO',mode='VALIDATED_ONLY',confirmation}={}){
+  symbol='AUTO',mode='VALIDATED_ONLY',continueAfterNegativeRound=false,
+  confirmation}={}){
   if(confirmation!=='CONFIRMAR PROGRAMA DEMO 10X10')
    throw Error('DEMO_PROGRAM_LOCAL_APPROVAL_REQUIRED');
   if(!['VALIDATED_ONLY','RESEARCH_DEMO'].includes(mode))
    throw Error('DEMO_PROGRAM_SIGNAL_MODE_INVALID');
+  if(typeof continueAfterNegativeRound!=='boolean')
+   throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_BOOLEAN_REQUIRED');
+  if(continueAfterNegativeRound&&mode!=='RESEARCH_DEMO')
+   throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_RESEARCH_ONLY');
   // Cap estricto de esta función. Nunca expandir a órdenes ilimitadas o REAL.
   if(rounds!==10||perRound!==10||stakeCents!==100||symbol!=='AUTO'||
    !Number.isSafeInteger(concurrency)||concurrency<1||concurrency>5)
@@ -146,13 +162,17 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   const blocked=riskStop();
   if(blocked)throw Error(blocked);
   const id=randomUUID();
-  add.run(id,now(),now(),'RUNNING',10,10,100,concurrency,'AUTO',mode);
-  const session={id,concurrency,mode,round:0,roundsCompleted:0,stopRequested:false,
+  add.run(id,now(),now(),'RUNNING',10,10,100,concurrency,'AUTO',mode,
+   continueAfterNegativeRound?1:0);
+  const session={id,concurrency,mode,continueAfterNegativeRound,
+   round:0,roundsCompleted:0,stopRequested:false,
    usedCandleEpoch:new Map()};
   current=session;
-  audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS$1, '+mode+' DEMO ONLY');
+  audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS$1, '+mode+
+   ' continueNegative='+continueAfterNegativeRound+' DEMO ONLY');
   void run(session);
-  return {id,state:'RUNNING',mode,roundsRequested:10,perRound:10,stakeCents:100,
+  return {id,state:'RUNNING',mode,continueAfterNegativeRound,
+   roundsRequested:10,perRound:10,stakeCents:100,
    maxCommittedCents:10000,maxConcurrent:concurrency,realEnabled:false};
  }
  function stop(){
@@ -164,8 +184,9 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
  function exportResultsCsv(){
   const keys=['programId','round','batchId','state','requested','executed','settled','wins',
    'losses','rejected','winRatePct','stakedCents','grossWinCents','grossLossCents',
-   'netCents','roiPct','stopReason'];
-  const rows=getReport().flatMap(p=>p.batches);
+   'netCents','roiPct','continueOnNegativeRound','stopReason'];
+  const rows=getReport().flatMap(p=>p.batches.map(b=>({
+   ...b,continueOnNegativeRound:p.continueOnNegativeRound})));
   const safe=v=>typeof v==='number'&&Number.isFinite(v)?String(v):
    '"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,m=>'_'+m)+'"';
   return '\uFEFF'+keys.join(',')+'\r\n'+rows.map(r=>
