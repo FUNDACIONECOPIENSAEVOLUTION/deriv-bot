@@ -53,7 +53,7 @@ test('Compras simultáneas no entrenan el modelo con liquidaciones futuras',()=>
 });
 
 test('Cuenta como una sola observación por señal/candle, descarta liquidaciones inciertas',()=>{
- const rows=[row(0),{...row(1),symbol:'R_50',direction:'PUT',candle_epoch:row(0).candle_epoch,symbol:'R_10',direction:row(0).direction},
+ const rows=[row(0),{...row(1),symbol:'R_50',direction:'PUT',candle_epoch:row(0).candle_epoch,symbol:row(0).symbol,direction:row(0).direction},
   {...row(2),settled_at_ms:null},
   {...row(3),signal_strength:null,signal_rsi:null,signal_tick_rsi14:null,signal_five_tick_momentum:null}];
  const p=evaluateWalkForward(rows);
