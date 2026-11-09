@@ -104,3 +104,32 @@ export function conservativeQuoteDecision(candidate,askPrice,payout,{
    'NO_PAYOUT_ADJUSTED_EDGE',
   breakEvenWinRate,expectedNetReturnLower};
 }
+
+/**
+ * Solo investigacion DEMO: condicion no equivalente a ventaja estadistica.
+ * El holdout debe contener datos conocidos anteriores al momento de decidir,
+ * y el contrato debe superar por separado la cotizacion real del broker.
+ */
+export function isExploratoryCandidate(candidate,{
+ minTraining=30,minValidation=20,minObservedHitRate=.55}={}){
+ return !!candidate&&[5,10].includes(candidate.durationTicks)&&
+  ['CALL','PUT'].includes(candidate.direction)&&
+  typeof candidate.selectedPolicy==='string'&&candidate.selectedPolicy.length>0&&
+  Number.isFinite(candidate.trainingDecisions)&&candidate.trainingDecisions>=minTraining&&
+  Number.isFinite(candidate.validationDecisions)&&candidate.validationDecisions>=minValidation&&
+  Number.isFinite(candidate.observedValidationHitRate)&&
+  candidate.observedValidationHitRate>=minObservedHitRate;
+}
+export function exploratoryQuoteDecision(candidate,askPrice,payout,{
+ minObservedNetEdge=.03}={}){
+ if(!isExploratoryCandidate(candidate)||!Number.isFinite(askPrice)||askPrice<=0||
+  !Number.isFinite(payout)||payout<=askPrice)
+  return {approved:false,reason:'EXPLORATORY_INSUFFICIENT_SAMPLE_OR_QUOTE',
+   validatedEdge:false};
+ const breakEvenWinRate=askPrice/payout;
+ const observedNetReturn=candidate.observedValidationHitRate*(payout/askPrice)-1;
+ return {approved:observedNetReturn>=minObservedNetEdge,
+  reason:observedNetReturn>=minObservedNetEdge?
+   'DEMO_EXPLORATORY_OBSERVED_EDGE_ONLY':'EXPLORATORY_QUOTED_EDGE_TOO_LOW',
+  breakEvenWinRate,observedNetReturn,validatedEdge:false};
+}
