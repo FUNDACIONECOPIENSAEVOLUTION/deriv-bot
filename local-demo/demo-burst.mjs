@@ -246,6 +246,17 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     if(batch.stopRequested){state='STOPPED';reason='OWNER_STOP_REQUESTED';break;}
     const beforeSelectRisk=hardRiskStop();
     if(beforeSelectRisk){state='PAUSED';reason=beforeSelectRisk;break;}
+    if(batch.profitTargetCents>0){
+     const recorded=profitLockResult.get(batch.id);
+     if(recorded.settled!==settled){
+      state='HALTED';reason='PROFIT_LOCK_SETTLEMENT_NOT_VERIFIED';break;
+     }
+     // No abrir otra compra cuya perdida completa pudiese superar
+     // el limite de la tanda, aunque el resultado actual aun sea verde.
+     if(recorded.netCents-batch.stakeCents< -batch.lossCapCents){
+      state='PAUSED';reason='BATCH_LOSS_BUDGET_INSUFFICIENT';break;
+     }
+    }
     let picks=[],pollBlock=null;
     for(let poll=0;researchProgram||poll<noSignalMaxPolls;poll++){
      if(batch.stopRequested)break;
