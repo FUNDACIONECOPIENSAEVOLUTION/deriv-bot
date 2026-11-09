@@ -100,7 +100,9 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
    assert.equal(x.candle_pattern_version,'CANDLE_CONTEXT_V1');
    const context=JSON.parse(x.candle_context_json);
    assert.equal(context.candles.length,20);
-   assert.equal(context.lastTickPrices.length,30);
+   assert.equal(context.lastTickPrices.length,40);
+   // 40 precios de la fixture; produccion retiene hasta 90.
+   assert.ok(Array.isArray(context.lastTickEpochs));
    assert.ok(context.capturedAtMs<=x.bought_at_ms,'se captura ANTES de confirmar BUY');
    assert.equal(context.candles.at(-1).close,100.7);
    assert.equal(context.source,'OHLC_CLOSED_BEFORE_BROKER_BUY');
