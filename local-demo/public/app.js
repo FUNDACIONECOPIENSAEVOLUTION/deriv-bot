@@ -236,7 +236,7 @@ async function updateBurstPanel(){
   $('burst-latency').textContent=latencies.length?(latencies.reduce((a,v)=>a+v,0)/latencies.length/1000).toFixed(3)+' s':'—';
   const risk=b.risk||null;
   const dailyLimit=risk?.dailyLossLimitCents;
-  const dailyLoss=risk?.dailyGrossLossCents;
+  const dailyLoss=risk?.dailyNetLossCents;
   const reset=risk?.nextDailyResetEpoch?
    new Date(risk.nextDailyResetEpoch*1000).toLocaleString('es-CO',{
     timeZone:'America/Bogota',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'
@@ -244,9 +244,12 @@ async function updateBurstPanel(){
   const blocked=!!risk?.dailyLossStopActive||!!risk?.accountFloorStopActive;
   $('burst-risk-status').textContent=!risk?'Protección DEMO no disponible.':
    (blocked?'COMPRAS DEMO BLOQUEADAS: ':'Protección DEMO activa: ')+
-   'pérdidas brutas acumuladas en el día UTC '+usd((dailyLoss||0)/100)+
+   'pérdida NETA acumulada del día UTC '+usd((dailyLoss||0)/100)+
    ' de un máximo de '+usd((dailyLimit||0)/100)+
-   ' · neto de esas operaciones '+signedCents(risk.dailyNetCents||0)+
+   ' · resultado neto '+signedCents(risk.dailyNetCents||0)+
+   ' · pérdidas brutas '+usd((risk.dailyGrossLossCents||0)/100)+
+   ' · ganancias brutas '+usd((risk.dailyGrossWinCents||0)/100)+
+   ' · exposición reservada '+usd((risk.pendingExposureCents||0)/100)+
    ' · reinicio del cómputo diario a las '+reset+' (Colombia). '+
    (risk.dailyLossStopActive?
     'No se aceptarán nuevas tandas hoy; no se reanudarán automáticamente.':
@@ -306,7 +309,7 @@ $('burst-start').onclick=async()=>{
    symbol=$('burst-symbol').value;
  const concurrency=Math.min(count,Number($('burst-concurrency').value));
  const cost=count*stakeCents/100;
- if(!Number.isSafeInteger(count)||count<1||count>10||cost>10){$('burst-message').textContent='La tanda permite de 1 a 10 compras y hasta US$10 en apuestas.';return;}
+ if(!Number.isSafeInteger(count)||count<1||count>10||cost>100){$('burst-message').textContent='La tanda permite de 1 a 10 compras y hasta US$100 en apuestas DEMO.';return;}
  // El clic en el botón local es la autorización explícita para esta tanda DEMO.
  const confirmation='CONFIRMAR TANDA DEMO';
  $('burst-start').disabled=true;$('burst-message').textContent='Autorizando tanda DEMO. No vuelvas a pulsar.';

@@ -154,3 +154,32 @@ test('Tandas DEMO registran versiones y el historial previo se preserva',async()
  // No se crean órdenes durante la prueba.
  db.close();
 });
+
+test('Se pueden preparar contratos DEMO de US$10 sin llamadas al broker y mantienen límite de riesgo',()=>{
+ const {db,trading}=setup();
+ const intent=trading.requestIntent({symbol:'R_100',direction:'CALL',stakeCents:1000,source:'LOCAL_OWNER'});
+ assert.equal(intent.stakeCents,1000);
+ assert.equal(intent.state,'PENDING_APPROVAL');
+ assert.equal(trading.getRiskStatus().pendingExposureCents,1000);
+ assert.equal(trading.cancel(intent.id).brokerOrders,0);
+ assert.equal(trading.canUpdate(),true);
+ db.close();
+});
+test('Autorización de 10 x US$10 = US$100 por tanda, sin ejecutar BUY',async()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec("CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)");
+ const account={accountId:'DEMO-ONLY',currency:'USD',balance:10000};
+ let calls=0;
+ const runner=createDemoBurst({db,trading:{
+   canUpdate:()=>true,getRiskStatus:()=>({dailyLossStopActive:false,accountFloorStopActive:false,dailyRemainingRiskCents:10000}),
+   requestIntent:()=>{calls++;throw Error('NO_BUY_IN_TEST')}
+  },marketSnapshot:()=>null,refreshAccount:async()=>account,
+  getAccount:()=>account,audit:()=>{}});
+ const batch=runner.start({count:10,stakeCents:1000,symbol:'AUTO',concurrency:5,confirmation:'CONFIRMAR TANDA DEMO'});
+ assert.equal(batch.maxGrossCents,10000);
+ assert.equal(batch.realEnabled,false);
+ runner.stop();
+ for(let i=0;i<15&&runner.status().running;i++)await pause(20);
+ assert.equal(calls,0);
+ db.close();
+});
