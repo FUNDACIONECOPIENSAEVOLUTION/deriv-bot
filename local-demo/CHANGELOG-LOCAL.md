@@ -1,3 +1,12 @@
+## v15.3 · 2026-11-09
+
+- Bot DEMO permite tandas autorizadas de 1 a 10 contratos, uno a uno; REAL bloqueada.
+- Selección automática de señales frescas SMA/RSI, pausa en caso de incertidumbre.
+- Velas OHLC por ticks, gráfico P&L, tabla de resultados y CSV de tandas.
+- Métricas de latencia y confirmación de contratos en SQLite local.
+- MCP local de lectura y solicitud de compra con aprobación humana local.
+- Actualización automática cuando el bot no tiene contratos pendientes, sin borrar tokens.
+
 ## v15.2 · 2026-11-09
 
 - Bot DEMO permite tandas autorizadas de 1 a 10 contratos, uno a uno; REAL bloqueada.
