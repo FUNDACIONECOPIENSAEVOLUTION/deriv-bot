@@ -28,3 +28,38 @@ Herramienta MCP read-only: `get_walk_forward_validation`.
 - Plantear pruebas A/B en DEMO en dos conjuntos temporales predefinidos; **no** activar selección por IA ni REAL hasta obtener evidencia robusta fuera de muestra.
 
 **El 90% de acierto es una aspiración, no una probabilidad ni garantía.** La ventaja neta depende también de payout, tamaño de pérdidas, volatilidad y ejecución.
+
+## Evaluadores 5 y 10 ticks (DEMO)
+
+La rama pc-local incluye `tick-horizon-model.mjs`: por cada indice
+hay dos modelos por vencimiento (5 y 10 ticks), alimentados con ticks
+individuales y ventanas de 5, 10 y 20 ticks previos. Compara
+`MOMENTUM_5`, `MOMENTUM_10`, `MOMENTUM_20`,
+`VOTE_5_10_20` y `REVERSION_5`. Elige politica con
+el 60% cronologicamente anterior de las observaciones no solapadas, luego
+verifica en el 40% final, independientemente para cada horizonte.
+
+**Condicion de entrada automatica DEMO:** al menos 30 decisiones de
+entrenamiento, 20 decisiones de validacion, cota Wilson inferior del
+95% >= 0.58; señal CALL/PUT fresca. El programa ordena candidatos
+por esa cota, no por fuerza de la EMA. Cuando se solicita el
+contrato seleccionado se vuelve a validar la prediccion y se obtiene
+una propuesta oficial para el vencimiento elegido; no se envia BUY
+si el beneficio esperado conservador basado en `ask_price/payout`
+queda por debajo del 2% o si la ventana de 20 velas no puede
+registrarse antes de BUY. Esto **no garantiza** que la cotizacion
+historica, retrasos, multiples comparaciones o deriva de la señal
+permitan conseguir una ventaja real.
+
+La cuenta REAL sigue inaccesible; no se reintentan ordenes BUY
+ambiguas, se respetan exposicion, perdidas netas, maximo cinco
+simultaneos y aprobacion DEMO local. Los registros SQLite y CSV
+incluyen `durationTicks`, `predictionMode`, `predictionPolicy`,
+`predictionLower95` y `predictionQuoteEdge`.
+Las compras manuales legacy se mantienen en cinco ticks; solo
+las tandas automaticas DEMO usan el selector de 5 o 10 ticks.
+
+Estos evaluadores son pequenos calculos estadisticos en el proceso
+local, no procesos con tokens independientes ni ejecutores paralelos.
+Separar el envio de ordenes evita duplicados y la evaluacion se hace
+en memoria sin consultas extra al broker durante cada tick.
