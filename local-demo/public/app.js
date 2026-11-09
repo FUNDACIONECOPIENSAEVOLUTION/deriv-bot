@@ -143,6 +143,22 @@ async function showQualityAudit(){
    ' casos; error Brier '+(q.shadow.brier??'—')+
    ' frente a base '+(q.shadow.baselineBrier??'—')+
    '. No se usa para comprar.';
+  const research=q.research||{};
+  const groups=research.strengthBands||[];
+  const byVersion=q.shadow.byVersion||[];
+  const latestShadow=byVersion.find(x=>x.version===q.latestVersion);
+  $('quality-five-tick').textContent=
+   'Impulso previo de cinco TICKS: '+(research.fiveTickRecorded||0)+
+   ' operaciones con dato registrado de '+q.latest.n+
+   ' · coincide con señal '+(research.momentumAligned?.n||0)+
+   ' (aciertos '+pct(research.momentumAligned?.winRate)+
+   '), se opone '+(research.momentumOpposed?.n||0)+
+   ' (aciertos '+pct(research.momentumOpposed?.winRate)+
+   '). Evaluador secuencial de esta versión: '+(latestShadow?.n||0)+
+   ' observaciones, Brier '+(latestShadow?.brier??'—')+
+   ' frente a referencia 0,25. Intensidad por grupos: '+
+   groups.map(g=>g.range+': '+g.wins+'/'+g.n).join(' · ')+
+   '. Análisis exploratorio, NO determina futuras compras.';
  }catch(e){
   $('quality-status').textContent='Auditoría no disponible: '+e.message;
  }
