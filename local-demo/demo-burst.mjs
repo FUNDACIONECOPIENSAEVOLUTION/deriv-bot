@@ -3,6 +3,7 @@
 import {randomUUID} from 'node:crypto';
 import {setTimeout as pause} from 'node:timers/promises';
 import {isVolatilitySymbol} from './synthetic-catalog.mjs';
+import {isExploratoryCandidate} from './tick-horizon-model.mjs';
 
 const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500'];
@@ -29,7 +30,8 @@ export function selectDistinctCandidates(candidates,limit,usedCandleEpoch=new Ma
  * For an empty/paused burst the returned counters are evidence, not guesses.
  */
 export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch=new Map(),
- getAdaptiveVerdict=()=>({blocked:false}),nowMs=Date.now(),predictive=false){
+ getAdaptiveVerdict=()=>({blocked:false}),nowMs=Date.now(),predictive=false,
+ mode='VALIDATED_ONLY'){
  const counts={};
  const details=[];
  const count=reason=>{counts[reason]=(counts[reason]||0)+1;return reason;};
@@ -43,10 +45,16 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
    !Number.isInteger(m.epoch)||Math.abs(nowMs-m.epoch*1000)>2500)
     reason='TICK_OR_PRICE_STALE';
   else if(predictive){
-   const options=m.tickHorizonModels?.filter(x=>x.readyForProposal&&
-    ['CALL','PUT'].includes(x.direction)&&
+   const options=m.tickHorizonModels?.filter(x=>
+    (mode==='RESEARCH_DEMO'?isExploratoryCandidate(x):x.readyForProposal)&&
     !getAdaptiveVerdict(m.symbol,x.direction).blocked)||[];
-   if(!options.length)reason='NO_VALIDATED_TICK_MODEL';
+   if(!options.length)reason=mode==='RESEARCH_DEMO'?
+    'NO_RESEARCH_TICK_EVIDENCE':'NO_VALIDATED_TICK_MODEL';
+   else{
+    const candleEpoch=m.candles?.at(-1)?.epoch??m.epoch;
+    if(!Number.isInteger(candleEpoch)||candleEpoch<=0)reason='INVALID_CANDLE_EPOCH';
+    else if((usedCandleEpoch.get(symbol)??-1)>=candleEpoch)reason='CANDLE_ALREADY_USED';
+   }
   }
   else if(!['CALL','PUT'].includes(m.direction))reason='NO_CONFIRMED_DIRECTION';
   else if(getAdaptiveVerdict(m.symbol,m.direction).blocked)reason='ADAPTIVE_RISK_VETO';
@@ -71,13 +79,15 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  if(!fields.has('strategy_version'))db.exec('ALTER TABLE demo_bursts ADD COLUMN strategy_version TEXT');
  if(!fields.has('inspection_json'))db.exec('ALTER TABLE demo_bursts ADD COLUMN inspection_json TEXT');
  if(!fields.has('program_id'))db.exec('ALTER TABLE demo_bursts ADD COLUMN program_id TEXT');
- const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent,app_version,strategy_version,program_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
+ if(!fields.has('signal_mode'))db.exec("ALTER TABLE demo_bursts ADD COLUMN signal_mode TEXT DEFAULT 'VALIDATED_ONLY'");
+ const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent,app_version,strategy_version,program_id,signal_mode) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
  const update=db.prepare('UPDATE demo_bursts SET state=?,updated_at=?,completed=?,stop_reason=? WHERE id=?');
  const saveInspection=db.prepare('UPDATE demo_bursts SET inspection_json=? WHERE id=?');
  // Totales durables desde TODAS las órdenes SQLite de cada tanda (sin límite de 60 filas UI).
  const latest=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.state,
  b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,b.concurrent,
  b.app_version AS appVersion,b.strategy_version AS strategyVersion,b.program_id AS programId,
+ b.signal_mode AS signalMode,
  b.completed,b.stop_reason AS stopReason,b.inspection_json AS inspectionJson,
  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
@@ -93,6 +103,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  const allBatches=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.updated_at AS updatedAt,
  b.state,b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,
  b.concurrent,b.app_version AS appVersion,b.strategy_version AS strategyVersion,b.program_id AS programId,
+ b.signal_mode AS signalMode,
  b.stop_reason AS stopReason,b.inspection_json AS inspectionJson,
  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
@@ -121,21 +132,28 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     !m.fresh||!Number.isFinite(m.ageReceivedMs)||m.ageReceivedMs>1500||
     !Number.isInteger(m.epoch)||Math.abs(Date.now()-m.epoch*1000)>2500)continue;
    const options=(m.tickHorizonModels||[]).filter(x=>
-    x.readyForProposal&&['CALL','PUT'].includes(x.direction)&&
+    (batch.mode==='RESEARCH_DEMO'?isExploratoryCandidate(x):x.readyForProposal)&&
     !getAdaptiveVerdict(m.symbol,x.direction).blocked)
-    .sort((a,b)=>b.conservativeWinRateLower95-a.conservativeWinRateLower95||
+    .sort((a,b)=>Number(b.readyForProposal)-Number(a.readyForProposal)||
+     (b.readyForProposal?b.conservativeWinRateLower95:b.observedValidationHitRate)-
+      (a.readyForProposal?a.conservativeWinRateLower95:a.observedValidationHitRate)||
      a.durationTicks-b.durationTicks);
    if(options.length){
-    const best=options[0];
+    const best=options[0],strict=best.readyForProposal;
     eligible.push({...m,direction:best.direction,
-     durationTicks:best.durationTicks,modelMode:'PREDICTIVE_5_10',
-     predictedLower95:best.conservativeWinRateLower95,
+     durationTicks:best.durationTicks,
+     modelMode:strict?'PREDICTIVE_5_10':'DEMO_EXPLORATORY_5_10',
+     predictionValidated:strict,
+     predictedLower95:best.conservativeWinRateLower95??0,
+     observedHitRate:best.observedValidationHitRate??0,
      predictorPolicy:best.selectedPolicy});
    }
   }
-  // Comparacion de horizontes por indice. El payout oficial se verifica
-  // despues de recibir la propuesta de compra y ANTES de BUY.
-  eligible.sort((a,b)=>b.predictedLower95-a.predictedLower95||
+  // El modo de investigacion prioriza muestras validadas. El observed hit
+  // rate es exploratorio y NO prueba ventaja; payout se valida antes de BUY.
+  eligible.sort((a,b)=>Number(b.predictionValidated)-Number(a.predictionValidated)||
+   (b.predictionValidated?b.predictedLower95:b.observedHitRate)-
+   (a.predictionValidated?a.predictedLower95:a.observedHitRate)||
    a.ageReceivedMs-b.ageReceivedMs);
   const selectedAtMs=Date.now();
   const selected=eligible.map(x=>({...x,selectionTelemetry:{
@@ -186,7 +204,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
      state='PAUSED';reason='NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS';
      const allowed=batch.symbol==='AUTO'?getSymbols():[batch.symbol];
      saveInspection.run(JSON.stringify(inspectSignalAvailability(allowed,marketSnapshot,
-      batch.usedCandleEpoch,getAdaptiveVerdict,Date.now(),true)),batch.id);
+      batch.usedCandleEpoch,getAdaptiveVerdict,Date.now(),true,batch.mode)),batch.id);
      break;
     }
     await refreshAccount();
@@ -233,8 +251,13 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    if(active?.id===batch.id)active=null;
   }
  }
- function start({count,stakeCents,symbol,confirmation,concurrency=1,programId=null,usedCandleEpoch=null}){
+ function start({count,stakeCents,symbol,confirmation,concurrency=1,programId=null,
+  usedCandleEpoch=null,mode='VALIDATED_ONLY'}){
   if(confirmation!=='CONFIRMAR TANDA DEMO')throw Error('DEMO_BURST_APPROVAL_REQUIRED');
+  if(!['VALIDATED_ONLY','RESEARCH_DEMO'].includes(mode))
+   throw Error('DEMO_SIGNAL_MODE_INVALID');
+  if(mode==='RESEARCH_DEMO'&&stakeCents>100)
+   throw Error('DEMO_EXPLORATORY_MAX_1USD');
   if(!Number.isSafeInteger(count)||count<1||count>10||
    !Number.isSafeInteger(concurrency)||concurrency<1||concurrency>Math.min(count,MAX_PARALLEL)||
    !STAKES.includes(stakeCents)||!(symbol==='AUTO'||(isVolatilitySymbol(symbol)&&getSymbols().includes(symbol))))
@@ -249,12 +272,16 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(risk?.dailyLossStopActive)throw Error('DEMO_DAILY_NET_LOSS_STOP');
   if(risk?.accountFloorStopActive)throw Error('DEMO_LOSS_STOP_100USD');
   if(risk&&risk.dailyRemainingRiskCents<stakeCents)throw Error('DEMO_DAILY_NET_LOSS_EXPOSURE');
-  const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,inFlight:0,stopRequested:false,usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
-  insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,getVersion(),getStrategyVersion(),programId);
+  const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,mode,
+   inFlight:0,stopRequested:false,
+   usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
+  insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,
+   getVersion(),mode==='RESEARCH_DEMO'?'TICK_5_10_RESEARCH_DEMO_V1':
+    'TICK_5_10_VALIDATED_V1',programId,mode);
   active=batch;
   audit('DEMO_BURST_AUTHORIZED','Count '+count+' stake '+stakeCents+' DEMO only');
   void run(batch);
-  return {id,state:'RUNNING',requested:count,stakeCents,symbol,accountType:'demo',
+  return {id,state:'RUNNING',requested:count,stakeCents,symbol,mode,accountType:'demo',
    realEnabled:false,concurrent:concurrency,maxGrossCents:count*stakeCents};
  }
  function stop(){
@@ -266,7 +293,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  }
  function exportBatchesCsv(){
   const headers=['id','createdAt','updatedAt','appVersion','strategyVersion',
-   'state','requested','executed','settled','rejected','wins','losses','netCents','programId',
+   'state','requested','executed','settled','rejected','wins','losses','netCents','programId','signalMode',
    'stopReason','inspection'];
   const safe=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+allBatches.all().map(raw=>{
