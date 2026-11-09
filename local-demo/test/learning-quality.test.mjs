@@ -92,3 +92,28 @@ test('La investigación a cinco ticks es independiente de la selección CALL/PUT
  assert.equal(report.predictionAltersBuy,false);
  assert.equal(report.research.strengthBands.reduce((n,x)=>n+x.n,0),3);
 });
+
+test('Diagnóstico identifica rachas negativas sin bloquear automáticamente la compra',()=>{
+ const losing=[
+  ...Array.from({length:10},(_,i)=>({...mock(i,{version:'13.8',pnl:-100}),
+   batch_id:'losing-1',stake_cents:100})),
+  ...Array.from({length:10},(_,i)=>({...mock(10+i,{version:'13.8',pnl:i<2?88:-100}),
+   batch_id:'losing-2',stake_cents:100}))
+ ];
+ const r=buildTradeQualityReport(losing);
+ assert.equal(r.operationalWarnings.latestNegativeBatchStreak,2);
+ assert.equal(r.operationalWarnings.latest10Loss,true);
+ assert.equal(r.operationalWarnings.lastBatches.length,2);
+ assert.equal(r.operationalWarnings.recommendedAction,'REVISAR_PERDIDAS_ANTES_DE_OTRA_TANDA_DEMO');
+ assert.equal(r.operationalWarnings.operatingStrategyIsAdaptive,false);
+ assert.equal(r.predictionAltersBuy,false);
+ assert.equal(r.realEnabled,false);
+});
+test('Acierto de equilibrio se calcula con pago real de contratos positivos',()=>{
+ const rows=Array.from({length:10},(_,i)=>({...mock(i,{version:'13.8',pnl:i<5?88:-100}),
+  stake_cents:100,batch_id:'single-batch'}));
+ const r=buildTradeQualityReport(rows);
+ assert.ok(r.operationalWarnings.estimatedBreakEvenWinRate>.531);
+ assert.ok(r.operationalWarnings.estimatedBreakEvenWinRate<.533);
+ assert.equal(r.operationalWarnings.latest10Loss,true);
+});
