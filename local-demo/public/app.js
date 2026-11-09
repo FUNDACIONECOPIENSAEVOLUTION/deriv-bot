@@ -126,6 +126,39 @@ async function showOpportunityShadow(){
   }
  }catch(e){$('shadow-opportunities-status').textContent='Estudio no disponible: '+e.message;}
 }
+async function showCandlePatternAudit(){
+ try{
+  const d=await get('/api/learning/candle-patterns');
+  const pct=x=>Number.isFinite(x)?(100*x).toFixed(1)+' %':'—';
+  const brier=x=>Number.isFinite(x)?x.toFixed(4):'—';
+  const latest=d.versions?.at(-1);
+  $('candle-pattern-status').textContent='Velas precompra: '+d.independentSamples+
+   ' decisiones independientes con contexto · '+d.missingContext+
+   ' liquidaciones históricas sin las 20 velas guardadas · '+d.duplicates+
+   ' señales/candles duplicadas omitidas · '+d.conclusion+
+   '. No cambia las decisiones CALL/PUT.';
+  const body=$('candle-pattern-results');body.replaceChildren();
+  for(const p of d.patterns||[]){
+   const tr=document.createElement('tr');
+   [p.pattern,p.n,p.wins,p.losses,signedCents(p.netCents)].forEach((value,i)=>{
+    const cell=document.createElement('td');cell.textContent=value;
+    if(i===4)cell.className=p.netCents<0?'down':p.netCents>0?'up':'';
+    tr.appendChild(cell);
+   });body.appendChild(tr);
+  }
+  if(!body.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=5;td.textContent='Todavía no hay compras liquidadas con 20 velas registradas. El histórico anterior no contiene esas series.';
+   tr.appendChild(td);body.appendChild(tr);
+  }
+  $('candle-pattern-validation').textContent='Validación cronológica de velas: '+
+   d.scored.n+' compras posteriores evaluadas, '+d.fullFolds+
+   ' bloques completos. Brier modelo '+brier(d.scored.modelBrier)+
+   ' · histórico '+brier(d.scored.historicBrier)+
+   ' · neutral '+brier(d.scored.neutralBrier)+
+   '. Menor es mejor. '+d.conclusion+' · modelo en sombra, NO compra.';
+ }catch(e){$('candle-pattern-status').textContent='Análisis de velas no disponible: '+e.message;}
+}
 async function showWalkForwardAudit(){
  try{
   const d=await get('/api/learning/walk-forward');
@@ -579,6 +612,7 @@ $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando
  await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
  await showQualityAudit();setInterval(showQualityAudit,20000);
  await showWalkForwardAudit();setInterval(showWalkForwardAudit,20000);
+ await showCandlePatternAudit();setInterval(showCandlePatternAudit,20000);
  await showOpportunityShadow();setInterval(showOpportunityShadow,20000);
  async function diagnose(){
   try{

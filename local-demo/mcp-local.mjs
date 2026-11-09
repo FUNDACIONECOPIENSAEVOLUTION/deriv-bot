@@ -6,6 +6,7 @@ export const MCP_TOOLS=[
  {name:'get_market_signals',description:'Señales SMA/RSI públicas con antigüedad de cada cotización.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_training_statistics',description:'Historial experimental de contratos DEMO, no modelo entrenado.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_walk_forward_validation',description:'Validación de modelo logístico DEMO con datos solo de liquidaciones anteriores, sin autorización de BUY, ni REAL.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+ {name:'get_candle_pattern_validation',description:'Estudio estadístico de 20 velas cerradas PRE-BUY y aprendizaje en sombra sin ejecutar órdenes.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_demo_orders',description:'Compras locales confirmadas, pendientes y P&L en la cuenta DEMO.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_demo_risk_status',description:'Pérdida neta diaria DEMO, exposición, pendientes y stop; solo lectura, sin BUY.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_demo_program_status',description:'Estado del programa 10x10 DEMO, tandas y P&L; solo lectura, sin BUY.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
@@ -33,6 +34,7 @@ export async function dispatchMcp(message,handlers){
   if(name==='get_market_signals')result=handlers.signals();
   if(name==='get_training_statistics')result=handlers.training();
   if(name==='get_walk_forward_validation')result=handlers.walkForward();
+  if(name==='get_candle_pattern_validation')result=handlers.candlePatterns();
   if(name==='get_demo_orders')result=handlers.orders();
   if(name==='get_demo_risk_status')result=handlers.risk();
   if(name==='get_demo_program_status')result=handlers.program();

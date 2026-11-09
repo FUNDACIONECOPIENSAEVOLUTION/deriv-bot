@@ -35,6 +35,13 @@
  <p id="walk-forward-status" class="msg">Validando datos históricos en orden temporal...</p>
  <div class="table-wrap"><table><thead><tr><th>Prueba posterior</th><th>Operaciones</th><th>Brier modelo</th><th>Brier referencia</th><th>Brier histórico</th></tr></thead>
  <tbody id="walk-forward-folds"><tr><td colspan="5">Esperando evaluación.</td></tr></tbody></table></div>
+ <h3>Aprendizaje estadístico con 20 velas anteriores a cada compra</h3>
+ <p>Esta investigación conservará 20 velas OHLC de diez ticks, los últimos ticks disponibles y los indicadores observados justo ANTES de enviar cada BUY DEMO. Clasifica continuación, retroceso o doji, compara CALL/PUT con la tendencia y valida las predicciones usando únicamente contratos ya liquidados. No cambia órdenes ni apuesta real.</p>
+ <p id="candle-pattern-status" class="msg">Consultando contexto de velas disponible...</p>
+ <div class="table-wrap"><table><thead><tr><th>Patrón / dirección</th><th>Contratos</th><th>Ganadas</th><th>Perdidas</th><th>Resultado neto</th></tr></thead>
+ <tbody id="candle-pattern-results"><tr><td colspan="5">Las primeras compras posteriores a la actualización comenzarán el estudio.</td></tr></tbody></table></div>
+ <p id="candle-pattern-validation" class="msg">Esperando validación por bloques de resultados posteriores.</p>
+ <a class="download-link" href="/api/learning/candles.csv" download>Descargar las 20 velas anteriores a cada compra (CSV)</a>
  <h3>Oportunidades observadas en cinco ticks (sin compras adicionales)</h3>
  <p>Estudio de todas las señales elegibles antes de cada ola: compara índices seleccionados y no seleccionados. Mide únicamente la dirección del precio cinco ticks después de la señal; no supone la misma cotización, ganancia ni payout de un contrato.</p>
  <p id="shadow-opportunities-status" class="msg">Sin oportunidades registradas todavía.</p>

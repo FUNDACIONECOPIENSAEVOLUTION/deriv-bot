@@ -37,7 +37,12 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   fresh:true,ageReceivedMs:100,epoch:Math.floor(Date.now()/1000),
   rsi14:59,sma8:101,sma21:100,ema20:103,ema50:102,atr14:0.4,
   momentum5:0.02,signalStrength:70,
-  candles:[{open:100.1,high:100.8,low:99.9,close:100.7,epoch:Math.floor(Date.now()/1000)-1}],
+  candles:[
+   ...Array.from({length:19},(_,i)=>({open:100+i*.01,high:100.2+i*.01,
+    low:99.9+i*.01,close:100.1+i*.01,epoch:Math.floor(Date.now()/1000)-20+i})),
+   {open:100.1,high:100.8,low:99.9,close:100.7,epoch:Math.floor(Date.now()/1000)-1}
+  ],
+  lastPrices:Array.from({length:40},(_,i)=>100+i*.004),
   projectedNextTick:100.75,modelMae:0.12,naiveMae:0.13,
   fiveTickMomentum:-0.32,tickRsi14:43,fiveTickStudy:{hitRate:.57,holdoutCount:20},
   reason:'TENDENCIA_ALCISTA_MULTIFACTOR'};
@@ -77,6 +82,17 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   assert.ok(totals.orders.every(x=>x.fiveTickMomentum===-0.32&&x.tickRsi14===43));
   assert.ok(totals.orders.every(x=>x.fiveTickStudyHitRate===.57&&x.fiveTickStudyN===20));
   assert.ok(totals.orders.every(x=>x.signalReason==='TENDENCIA_ALCISTA_MULTIFACTOR'));
+  const archives=db.prepare('SELECT id,state,bought_at_ms,candle_context_json,candle_context_captured_ms,candle_pattern_version FROM demo_local_orders').all();
+  assert.equal(archives.length,5);
+  for(const x of archives){
+   assert.equal(x.candle_pattern_version,'CANDLE_CONTEXT_V1');
+   const context=JSON.parse(x.candle_context_json);
+   assert.equal(context.candles.length,20);
+   assert.equal(context.lastTickPrices.length,30);
+   assert.ok(context.capturedAtMs<=x.bought_at_ms,'se captura ANTES de confirmar BUY');
+   assert.equal(context.candles.at(-1).close,100.7);
+   assert.equal(context.source,'OHLC_CLOSED_BEFORE_BROKER_BUY');
+  }
   assert.match(csv,/fiveTickMomentum,tickRsi14,fiveTickStudyHitRate/);
   assert.match(csv,/diagnosisCode/);
  }finally{

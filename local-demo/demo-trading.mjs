@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import {diagnoseTrade} from './trade-analysis.mjs';
 import {isVolatilitySymbol} from './synthetic-catalog.mjs';
+import {captureCandleContext} from './candle-patterns.mjs';
 
 const SYMBOLS=new Set(['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500']);
@@ -36,7 +37,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   projected_next_tick:'REAL',projection_model_mae:'REAL',projection_naive_mae:'REAL',app_version:'TEXT',strategy_version:'TEXT',
    signal_five_tick_momentum:'REAL',signal_tick_rsi14:'REAL',
    five_tick_study_hit_rate:'REAL',five_tick_study_n:'INTEGER',
-   signal_snapshot_epoch:'INTEGER',signal_reason:'TEXT'})){
+   signal_snapshot_epoch:'INTEGER',signal_reason:'TEXT',
+   candle_context_json:'TEXT',candle_context_captured_ms:'INTEGER',candle_pattern_version:'TEXT'})){
   if(!columns.has(name))db.exec('ALTER TABLE demo_local_orders ADD COLUMN '+name+' '+sqlType);
  }
  const STRATEGY_VERSION='EMA20_EMA50_RSI14_ATR14_OHLC10_V1';
@@ -75,6 +77,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const recordBuy=db.prepare(`UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=?,candle_open=?,candle_high=?,candle_low=?,candle_close=?,candle_epoch=?,projected_next_tick=?,projection_model_mae=?,projection_naive_mae=?,
    signal_five_tick_momentum=?,signal_tick_rsi14=?,five_tick_study_hit_rate=?,
    five_tick_study_n=?,signal_snapshot_epoch=?,signal_reason=? WHERE id=?`);
+ const recordCandleContext=db.prepare(`UPDATE demo_local_orders
+ SET candle_context_json=?,candle_context_captured_ms=?,candle_pattern_version=?
+ WHERE id=?`);
  const markBatch=db.prepare("UPDATE demo_local_orders SET batch_id=? WHERE id=?");
  const purchasedAt=db.prepare("UPDATE demo_local_orders SET created_at_ms=? WHERE id=?");
  const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=?,settled_at_ms=?,entry_tick=COALESCE(?,entry_tick),exit_tick=COALESCE(?,exit_tick),entry_tick_epoch=COALESCE(?,entry_tick_epoch),exit_tick_epoch=COALESCE(?,exit_tick_epoch) WHERE id=?");
@@ -267,8 +272,13 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
      ||!Number.isFinite(price)||price<0||cents(price)>row.stake_cents)
      throw Error('DEMO_QUOTE_INVALID');
    if(performance.now()-t>2000||!signalValid(row.symbol,row.direction))throw Error('DEMO_QUOTE_STALE');
-   change.run('SENDING',epoch(),null,id);
+   // Congelar el contexto de 20 velas cerradas ANTES de que se envíe BUY.
+   // Se almacena incluso si posteriormente se pierde el acuse del broker.
    const observed=marketSnapshot(row.symbol);
+   const candleContext=captureCandleContext(observed,{count:20,atMs:Date.now()});
+   if(candleContext)recordCandleContext.run(JSON.stringify(candleContext),
+    candleContext.capturedAtMs,'CANDLE_CONTEXT_V1',id);
+   change.run('SENDING',epoch(),null,id);
    const lastClosed=observed?.candles?.at(-1)||null;
    const buyStart=performance.now();
    // No automatic retries if the buy acknowledgement is lost.

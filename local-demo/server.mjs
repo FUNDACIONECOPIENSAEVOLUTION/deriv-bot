@@ -19,6 +19,7 @@ import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
 import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
 import {evaluateWalkForward} from './shadow-walk-forward.mjs';
+import {evaluateCandlePatterns,exportCandlesCsv} from './candle-patterns.mjs';
 
 const HOME=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ECOPIENSA_DATA_DIR||join(HOME,'data');
@@ -303,6 +304,11 @@ const qualityRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cent
  entry_tick,exit_tick,signal_quote,projection_model_mae,projection_naive_mae,error_code
  FROM demo_local_orders WHERE state IN ('SETTLED','REJECTED')
  ORDER BY created_at ASC`);
+const candleRows=db.prepare(`SELECT id,batch_id,app_version,strategy_version,
+ state,symbol,direction,stake_cents,pnl_cents,bought_at_ms,settled_at_ms,
+ candle_context_json FROM demo_local_orders
+ WHERE state IN ('SETTLED','REJECTED','OPEN','UNKNOWN')
+ ORDER BY created_at ASC,id ASC`);
 const outcomeRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
  bought_at_ms,created_at,candle_epoch,signal_age_ms,signal_rsi,buy_latency_ms
  FROM demo_local_orders WHERE state='SETTLED' ORDER BY created_at DESC`);
@@ -335,6 +341,7 @@ const mcpHandlers={
  risk:()=>trading.getRiskStatus(),
  program:()=>program.status(),
  walkForward:()=>evaluateWalkForward(qualityRows.all()),
+ candlePatterns:()=>evaluateCandlePatterns(candleRows.all()),
  request:args=>{if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');if(program.isRunning())throw Error('DEMO_PROGRAM_IN_PROGRESS');return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});}
 };
 let server;
@@ -352,6 +359,14 @@ server=http.createServer(async(req,res)=>{
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
   if(req.method==='GET'&&path==='/api/learning/walk-forward')
    return answer(res,200,evaluateWalkForward(qualityRows.all()));
+  if(req.method==='GET'&&path==='/api/learning/candle-patterns')
+   return answer(res,200,evaluateCandlePatterns(candleRows.all()));
+  if(req.method==='GET'&&path==='/api/learning/candles.csv'){
+   res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
+    'X-Content-Type-Options':'nosniff',
+    'Content-Disposition':'attachment; filename="ecopiensa-20-velas-precompra.csv"'});
+   res.end(exportCandlesCsv(candleRows.all()));return;
+  }
   if(req.method==='GET'&&path==='/api/learning/opportunities')
    return answer(res,200,opportunityShadow.status());
   if(req.method==='GET'&&path==='/api/learning/opportunities.csv'){
