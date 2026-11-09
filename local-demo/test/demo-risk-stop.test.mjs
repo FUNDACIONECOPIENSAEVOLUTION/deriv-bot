@@ -26,7 +26,7 @@ function setup(){
 }
 test('Límite US$100 de pérdidas brutas impide crear tanda 0/10 desde el inicio',()=>{
  const {db,trading,burst,insert,brokerCalls}=setup();
- for(let i=0;i<100;i++)insert.run('loss-'+i,epoch()-90+i%30,epoch(),
+ for(let i=0;i<100;i++)insert.run('loss-'+i,Math.floor(epoch()/86400)*86400+1,epoch(),
   'SETTLED','LOCAL_OWNER','R_100','CALL',100,-100);
  const risk=trading.getRiskStatus();
  assert.equal(risk.dailyGrossLossCents,10000);
