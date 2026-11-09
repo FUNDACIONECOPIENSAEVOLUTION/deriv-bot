@@ -347,10 +347,11 @@ $('program-start').onclick=async()=>{
  try{
   const r=await post('/api/demo/program/start',{
    rounds:10,perRound:10,stakeCents:100,symbol:'AUTO',concurrency:5,
+   mode:'RESEARCH_DEMO',
    confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'
   });
   $('program-status').textContent='Programa '+r.id.slice(0,8)+
-   ' autorizado solo para DEMO · hasta 100 compras de US$1. No se activará cuenta REAL.';
+   ' autorizado para investigación DEMO · hasta 100 compras de US$1, condicionado a señales y riesgo. REAL no se habilita.';
  }catch(e){$('program-status').textContent='Programa no iniciado: '+e.message;}
  await updateDemoProgram();
 };
@@ -472,15 +473,16 @@ async function updateBurstPanel(){
 }
 $('burst-start').onclick=async()=>{
  const count=Number($('burst-count').value),stakeCents=Number($('burst-stake').value),
-   symbol=$('burst-symbol').value;
+   symbol=$('burst-symbol').value,mode=$('burst-mode').value;
  const concurrency=Math.min(count,Number($('burst-concurrency').value));
  const cost=count*stakeCents/100;
  if(!Number.isSafeInteger(count)||count<1||count>10||cost>100){$('burst-message').textContent='La tanda permite de 1 a 10 compras y hasta US$100 en apuestas DEMO.';return;}
+ if(mode==='RESEARCH_DEMO'&&stakeCents>100){$('burst-message').textContent='Investigación DEMO: máximo US$1 por compra. Elige una apuesta menor o modo conservador.';return;}
  // El clic en el botón local es la autorización explícita para esta tanda DEMO.
  const confirmation='CONFIRMAR TANDA DEMO';
  $('burst-start').disabled=true;$('burst-message').textContent='Autorizando tanda DEMO. No vuelvas a pulsar.';
- try{const d=await post('/api/demo/burst/start',{count,stakeCents,symbol,concurrency,confirmation});
-  $('burst-message').textContent='Tanda '+d.id.slice(0,8)+' autorizada. Se enviarán como máximo '+count+' contratos virtuales; REAL bloqueada.';
+ try{const d=await post('/api/demo/burst/start',{count,stakeCents,symbol,concurrency,mode,confirmation});
+  $('burst-message').textContent='Tanda '+d.id.slice(0,8)+' autorizada en '+d.mode+'. Máximo '+count+' compras DEMO si se cumplen señales, cotización y riesgo; REAL bloqueada.';
  }catch(e){$('burst-message').textContent='Tanda no iniciada: '+e.message;}
  finally{await updateBurstPanel();}
 };
