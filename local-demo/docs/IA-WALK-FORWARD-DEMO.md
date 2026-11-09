@@ -280,3 +280,36 @@ y las ordenes inciertas siguen protegidos.
 // stop del usuario y prohibicion absoluta de cuenta REAL.
 // No es una estrategia de rentabilidad garantizada ni se permite
 // seguir indefinidamente una tanda hasta que quede positiva.
+
+## Protección GLOBAL de beneficios y downshift por dos pérdidas (DEMO)
+
+Un programa 10x10 nuevo puede autorizar dos opciones adicionales
+(marcadas inicialmente en UI, pero sin iniciar compras sin clic
+local): protección de beneficio global y reducción de US$1 a
+US$0.50 tras dos pérdidas consecutivas. Mantiene salida verde
+progresiva, diez operaciones máximo por tanda, una compra en
+vuelo y stop DEMO general. No modifica programas ni órdenes
+anteriores.
+
+El guard global usa exclusivamente resultados liquidados
+de ese programa, en el orden de las órdenes; antes de alcanzar
++US$3 detiene nuevos BUY cuya pérdida máxima dejara el neto
+por debajo de -US$3. Tras alcanzar +US$3 se protege
+max(+US$1, pico de beneficio- US$2). Se evalúa antes de
+cada BUY y antes de iniciar la siguiente tanda; puede cerrar
+antes de 10 tandas, sin forzar recuperación ni dar resultados
+positivos ficticios.
+
+Downshift SOLO después de dos pérdidas liquidadas consecutivas
+en la misma tanda (un rechazo sin BUY no cuenta). Resto de
+la tanda usa US$0.50 y nunca sube durante la tanda. La
+siguiente reinicia US$1. Si Deriv rechaza una propuesta
+de US$0.50, no se aumenta la apuesta para saltar el filtro.
+Se preservan seguridad OPEN/UNKNOWN, validación por broker,
+parada diaria y prohibición de REAL.
+
+Simulación aproximada sobre las mismas 112 compras v17.4:
+- Sin downshift: 20 tandas, 15 verdes, -US$2.86.
+- Downshift hipotético tras dos rojas: 11 verdes, -US$2.75.
+No refleja cambios de señal ni condiciones de payout; no
+demuestra mejora predictiva.

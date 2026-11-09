@@ -552,6 +552,8 @@ server=http.createServer(async(req,res)=>{
     concurrency:b.concurrency,symbol:b.symbol,mode:b.mode,
      continueAfterNegativeRound:b.continueAfterNegativeRound,
      profitTargetCents:b.profitTargetCents,exitPolicy:b.exitPolicy,
+     globalProtection:b.globalProtection,
+     downshiftAfterTwoLosses:b.downshiftAfterTwoLosses,
      confirmation:b.confirmation
    }));
    if(path==='/api/demo/program/stop')return answer(res,200,program.stop());
