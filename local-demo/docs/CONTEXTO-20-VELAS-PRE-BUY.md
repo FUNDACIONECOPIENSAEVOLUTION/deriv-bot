@@ -26,3 +26,15 @@ El modo `CANDLE_PATTERN_SHADOW_TRAINING` **no altera CALL/PUT**, no incrementa a
 - MCP local read-only `get_candle_pattern_validation`.
 
 El histórico previo sin secuencia completa **no puede** reconstruir retrospectivamente la señal exacta ni los ticks de la expiración solo a partir de la última vela. Para analizar errores de v13.6/v14.4, usar los datos oficiales disponibles sin atribuirles información no registrada.
+
+## Huella individual de ticks (siguiente version)
+
+Cada contexto nuevo conserva hasta **90** precios tick individuales
+anteriores al BUY (`lastTickPrices`) en lugar de 30, junto a
+`lastTickEpochs` cuando los proporciona el flujo publico y
+`lastLiveTickSeq` para estudiar si se perdieron ticks al reconectar.
+Conserva aparte las 20 velas OHLC cerradas. Los ticks nunca constituyen
+una prediccion conocida del futuro: sirven para entrenar/validar
+causalmente modelos de 5 y 10 ticks con las liquidaciones posteriores.
+Los registros anteriores de 30 ticks se mantienen sin modificar;
+los epoch ausentes no se fabrican.

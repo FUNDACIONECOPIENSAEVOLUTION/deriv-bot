@@ -106,3 +106,31 @@ muestra prospectiva suficiente; correlacion no demuestra causalidad.
 // Los bloqueos de pérdida neta diaria, saldo mínimo, órdenes UNKNOWN,
 // conciliación, cuotas, datos frescos y consentimiento DEMO siguen vigentes.
 // Los resultados anteriores permanecen PAUSED y jamás se reanudan solos.
+
+## Auditoria oficial de aleatoriedad y multiple comparacion (v2)
+
+Deriv confirma que los indices Volatility usan una fuente de numeros
+aleatorios criptograficamente segura; no publica una formula que permita
+conocer los siguientes 5/10 ticks. Los niveles 10, 25, 50, etc. miden
+volatilidad simulada, NO probabilidad de CALL o PUT.
+
+Fuentes oficiales:
+- https://deriv.com/es/markets/derived-indices/synthetic-indices
+- https://traders-academy.deriv.com/es/trading-guides/guide-to-understanding-volatility-indices
+- https://developers.deriv.com/docs/data/ticks/
+- https://developers.deriv.com/docs/data/ticks-history/
+
+El modulo tick-horizon-model.mjs conserva los 5 modelos seleccionados
+en entrenamiento y los valida fuera de muestra. La evaluacion agrega
+`fairCoinOneSidedP` y `familywiseAdjustedP` contra una referencia
+hipotetica de 50% por direccion. El ajuste conservador controla
+26 comparaciones por foto de los mercados (13 simbolos * 2 horizontes).
+**No ajusta todas las pruebas repetidas en el tiempo** ni demuestra
+predictibilidad real. En modo conservador exige p ajustada <= 0.05,
+cota Wilson >= 0.58, validez de la direccion y cotizacion favorable.
+Los contratos DEMO experimentales siguen rotulados como NO validados:
+siempre son opcionales y preservan controles de riesgo y exposicion.
+
+La ganancia esperada nunca se deduce del porcentaje de acierto solo:
+en cada propuesta se evalua `P(win)*payout-ask_price` y se registra
+la calidad estadistica sin inventar un supuesto 90% de aciertos.

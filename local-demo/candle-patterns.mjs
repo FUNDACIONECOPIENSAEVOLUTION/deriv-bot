@@ -44,8 +44,14 @@ export function captureCandleContext(snapshot,{count=20,atMs=Date.now()}={}){
    c.close<c.low||c.close>c.high||c.epoch*1000>atMs+1000)return null;
   priorEpoch=c.epoch;
  }
+ // Se archivan hasta 90 ticks independientes (sin transformar en velas).
+ // El historico anterior conserva sus 30 ticks sin reconstruccion artificial.
  const ticks=Array.isArray(snapshot.lastPrices)?
-  snapshot.lastPrices.slice(-30).map(n).filter(finite):[];
+  snapshot.lastPrices.slice(-90).map(n).filter(finite):[];
+ const epochs=Array.isArray(snapshot.lastTickEpochs)?
+  snapshot.lastTickEpochs.slice(-ticks.length):[];
+ const tickEpochs=epochs.length===ticks.length&&epochs.every(x=>
+  Number.isInteger(x)&&x>0&&x*1000<=atMs+1000)?epochs:[];
  return {schema:1,capturedAtMs:Math.round(atMs),symbol:String(snapshot.symbol||''),
   source:'OHLC_CLOSED_BEFORE_BROKER_BUY',
   quote:n(snapshot.quote),tickEpoch:n(snapshot.epoch),
@@ -54,6 +60,7 @@ export function captureCandleContext(snapshot,{count=20,atMs=Date.now()}={}){
   ema20:n(snapshot.ema20),ema50:n(snapshot.ema50),rsi14:n(snapshot.rsi14),
   atr14:n(snapshot.atr14),fiveTickMomentum:n(snapshot.fiveTickMomentum),
   tickRsi14:n(snapshot.tickRsi14),candles:bars,lastTickPrices:ticks,
+  lastTickEpochs:tickEpochs,lastLiveTickSeq:n(snapshot.liveTickSeq),
   pattern:patternOf(bars,n(snapshot.atr14))};
 }
 export function parseCandleContext(raw){

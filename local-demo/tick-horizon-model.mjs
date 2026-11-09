@@ -25,6 +25,23 @@ function wilsonLower(w,n){
  const z=1.96,p=w/n,den=1+z*z/n;
  return Math.max(0,(p+z*z/(2*n)-z*Math.sqrt((p*(1-p)+z*z/(4*n))/n))/den);
 }
+// Referencia hipotetica sin capacidad predictiva: p=0.5 (cara/cruz).
+// Cada horizonte/simbolo se evalua sobre etiquetas historicas DISJUNTAS.
+// Ajuste de 26 comparaciones simultaneas: 13 indices * 2 horizontes.
+// NO corrige todas las decisiones repetidas a traves del tiempo.
+const HYPOTHESES_PER_SNAPSHOT=26;
+function fairCoinUpperTail(wins,count){
+ if(count<=0)return null;
+ // El valor >=0.5 es evidencia insuficiente; devolver 1 conservador.
+ if(wins<=count/2)return 1;
+ let logCombination=0;
+ for(let j=1;j<=wins;j++)logCombination+=Math.log(count-j+1)-Math.log(j);
+ let term=Math.exp(logCombination-count*Math.LN2),sum=term;
+ for(let k=wins;k<count;k++){
+  term*=(count-k)/(k+1);sum+=term;
+ }
+ return Math.max(0,Math.min(1,sum));
+}
 function evaluatePolicy(prices,observations,policy){
  let wins=0,decisions=0,ties=0;
  for(const row of observations){
@@ -67,7 +84,14 @@ export function evaluateTickHorizons(rawPrices,{minTraining=30,minValidation=20}
   // Umbral deliberadamente exigente: se evita sobreajuste con muestras pequeñas.
   // Una cotizacion Deriv actual y EV conservadora aun deben aprobarse ANTES de BUY.
   const enough=!!selected&&verify.decisions>=minValidation;
-  const readyForProposal=enough&&verify.wilson95Lower>=.58&&direction!=='ESPERAR';
+  const fairCoinTailP=enough?fairCoinUpperTail(verify.wins,verify.decisions):null;
+  const familywiseAdjustedP=fairCoinTailP!==null?
+   Math.min(1,fairCoinTailP*HYPOTHESES_PER_SNAPSHOT):null;
+  // Filtro estricto: no confundir acierto descriptivo con ventaja.
+  const statisticallyDistinctFromFairCoin=familywiseAdjustedP!==null&&
+   familywiseAdjustedP<=.05;
+  const readyForProposal=enough&&verify.wilson95Lower>=.58&&
+   statisticallyDistinctFromFairCoin&&direction!=='ESPERAR';
   return {durationTicks:h,lookbacksTicks:[5,10,20],
    computeMs:Number((performance.now()-horizonStart).toFixed(3)),
    computedAtMs:Date.now(),
@@ -78,10 +102,15 @@ export function evaluateTickHorizons(rawPrices,{minTraining=30,minValidation=20}
    validationTies:verify?.ties||0,
    observedValidationHitRate:clean(verify?.hitRate),
    conservativeWinRateLower95:clean(verify?.wilson95Lower),
+   fairCoinOneSidedP:fairCoinTailP,
+   familywiseAdjustedP,comparisonsPerSnapshot:HYPOTHESES_PER_SNAPSHOT,
+   statisticallyDistinctFromFairCoin,
+   nullHypothesis:'INDEPENDENT_FAIR_COIN_DIRECTION_50_PERCENT',
    readyForProposal,
    reason:!selected?'TRAINING_INSUFFICIENT':
     !enough?'HOLDOUT_INSUFFICIENT':
     direction==='ESPERAR'?'NO_DIRECTION':
+    !statisticallyDistinctFromFairCoin?'NO_EVIDENCE_VS_FAIR_COIN':
     !readyForProposal?'NO_VALIDATED_EDGE':'AWAIT_BROKER_PAYOUT_CHECK',
    payoutChecked:false,canBuyWithoutQuote:false,
    predictionUsesFutureTicks:false,

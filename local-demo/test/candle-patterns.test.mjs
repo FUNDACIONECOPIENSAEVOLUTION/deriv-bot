@@ -28,13 +28,33 @@ function trade(i,{pnl=(i%4===0?-100:88),buyAt=base+i*60000,settledAt=buyAt+2500,
 test('Archiva 20 velas OHLC PRE-BUY, con ticks anteriores y patrón de retroceso',()=>{
  const ctx=observation(5);
  assert.equal(ctx.candles.length,20);
- assert.equal(ctx.lastTickPrices.length,30);
+ assert.equal(ctx.lastTickPrices.length,40);
+ assert.equal(ctx.lastTickEpochs.length,0);
  assert.equal(ctx.source,'OHLC_CLOSED_BEFORE_BROKER_BUY');
  assert.equal(ctx.schema,1);
  assert.ok(ctx.candles.at(-1).epoch*1000<ctx.capturedAtMs);
  assert.equal(ctx.pattern.lastThree.length,3);
  assert.ok(['DOJI','PULLBACK','CONTINUATION','MIXED'].includes(ctx.pattern.setup));
  assert.deepEqual(parseCandleContext(JSON.stringify(ctx)),ctx);
+});
+test('Ticks individuales ex ante con epoch y sin incorporar el futuro',()=>{
+ const buyAt=base+600000;
+ const c=observation(2,{buyAt});
+ const m=40;
+ const snapshot={...c,quote:c.quote,direction:c.signalDirection,
+  candles:c.candles,atr14:c.atr14,
+  epoch:Math.floor((buyAt-1000)/1000),
+  lastPrices:Array.from({length:m},(_,i)=>100+i*.01),
+  lastTickEpochs:Array.from({length:m},(_,i)=>Math.floor(buyAt/1000)-m+i),
+  liveTickSeq:630};
+ const stored=captureCandleContext(snapshot,{atMs:buyAt});
+ assert.equal(stored.lastTickPrices.length,40);
+ assert.equal(stored.lastTickEpochs.length,40);
+ assert.equal(stored.lastLiveTickSeq,630);
+ assert.ok(stored.lastTickEpochs.every(x=>x*1000<=stored.capturedAtMs));
+ const future={...snapshot,lastTickEpochs:[...snapshot.lastTickEpochs.slice(0,-1),
+  Math.floor(buyAt/1000)+100]};
+ assert.equal(captureCandleContext(future,{atMs:buyAt}).lastTickEpochs.length,0);
 });
 test('Nunca acepta velas futuras, corruptas o contexto incompleto',()=>{
  const b=observation(3);

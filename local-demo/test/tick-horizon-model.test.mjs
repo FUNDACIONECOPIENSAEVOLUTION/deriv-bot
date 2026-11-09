@@ -20,6 +20,22 @@ test('Modelo no usa precios posteriores para predecir el mismo corte temporal',(
  assert.deepEqual(statisticalFields(a),statisticalFields(b));
  assert.ok(a.every(x=>Number.isFinite(x.computeMs)&&Number.isFinite(x.computedAtMs)));
 });
+test('Aciertos de 50 % no demuestran ventaja al comparar 26 modelos',()=>{
+ const prices=Array.from({length:660},(_,i)=>100+Math.sin(i*.3)*.001);
+ const a=evaluateTickHorizons(prices);
+ assert.equal(a.length,2);
+ assert.ok(a.every(x=>x.comparisonsPerSnapshot===26));
+ assert.ok(a.every(x=>x.nullHypothesis==='INDEPENDENT_FAIR_COIN_DIRECTION_50_PERCENT'));
+ assert.ok(a.every(x=>x.familywiseAdjustedP===null||
+  (x.familywiseAdjustedP>=0&&x.familywiseAdjustedP<=1)));
+ assert.ok(a.every(x=>!x.readyForProposal||x.statisticallyDistinctFromFairCoin));
+});
+test('Modelo de tendencia clara pasa prueba estadistica sin garantizar beneficio',()=>{
+ const a=evaluateTickHorizons(rising);
+ assert.ok(a.every(x=>x.statisticallyDistinctFromFairCoin));
+ assert.ok(a.every(x=>x.familywiseAdjustedP<=.05));
+ assert.ok(a.every(x=>x.readyForProposal));
+});
 test('Pago insuficiente cancela BUY incluso con una prediccion aparente perfecta',()=>{
  const candidate={durationTicks:5,readyForProposal:true,conservativeWinRateLower95:.65};
  assert.equal(conservativeQuoteDecision(candidate,1,1.4).approved,false);

@@ -128,5 +128,7 @@ export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}
   sma8:prices.length>=8?mean(prices.slice(-8)):null,
   sma21:prices.length>=21?mean(prices.slice(-21)):null,
   direction,reason,signalStrength:strength,ready,fresh,
-  lastPrices:prices.slice(-90),trend:direction==='CALL'?'ALCISTA':direction==='PUT'?'BAJISTA':'INDEFINIDA'};
+  lastPrices:prices.slice(-90),
+  lastTickEpochs:valid.slice(-90).map(x=>x.epoch),
+  trend:direction==='CALL'?'ALCISTA':direction==='PUT'?'BAJISTA':'INDEFINIDA'};
 }
