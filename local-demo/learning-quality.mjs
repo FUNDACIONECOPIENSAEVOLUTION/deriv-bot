@@ -36,6 +36,7 @@ export function buildTradeQualityReport(rawRows){
   if(!good(pnl)||!good(stake)||stake<=0)continue;
   settled.push({pnl,stake,
    symbol:String(row.symbol||''),direction:String(row.direction||''),
+   batchId:String(row.batch_id||''),proposalPayoutCents:num(row.proposal_payout_cents),
    version:String(row.app_version||'SIN_VERSION_HISTORICA'),
    strategy:String(row.strategy_version||'SIN_ESTRATEGIA_HISTORICA'),
    at:num(row.bought_at_ms)??((num(row.created_at)||0)*1000),
@@ -63,6 +64,32 @@ export function buildTradeQualityReport(rawRows){
  const firstHalf=recent.slice(0,Math.floor(recent.length/2));
  const secondHalf=recent.slice(Math.floor(recent.length/2));
  const winners=recent.filter(r=>r.pnl>0),losers=recent.filter(r=>r.pnl<0);
+ const recent10=recent.slice(-10),recent20=recent.slice(-20);
+ const batchIndex=new Map();
+ for(const row of recent){
+  if(!row.batchId)continue;
+  if(!batchIndex.has(row.batchId))batchIndex.set(row.batchId,[]);
+  batchIndex.get(row.batchId).push(row);
+ }
+ const batchOutcomes=[...batchIndex.entries()].map(([id,rows])=>({
+  id,at:Math.min(...rows.map(r=>r.at)),...winStats(rows)
+ })).sort((a,b)=>a.at-b.at);
+ let losingBatchStreak=0;
+ for(let i=batchOutcomes.length-1;i>=0&&batchOutcomes[i].netCents<0;i--)losingBatchStreak++;
+ const avgWinReturn=winners.length?
+  winners.reduce((sum,r)=>sum+r.pnl/r.stake,0)/winners.length:null;
+ const breakEvenWinRate=avgWinReturn>0?1/(1+avgWinReturn):null;
+ const warning=recent10.length===10&&recent10.reduce((a,r)=>a+r.pnl,0)<0;
+ const operationalWarnings={
+  latest10Loss:warning,latest10:winStats(recent10),latest20:winStats(recent20),
+  latestNegativeBatchStreak:losingBatchStreak,
+  lastBatches:batchOutcomes.slice(-8),estimatedBreakEvenWinRate:round(breakEvenWinRate,4),
+  operatingStrategyIsAdaptive:false,
+  recommendedAction:warning?
+   'REVISAR_PERDIDAS_ANTES_DE_OTRA_TANDA_DEMO':'CONTINUAR_VALIDACION_ESTADISTICA',
+  note:'Aviso informativo, sin detener compras ni prometer mejora. El punto de equilibrio usa el pago medio observado y no supone predictibilidad.'
+ };
+
  const failures=losers.map(r=>{
   const move=(good(r.entry)&&good(r.exit))?
    (r.exit-r.entry)*(r.direction==='CALL'?1:r.direction==='PUT'?-1:0):null;
@@ -127,6 +154,7 @@ export function buildTradeQualityReport(rawRows){
   latest:winStats(recent),firstHalf:winStats(firstHalf),secondHalf:winStats(secondHalf),
   last10:winStats(recent.slice(-10)),
   latestCI95:wilson(recent.filter(r=>r.pnl>0).length,recent.length),
+  operationalWarnings,
   latency:{
    winners:{signalAgeMedianMs:median(winners.map(x=>x.age)),
     proposalMedianMs:median(winners.map(x=>x.proposalMs)),buyMedianMs:median(winners.map(x=>x.buyMs))},

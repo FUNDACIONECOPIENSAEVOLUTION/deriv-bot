@@ -286,7 +286,7 @@ const mcpAuthPath=join(DATA,'.mcp-local-authorization');
 if(!existsSync(mcpAuthPath)){writeFileSync(mcpAuthPath,'Bearer '+mcpKey,{mode:0o600,flag:'wx'});}
 // Aprendizaje conservador a partir de liquidaciones oficiales guardadas en SQLite.
 const qualityRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
- app_version,strategy_version,bought_at_ms,settled_at_ms,created_at,
+ batch_id,proposal_payout_cents,app_version,strategy_version,bought_at_ms,settled_at_ms,created_at,
  signal_age_ms,proposal_latency_ms,buy_latency_ms,signal_strength,signal_rsi,
  signal_five_tick_momentum,signal_tick_rsi14,
  five_tick_study_hit_rate,five_tick_study_n,
@@ -337,6 +337,12 @@ server=http.createServer(async(req,res)=>{
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
    if(req.method==='GET'&&path==='/api/demo/orders')return answer(res,200,trading.getSummary());
    if(req.method==='GET'&&path==='/api/demo/burst/status')return answer(res,200,bursts.status());
+   if(req.method==='GET'&&path==='/api/demo/burst-history.csv'){
+    res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
+     'X-Content-Type-Options':'nosniff',
+     'Content-Disposition':'attachment; filename="ecopiensa-tandas-demo-y-pausas.csv"'});
+    res.end(bursts.exportBatchesCsv());return;
+   }
    if(req.method==='GET'&&(path==='/api/demo/orders.csv'||path==='/api/demo/burst.csv')){
     const csv=trading.exportCsv(path.endsWith('/burst.csv')?'last-burst':'all');
     const filename=path.endsWith('burst.csv')?'ecopiensa-ultima-tanda-demo.csv':'ecopiensa-historial-demo.csv';

@@ -24,6 +24,35 @@ export function selectDistinctCandidates(candidates,limit,usedCandleEpoch=new Ma
  return picks;
 }
 
+/** Explain why no DEMO BUY is eligible, without contacting the broker.
+ * For an empty/paused burst the returned counters are evidence, not guesses.
+ */
+export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch=new Map(),
+ getAdaptiveVerdict=()=>({blocked:false}),nowMs=Date.now()){
+ const counts={};
+ const details=[];
+ const count=reason=>{counts[reason]=(counts[reason]||0)+1;return reason;};
+ for(const symbol of symbols){
+  let reason='READY';
+  const m=marketSnapshot(symbol);
+  if(!m)reason='NO_MARKET_DATA';
+  else if(m.available===false)reason='MARKET_UNAVAILABLE';
+  else if(m.ready!==true||m.candleCount<60)reason='OHLC_INCOMPLETE';
+  else if(!m.fresh||!Number.isFinite(m.ageReceivedMs)||m.ageReceivedMs>1500||
+   !Number.isInteger(m.epoch)||Math.abs(nowMs-m.epoch*1000)>2500)
+    reason='TICK_OR_PRICE_STALE';
+  else if(!['CALL','PUT'].includes(m.direction))reason='NO_CONFIRMED_DIRECTION';
+  else if(getAdaptiveVerdict(m.symbol,m.direction).blocked)reason='ADAPTIVE_RISK_VETO';
+  else{
+   const candleEpoch=m.candles?.at(-1)?.epoch??m.epoch;
+   if(!Number.isInteger(candleEpoch)||candleEpoch<=0)reason='INVALID_CANDLE_EPOCH';
+   else if((usedCandleEpoch.get(symbol)??-1)>=candleEpoch)reason='CANDLE_ALREADY_USED';
+  }
+  details.push({symbol,reason:count(reason)});
+ }
+ return {checkedSymbols:symbols.length,counts,details};
+}
+
 export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAccount,audit,
  getSymbols=()=>SYMBOLS,getAdaptiveVerdict=()=>({blocked:false}),
  getVersion=()=>null,getStrategyVersion=()=>null}){
@@ -33,13 +62,15 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  if(!fields.has('concurrent'))db.exec('ALTER TABLE demo_bursts ADD COLUMN concurrent INTEGER NOT NULL DEFAULT 1');
  if(!fields.has('app_version'))db.exec('ALTER TABLE demo_bursts ADD COLUMN app_version TEXT');
  if(!fields.has('strategy_version'))db.exec('ALTER TABLE demo_bursts ADD COLUMN strategy_version TEXT');
+ if(!fields.has('inspection_json'))db.exec('ALTER TABLE demo_bursts ADD COLUMN inspection_json TEXT');
  const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent,app_version,strategy_version) VALUES(?,?,?,?,?,?,?,?,?,?)');
  const update=db.prepare('UPDATE demo_bursts SET state=?,updated_at=?,completed=?,stop_reason=? WHERE id=?');
+ const saveInspection=db.prepare('UPDATE demo_bursts SET inspection_json=? WHERE id=?');
  // Totales durables desde TODAS las órdenes SQLite de cada tanda (sin límite de 60 filas UI).
  const latest=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.state,
  b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,b.concurrent,
  b.app_version AS appVersion,b.strategy_version AS strategyVersion,
- b.completed,b.stop_reason AS stopReason,
+ b.completed,b.stop_reason AS stopReason,b.inspection_json AS inspectionJson,
  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
  COUNT(CASE WHEN o.state='REJECTED' THEN 1 END) AS rejected,
@@ -51,9 +82,27 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  COALESCE(SUM(CASE WHEN o.state='SETTLED' THEN o.pnl_cents ELSE 0 END),0) AS netCents
  FROM demo_bursts AS b LEFT JOIN demo_local_orders AS o ON o.batch_id=b.id
  GROUP BY b.id ORDER BY b.created_at DESC,b.id DESC LIMIT 12`);
+ const allBatches=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.updated_at AS updatedAt,
+ b.state,b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,
+ b.concurrent,b.app_version AS appVersion,b.strategy_version AS strategyVersion,
+ b.stop_reason AS stopReason,b.inspection_json AS inspectionJson,
+ COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
+ COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
+ COUNT(CASE WHEN o.state='REJECTED' THEN 1 END) AS rejected,
+ COUNT(CASE WHEN o.state='SETTLED' AND o.pnl_cents>0 THEN 1 END) AS wins,
+ COUNT(CASE WHEN o.state='SETTLED' AND o.pnl_cents<0 THEN 1 END) AS losses,
+ COALESCE(SUM(CASE WHEN o.state='SETTLED' THEN o.pnl_cents ELSE 0 END),0) AS netCents
+ FROM demo_bursts b LEFT JOIN demo_local_orders o ON o.batch_id=b.id
+ GROUP BY b.id ORDER BY b.created_at DESC,b.id DESC`);
+ const withInspection=row=>{
+  let inspection=null;
+  try{inspection=row.inspectionJson?JSON.parse(row.inspectionJson):null;}catch{}
+  const {inspectionJson,...publicRow}=row;
+  return {...publicRow,inspection};
+ };
  let active=null;
  function status(){return {running:!!active,stopRequested:!!active?.stopRequested,
-  inFlight:active?.inFlight||0,liveId:active?.id||null,batches:latest.all(),
+  inFlight:active?.inFlight||0,liveId:active?.id||null,batches:latest.all().map(withInspection),
   maxConcurrent:MAX_PARALLEL,realEnabled:false,demoOnly:true};}
  function select(symbol,limit,batch){
   const allowed=symbol==='AUTO'?getSymbols():[symbol];
@@ -99,7 +148,13 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
      await pause(250);
     }
     if(batch.stopRequested){state='STOPPED';reason='OWNER_STOP_REQUESTED';break;}
-    if(!picks.length){state='PAUSED';reason='NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS';break;}
+    if(!picks.length){
+     state='PAUSED';reason='NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS';
+     const allowed=batch.symbol==='AUTO'?getSymbols():[batch.symbol];
+     saveInspection.run(JSON.stringify(inspectSignalAvailability(allowed,marketSnapshot,
+      batch.usedCandleEpoch,getAdaptiveVerdict)),batch.id);
+     break;
+    }
     await refreshAccount();
     if(!getAccount()){state='HALTED';reason='DEMO_ACCOUNT_UNAVAILABLE';break;}
     // Reservar esta señal/vela antes de solicitar BUY (también si luego es rechazada).
@@ -165,5 +220,15 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   update.run('STOP_REQUESTED',epoch(),record?.completed||0,'OWNER_STOP_REQUESTED',active.id);
   return {stopped:true,reason:'AFTER_CURRENT_WAVE',id:active.id};
  }
- return {start,stop,status,canUpdate:()=>!active};
+ function exportBatchesCsv(){
+  const headers=['id','createdAt','updatedAt','appVersion','strategyVersion',
+   'state','requested','executed','settled','rejected','wins','losses','netCents',
+   'stopReason','inspection'];
+  const safe=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
+  return '\uFEFF'+headers.join(',')+'\r\n'+allBatches.all().map(raw=>{
+   const row=withInspection(raw);
+   return headers.map(key=>safe(key==='inspection'?JSON.stringify(row.inspection??{}):row[key])).join(',');
+  }).join('\r\n')+'\r\n';
+ }
+ return {start,stop,status,exportBatchesCsv,canUpdate:()=>!active};
 }

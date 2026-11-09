@@ -143,6 +143,17 @@ async function showQualityAudit(){
    ' casos; error Brier '+(q.shadow.brier??'—')+
    ' frente a base '+(q.shadow.baselineBrier??'—')+
    '. No se usa para comprar.';
+  const risk=q.operationalWarnings||{};
+  const pctBreak=Number.isFinite(risk.estimatedBreakEvenWinRate)?
+   (100*risk.estimatedBreakEvenWinRate).toFixed(1)+'%':'—';
+  $('quality-risk').textContent='Riesgo DEMO (última versión): últimas 10 '+
+   (risk.latest10?.wins||0)+' ganadoras de '+(risk.latest10?.n||0)+
+   ', resultado '+signedCents(risk.latest10?.netCents||0)+
+   '. Tandas negativas consecutivas '+(risk.latestNegativeBatchStreak||0)+
+   '. Aciertos de equilibrio aproximados '+pctBreak+
+   '. '+(risk.latest10Loss?'ADVERTENCIA: considerar revisar la estrategia antes de iniciar otra tanda.':
+   'Seguir evaluando sin inferir garantías.')+
+   ' Este aviso no cambia ni detiene automáticamente las órdenes.';
   const research=q.research||{};
   const groups=research.strengthBands||[];
   const byVersion=q.shadow.byVersion||[];
@@ -205,6 +216,17 @@ async function updateBurstPanel(){
    net>0?'GANANCIA NETA':net<0?'PÉRDIDA NETA':'RESULTADO NETO CERO';
   $('burst-settled').textContent=executed+' ejecutadas / '+settled+' liquidadas (de '+(last?.requested||0)+')';
   $('burst-winloss').textContent=wins+' / '+losses+(settled?' ('+(100*wins/settled).toFixed(1)+'%)':'');
+  const noSignalReasons={
+   NO_MARKET_DATA:'sin cotización',MARKET_UNAVAILABLE:'índice no disponible',
+   OHLC_INCOMPLETE:'menos de 60 velas',TICK_OR_PRICE_STALE:'ticks desactualizados',
+   NO_CONFIRMED_DIRECTION:'sin consenso CALL/PUT',
+   ADAPTIVE_RISK_VETO:'veto del análisis de riesgo',
+   INVALID_CANDLE_EPOCH:'vela inválida',CANDLE_ALREADY_USED:'vela ya utilizada',
+   READY:'señal lista en la última inspección'
+  };
+  const inspectionText=last?.inspection?.counts?
+   Object.entries(last.inspection.counts).map(([code,n])=>
+    n+' índice(s): '+(noSignalReasons[code]||code)).join(' · '):null;
   $('burst-breakdown').textContent=last?
    'Tanda '+last.id.slice(0,8)+': ganancias '+signedCents(last.grossWinCents||0)+
    ' ('+wins+' operaciones), pérdidas '+signedCents(-(last.grossLossCents||0))+
@@ -219,6 +241,7 @@ async function updateBurstPanel(){
     ' · '+executed+'/'+last.requested+' ejecutadas · '+settled+' liquidadas · neto '+signedCents(net)+
      (b.inFlight?' · '+b.inFlight+' simultáneas en curso':'')+
     (last.stopReason?' · '+last.stopReason:'')+
+    (inspectionText?' · Diagnóstico de la pausa: '+inspectionText:'')+
     (b.running?' · Comprando solo si hay señal nueva y saldo DEMO verificado.':'');
   }
   const history=$('burst-history');history.replaceChildren();
@@ -228,14 +251,14 @@ async function updateBurstPanel(){
     batch.strategyVersion||'No registrada',batch.state,
     batch.executed+' / '+batch.requested,batch.wins,batch.losses,batch.rejected,
     signedCents(batch.grossWinCents),signedCents(-batch.grossLossCents),
-    signedCents(batch.netCents)];
+    signedCents(batch.netCents),batch.stopReason||'—'];
    values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=value;
     if(i===10&&Number.isFinite(batch.netCents))td.className=batch.netCents>0?'up':batch.netCents<0?'down':'';
     tr.appendChild(td);});history.appendChild(tr);
   }
   if(!history.children.length){
    const tr=document.createElement('tr'),td=document.createElement('td');
-   td.colSpan=11;td.textContent='Sin tandas registradas.';tr.appendChild(td);history.appendChild(tr);
+   td.colSpan=12;td.textContent='Sin tandas registradas.';tr.appendChild(td);history.appendChild(tr);
   }
   const tbody=$('burst-rows');tbody.replaceChildren();
   if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=14;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
