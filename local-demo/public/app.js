@@ -450,11 +450,11 @@ async function updateBurstPanel(){
    td.colSpan=12;td.textContent='Sin tandas registradas.';tr.appendChild(td);history.appendChild(tr);
   }
   const tbody=$('burst-rows');tbody.replaceChildren();
-  if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=14;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
+  if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=15;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
   for(const row of selection.slice(0,25)){
    const tr=document.createElement('tr');
    const values=[printableTime(row.createdAtMs),row.appVersion||'No registrada',row.strategyVersion||'No registrada',row.symbol,row.direction+' / '+row.state,
-    fmt(row.rsi),Number.isFinite(row.signalAgeMs)?row.signalAgeMs+' ms':'—',
+    (row.durationTicks||5)+' ticks',fmt(row.rsi),Number.isFinite(row.signalAgeMs)?row.signalAgeMs+' ms':'—',
     printableTime(row.boughtAtMs),printableTime(row.settledAtMs),
     Number.isFinite(row.buyLatencyMs)?(row.buyLatencyMs/1000).toFixed(3)+' s':'—',
     fmt(row.entryTick),fmt(row.exitTick),
@@ -462,8 +462,8 @@ async function updateBurstPanel(){
      row.state==='REJECTED'?'NO EJECUTADA':row.state==='CANCELLED'?'CANCELADA':'Pendiente',
     row.diagnosis?.code||'SIN_DATOS'];
    values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=value;
-    if(i===12&&Number.isFinite(row.pnlCents))td.className=row.pnlCents>=0?'up':'down';
-    if(i===13)td.title=row.diagnosis?.detail||row.errorCode||'';
+    if(i===13&&Number.isFinite(row.pnlCents))td.className=row.pnlCents>=0?'up':'down';
+    if(i===14)td.title=row.diagnosis?.detail||row.errorCode||'';
     tr.appendChild(td);
    });tbody.appendChild(tr);
   }
