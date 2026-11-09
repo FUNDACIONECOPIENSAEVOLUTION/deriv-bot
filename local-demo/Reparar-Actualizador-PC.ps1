@@ -68,7 +68,7 @@ try{
  $newVersion=[string]((Get-Content -LiteralPath (Join-Path $source 'local-release.json') -Raw | ConvertFrom-Json).version)
  if($newVersion -ne $remote){throw 'VERSION_EN_PAQUETE_NO_COINCIDE'}
  foreach($name in @('server.mjs','market-analysis.mjs','demo-trading.mjs','demo-burst.mjs','mcp-local.mjs',
-  'Tarea-Oculta.vbs','Instalar-TareasOcultas.ps1','Actualizar-Desde-GitHub.ps1','public\app.js')){
+  'Tarea-Oculta.vbs','Instalar-TareasOcultas.ps1','Actualizar-Desde-GitHub.ps1','Cerrar-Ecopiensa.ps1','Vigilar-Ecopiensa.ps1','public\app.js')){
   if(-not(Test-Path (Join-Path $source $name))){throw 'PAQUETE_INCOMPLETO'}
  }
  & node --check (Join-Path $source 'server.mjs')
@@ -131,7 +131,9 @@ try{
    throw 'COMPRAS_ACTIVAS_AL_INTENTAR_CERRAR'
   }
   $shutdownAttempted=$true
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Cerrar-Ecopiensa.ps1') -Ruta $Ruta
+  # El cierre de v13.2 depende de servidor.pid: utilizar siempre el NUEVO
+  # cierre comprobado en el ZIP, aunque la instalación actual sea antigua.
+  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $source 'Cerrar-Ecopiensa.ps1') -Ruta $Ruta
   if($LASTEXITCODE -ne 0){throw 'NO_PUDO_CERRAR_ECOPIENSA'}
   for($i=0;$i -lt 30;$i++){
    Start-Sleep -Milliseconds 300
