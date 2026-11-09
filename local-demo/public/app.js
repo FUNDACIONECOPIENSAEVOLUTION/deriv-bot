@@ -234,7 +234,26 @@ async function updateBurstPanel(){
    '. Rechazadas sin compra: '+(last.rejected||0)+'.':
    'Aún no hay ninguna tanda registrada.';
   $('burst-latency').textContent=latencies.length?(latencies.reduce((a,v)=>a+v,0)/latencies.length/1000).toFixed(3)+' s':'—';
-  $('burst-start').disabled=!!b.running||d.pendingOrOpen>0;
+  const risk=b.risk||null;
+  const dailyLimit=risk?.dailyLossLimitCents;
+  const dailyLoss=risk?.dailyGrossLossCents;
+  const reset=risk?.nextDailyResetEpoch?
+   new Date(risk.nextDailyResetEpoch*1000).toLocaleString('es-CO',{
+    timeZone:'America/Bogota',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'
+   }):'—';
+  const blocked=!!risk?.dailyLossStopActive||!!risk?.accountFloorStopActive;
+  $('burst-risk-status').textContent=!risk?'Protección DEMO no disponible.':
+   (blocked?'COMPRAS DEMO BLOQUEADAS: ':'Protección DEMO activa: ')+
+   'pérdidas brutas acumuladas en el día UTC '+usd((dailyLoss||0)/100)+
+   ' de un máximo de '+usd((dailyLimit||0)/100)+
+   ' · neto de esas operaciones '+signedCents(risk.dailyNetCents||0)+
+   ' · reinicio del cómputo diario a las '+reset+' (Colombia). '+
+   (risk.dailyLossStopActive?
+    'No se aceptarán nuevas tandas hoy; no se reanudarán automáticamente.':
+    risk.accountFloorStopActive?
+    'Saldo por debajo del mínimo configurado. No enviar órdenes.':
+    'El siguiente inicio requiere autorización local y señal válida.');
+  $('burst-start').disabled=!!b.running||d.pendingOrOpen>0||blocked;
   $('burst-stop').disabled=!b.running;
   if(last){
    $('burst-message').textContent='Tanda '+last.id.slice(0,8)+' · '+last.state+
@@ -242,7 +261,8 @@ async function updateBurstPanel(){
      (b.inFlight?' · '+b.inFlight+' simultáneas en curso':'')+
     (last.stopReason?' · '+last.stopReason:'')+
     (inspectionText?' · Diagnóstico de la pausa: '+inspectionText:'')+
-    (b.running?' · Comprando solo si hay señal nueva y saldo DEMO verificado.':'');
+    (b.running?' · Comprando solo si hay señal nueva y saldo DEMO verificado.':'')+
+    (blocked?' · LÍMITE DE RIESGO ACTIVO: no se enviarán nuevas compras.':'');
   }
   const history=$('burst-history');history.replaceChildren();
   for(const batch of b.batches||[]){
