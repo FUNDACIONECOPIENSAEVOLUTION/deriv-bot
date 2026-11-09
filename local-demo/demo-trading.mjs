@@ -5,6 +5,7 @@ import {performance} from 'node:perf_hooks';
 import {diagnoseTrade} from './trade-analysis.mjs';
 import {isVolatilitySymbol} from './synthetic-catalog.mjs';
 import {captureCandleContext} from './candle-patterns.mjs';
+import {conservativeQuoteDecision} from './tick-horizon-model.mjs';
 
 const SYMBOLS=new Set(['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500']);
@@ -38,6 +39,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    signal_five_tick_momentum:'REAL',signal_tick_rsi14:'REAL',
    five_tick_study_hit_rate:'REAL',five_tick_study_n:'INTEGER',
    signal_snapshot_epoch:'INTEGER',signal_reason:'TEXT',
+   duration_ticks:'INTEGER',prediction_mode:'TEXT',prediction_policy:'TEXT',
+   prediction_lower95:'REAL',prediction_quote_edge:'REAL',
    candle_context_json:'TEXT',candle_context_captured_ms:'INTEGER',candle_pattern_version:'TEXT'})){
   if(!columns.has(name))db.exec('ALTER TABLE demo_local_orders ADD COLUMN '+name+' '+sqlType);
  }
@@ -69,14 +72,18 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   projection_naive_mae AS naiveMae,app_version AS appVersion,strategy_version AS strategyVersion,
    signal_five_tick_momentum AS fiveTickMomentum,signal_tick_rsi14 AS tickRsi14,
    five_tick_study_hit_rate AS fiveTickStudyHitRate,five_tick_study_n AS fiveTickStudyN,
-   signal_snapshot_epoch AS snapshotEpoch,signal_reason AS signalReason FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
+   signal_snapshot_epoch AS snapshotEpoch,signal_reason AS signalReason,
+   duration_ticks AS durationTicks,prediction_mode AS predictionMode,
+   prediction_policy AS predictionPolicy,prediction_lower95 AS predictionLower95,
+   prediction_quote_edge AS predictionQuoteEdge FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
  const list=db.prepare(listSql+' LIMIT 60');
  const csvList=db.prepare(listSql);
- const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents,app_version,strategy_version) VALUES(?,?,?,?,?,?,?,?,?,?)');
+ const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents,app_version,strategy_version,duration_ticks,prediction_mode,prediction_policy,prediction_lower95) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
  const change=db.prepare('UPDATE demo_local_orders SET state=?,updated_at=?,error_code=? WHERE id=?');
  const recordBuy=db.prepare(`UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=?,candle_open=?,candle_high=?,candle_low=?,candle_close=?,candle_epoch=?,projected_next_tick=?,projection_model_mae=?,projection_naive_mae=?,
    signal_five_tick_momentum=?,signal_tick_rsi14=?,five_tick_study_hit_rate=?,
    five_tick_study_n=?,signal_snapshot_epoch=?,signal_reason=? WHERE id=?`);
+ const recordPredictionQuote=db.prepare('UPDATE demo_local_orders SET prediction_quote_edge=? WHERE id=?');
  const recordCandleContext=db.prepare(`UPDATE demo_local_orders
  SET candle_context_json=?,candle_context_captured_ms=?,candle_pattern_version=?
  WHERE id=?`);
@@ -138,12 +145,17 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    orders:rows,canUpdate:active.get().n===0,
    warning:'Los contratos UNKNOWN requieren conciliación; jamás se repite un BUY sin confirmación.'};
  }
- function signalValid(symbol,direction){
+ function signalValid(symbol,direction,durationTicks=5,modelMode='LEGACY_60_CANDLES'){
   const s=marketSnapshot(symbol);
-  return s&&s.available!==false&&s.ready===true&&s.candleCount>=60&&s.fresh&&s.direction===direction&&s.ageReceivedMs!==null&&s.ageReceivedMs<=1500
-    &&Number.isInteger(s.epoch)&&Math.abs(Date.now()-s.epoch*1000)<=2000;
+  if(!(s&&s.available!==false&&s.ready===true&&s.candleCount>=60&&s.fresh&&
+    s.ageReceivedMs!==null&&s.ageReceivedMs<=1500&&Number.isInteger(s.epoch)&&
+    Math.abs(Date.now()-s.epoch*1000)<=2000))return false;
+  if(modelMode==='PREDICTIVE_5_10')
+   return !!s.tickHorizonModels?.some(x=>x.durationTicks===durationTicks&&
+    x.direction===direction&&x.readyForProposal);
+  return modelMode==='LEGACY_60_CANDLES'&&durationTicks===5&&s.direction===direction;
  }
- function riskCheck(symbol,direction,stakeCents,balanceCents,ownId=null){
+ function riskCheck(symbol,direction,stakeCents,balanceCents,ownId=null,durationTicks=5,modelMode='LEGACY_60_CANDLES'){
   if(!isVolatilitySymbol(symbol)||!['CALL','PUT'].includes(direction)||!STAKES.has(stakeCents))
     throw Error('DEMO_PARAMETERS_INVALID');
   const a=getAccount();
@@ -159,21 +171,34 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   if(risk.dailyNetCents-exposure.get(ownId||'').gross-stakeCents<
      -MAX_DAILY_NET_LOSS_CENTS)throw Error('DEMO_DAILY_NET_LOSS_EXPOSURE');
   // Sin tope histórico; conservar protecciones de saldo, pérdidas y señal.
-  if(!signalValid(symbol,direction))throw Error('DEMO_SIGNAL_STALE_OR_CONTRARY');
+  if(!signalValid(symbol,direction,durationTicks,modelMode))throw Error('DEMO_SIGNAL_STALE_OR_CONTRARY');
  }
- function requestIntent({symbol,direction,stakeCents,source='LOCAL_OWNER'}){
+ function requestIntent({symbol,direction,stakeCents,source='LOCAL_OWNER',durationTicks=5,modelMode='LEGACY_60_CANDLES'}){
   if(!['LOCAL_OWNER','MCP_OWNER_REVIEW'].includes(source))throw Error('DEMO_SOURCE_INVALID');
+  if(modelMode==='PREDICTIVE_5_10'){
+   if(![5,10].includes(durationTicks)||source!=='LOCAL_OWNER')
+    throw Error('DEMO_PREDICTIVE_DURATION_INVALID');
+  }else if(modelMode!=='LEGACY_60_CANDLES'||durationTicks!==5)
+   throw Error('DEMO_LEGACY_DURATION_INVALID');
   const a=getAccount();
   if(!a||!Number.isFinite(a.balance)||epoch()-a.checkedAt>20)
     throw Error('DEMO_BALANCE_MUST_BE_REFRESHED');
   if(unknown.get().n>0)throw Error('DEMO_UNKNOWN_BUY_REQUIRES_RECONCILIATION');
   if(active.get().n>=MAX_CONCURRENT)throw Error('DEMO_CONCURRENCY_LIMIT');
-  riskCheck(symbol,direction,stakeCents,cents(a.balance));
+  riskCheck(symbol,direction,stakeCents,cents(a.balance),null,durationTicks,modelMode);
+  const prediction=modelMode==='PREDICTIVE_5_10'?
+   marketSnapshot(symbol)?.tickHorizonModels?.find(x=>x.durationTicks===durationTicks&&
+    x.direction===direction&&x.readyForProposal):null;
+  if(modelMode==='PREDICTIVE_5_10'&&!prediction)throw Error('DEMO_PREDICTIVE_EVIDENCE_MISSING');
   const id=randomUUID();
-  insert.run(id,epoch(),epoch(),'PENDING_APPROVAL',source,symbol,direction,stakeCents,getVersion(),STRATEGY_VERSION);
+  insert.run(id,epoch(),epoch(),'PENDING_APPROVAL',source,symbol,direction,stakeCents,
+   getVersion(),prediction?'TICK_HORIZON_5_10_WALK_FORWARD_V1':STRATEGY_VERSION,
+   durationTicks,modelMode,prediction?.selectedPolicy||null,
+   prediction?.conservativeWinRateLower95??null);
   purchasedAt.run(Date.now(),id);
   audit('DEMO_REVIEW_REQUEST','Solicitud pendiente. No se envió ningún BUY.');
-  return {id,state:'PENDING_APPROVAL',accountType:'demo',symbol,direction,stakeCents,expiresAt:epoch()+45,
+  return {id,state:'PENDING_APPROVAL',accountType:'demo',symbol,direction,stakeCents,
+   durationTicks,modelMode,expiresAt:epoch()+45,
    brokerOrders:0,requiresOwnerConfirmation:true};
  }
  function cancel(id){
@@ -249,7 +274,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const fresh=await accountLookup(creds,a.accountId);
   if(fresh.accountId!==a.accountId)throw Error('DEMO_ACCOUNT_MISMATCH');
   try{
-   riskCheck(row.symbol,row.direction,row.stake_cents,cents(fresh.balance),id);
+   riskCheck(row.symbol,row.direction,row.stake_cents,cents(fresh.balance),id,
+    row.duration_ticks||5,row.prediction_mode||'LEGACY_60_CANDLES');
   }catch(e){
    const code=cleanError(e);
    change.run('REJECTED',epoch(),code,id);
@@ -262,7 +288,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    if(new URL(url).pathname!=='/trading/v1/options/ws/demo')throw Error('DEMO_ONLY_REQUIRED');
    socket=await socketConnect(url);
    const request={proposal:1,amount:row.stake_cents/100,basis:'stake',
-    contract_type:row.direction,currency:'USD',duration:5,duration_unit:'t',
+    contract_type:row.direction,currency:'USD',duration:row.duration_ticks||5,duration_unit:'t',
     underlying_symbol:row.symbol,req_id:804};
    const t=performance.now(),quote=await sendAndWait(socket,request,'proposal');
    const proposalLatency=Math.round(performance.now()-t);
@@ -271,11 +297,23 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    if(typeof proposal.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(proposal.id)
      ||!Number.isFinite(price)||price<0||cents(price)>row.stake_cents)
      throw Error('DEMO_QUOTE_INVALID');
-   if(performance.now()-t>2000||!signalValid(row.symbol,row.direction))throw Error('DEMO_QUOTE_STALE');
+   if(performance.now()-t>2000||!signalValid(row.symbol,row.direction,
+    row.duration_ticks||5,row.prediction_mode||'LEGACY_60_CANDLES'))throw Error('DEMO_QUOTE_STALE');
+   if(row.prediction_mode==='PREDICTIVE_5_10'){
+    const latest=marketSnapshot(row.symbol);
+    const model=latest?.tickHorizonModels?.find(x=>x.durationTicks===row.duration_ticks&&
+     x.direction===row.direction&&x.readyForProposal&&
+     x.selectedPolicy===row.prediction_policy);
+    const decision=conservativeQuoteDecision(model,price,Number(proposal.payout));
+    if(!decision.approved)throw Error('DEMO_PREDICTIVE_NO_QUOTED_EDGE');
+    recordPredictionQuote.run(decision.expectedNetReturnLower,id);
+   }
    // Congelar el contexto de 20 velas cerradas ANTES de que se envíe BUY.
    // Se almacena incluso si posteriormente se pierde el acuse del broker.
    const observed=marketSnapshot(row.symbol);
    const candleContext=captureCandleContext(observed,{count:20,atMs:Date.now()});
+   if(row.prediction_mode==='PREDICTIVE_5_10'&&!candleContext)
+    throw Error('DEMO_PREDICTIVE_CONTEXT_MISSING');
    if(candleContext)recordCandleContext.run(JSON.stringify(candleContext),
     candleContext.capturedAtMs,'CANDLE_CONTEXT_V1',id);
    change.run('SENDING',epoch(),null,id);
@@ -342,7 +380,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const rows=csvList.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
-  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','fiveTickMomentum','tickRsi14','fiveTickStudyHitRate','fiveTickStudyN','snapshotEpoch','signalReason','errorCode','diagnosisCode'];
+  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','fiveTickMomentum','tickRsi14','fiveTickStudyHitRate','fiveTickStudyN','snapshotEpoch','signalReason',
+   'durationTicks','predictionMode','predictionPolicy','predictionLower95','predictionQuoteEdge',
+   'errorCode','diagnosisCode'];
    const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(x).code:x[h])).join(',')).join('\r\n')+'\r\n';
  }
