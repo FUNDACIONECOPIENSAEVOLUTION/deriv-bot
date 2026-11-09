@@ -1,4 +1,6 @@
 // Indicadores de investigación sobre ticks oficiales. NO son probabilidad de éxito ni BUY.
+import {evaluateTickHorizons} from './tick-horizon-model.mjs';
+export const CONTRACT_HORIZON_TICKS=5;
 export const TICKS_PER_CANDLE=10;
 export const CANDLES_VISIBLE=60;
 export const HISTORY_TICKS=660;
@@ -53,6 +55,7 @@ export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}
  const last5=prices.length>=6?prices.at(-1)-prices.at(-6):null;
  const tickRsi14=rsi(prices,14);
  const fiveTickStudy=fiveTickDirectionStudy(prices);
+ const tickHorizonModels=evaluateTickHorizons(prices);
  // Proyección ingenua del siguiente tick para INVESTIGACIÓN; no interviene en BUY.
  const n=prices.length,lookback=10;
  const projectedNextTick=n>lookback?prices[n-1]+(prices[n-1]-prices[n-1-lookback])/lookback:null;
@@ -103,7 +106,12 @@ export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}
  return {candles,candleCount:candles.length,requiredCandles:CANDLES_VISIBLE,
   ticksAnalyzed:prices.length,ema20,ema50,rsi14,atr14,momentum5,slope10,
   projectedNextTick,modelMae,naiveMae,projectionIsResearchOnly:true,
-  fiveTickMomentum:last5,tickRsi14,fiveTickStudy,
+  fiveTickMomentum:last5,tickRsi14,fiveTickStudy,tickHorizonModels,
+  tickHorizonAudit:{contractDurationTicks:5,
+   candlesUsed:CANDLES_VISIBLE,candleSizeTicks:TICKS_PER_CANDLE,
+   trendContextTicks:CANDLES_VISIBLE*TICKS_PER_CANDLE,
+   momentum5CandlesLookbackTicks:5*TICKS_PER_CANDLE,
+   historicalStudyOnly:true},
   sma8:prices.length>=8?mean(prices.slice(-8)):null,
   sma21:prices.length>=21?mean(prices.slice(-21)):null,
   direction,reason,signalStrength:strength,ready,fresh,

@@ -57,6 +57,12 @@ function draw(){const m=markets.get(chosen),cv=$('chart'),ctx=cv.getContext('2d'
   'Próximo tick (proyección experimental): '+fmt(m?.projectedNextTick)+
   ' · MAE modelo '+fmt(m?.modelMae)+' vs persistencia '+fmt(m?.naiveMae)+
   ' · momento 5 ticks '+fmt(m?.fiveTickMomentum)+' · RSI tick14 '+fmt(m?.tickRsi14)+
+  ' · Vencimiento actual 5 ticks; tendencia usa 60 velas de 10 ticks; momentum5 usa 5 velas (=50 ticks).' +
+  ' Evaluadores 5/10 ticks (muestra posterior, SIN BUY): '+
+  (m?.tickHorizonModels||[]).map(x=>x.durationTicks+'t '+x.direction+
+   ' · '+(Number.isFinite(x.observedValidationHitRate)?
+   (100*x.observedValidationHitRate).toFixed(1)+'%':'—')+
+   ' ('+x.validationDecisions+' pruebas) · '+x.reason).join(' / ')+
   ' · prueba retrospectiva 5 ticks '+(Number.isFinite(m?.fiveTickStudy?.hitRate)?
    (100*m.fiveTickStudy.hitRate).toFixed(1)+'%':'—')+
   ' de '+(m?.fiveTickStudy?.holdoutCount??0)+' casos. NO validado para trading.';
