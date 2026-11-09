@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {createDemoBurst} from '../demo-burst.mjs';
+import {createDemoBurst,inspectSignalAvailability} from '../demo-burst.mjs';
 import {diagnoseTrade} from '../trade-analysis.mjs';
 
 test('Tanda con 5 ganancias y 3 pérdidas conserva US$0.50 netos y separa rechazos',()=>{
@@ -63,4 +63,44 @@ test('No se habilita trading real en el resumen de tandas',()=>{
   refreshAccount:async()=>null,getAccount:()=>null,audit:()=>{}});
  assert.equal(runner.status().realEnabled,false);
  db.close();
+});
+
+test('Una tanda 0/10 pausada se exporta con su motivo, aunque no exista ninguna compra',()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec("CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)");
+ const runner=createDemoBurst({db,trading:{canUpdate:()=>true},marketSnapshot:()=>null,
+  refreshAccount:async()=>null,getAccount:()=>null,audit:()=>{}});
+ db.prepare("INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,completed,concurrent,stop_reason,inspection_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+ .run('zero-buy',1794190000,1794190000,'PAUSED',10,100,'AUTO',0,5,
+  'NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS',
+  JSON.stringify({checkedSymbols:2,counts:{NO_MARKET_DATA:2},details:[{symbol:'R_10',reason:'NO_MARKET_DATA'}]}));
+ const report=runner.status().batches[0];
+ assert.equal(report.executed,0);
+ assert.equal(report.requested,10);
+ assert.equal(report.inspection.counts.NO_MARKET_DATA,2);
+ const csv=runner.exportBatchesCsv();
+ assert.match(csv,/zero-buy/);
+ assert.match(csv,/NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS/);
+ assert.match(csv,/NO_MARKET_DATA/);
+ db.close();
+});
+test('Inspector muestra si faltan velas, hay señal obsoleta o se reutilizó la vela',()=>{
+ const now=1794190200000;
+ const snap={
+  R_10:null,
+  R_25:{symbol:'R_25',available:true,ready:false,candleCount:32},
+  R_50:{symbol:'R_50',available:true,ready:true,candleCount:60,fresh:false},
+  R_75:{symbol:'R_75',available:true,ready:true,candleCount:60,fresh:true,
+   epoch:1794190200,ageReceivedMs:100,direction:'ESPERAR'},
+  R_100:{symbol:'R_100',available:true,ready:true,candleCount:60,fresh:true,
+   epoch:1794190200,ageReceivedMs:100,direction:'PUT',candles:[{epoch:1794190190}]}
+ };
+ const reason=inspectSignalAvailability(Object.keys(snap),s=>snap[s],new Map([['R_100',1794190190]]),
+  ()=>({blocked:false}),now);
+ assert.equal(reason.counts.NO_MARKET_DATA,1);
+ assert.equal(reason.counts.OHLC_INCOMPLETE,1);
+ assert.equal(reason.counts.TICK_OR_PRICE_STALE,1);
+ assert.equal(reason.counts.NO_CONFIRMED_DIRECTION,1);
+ assert.equal(reason.counts.CANDLE_ALREADY_USED,1);
+ assert.equal(reason.counts.READY||0,0);
 });
