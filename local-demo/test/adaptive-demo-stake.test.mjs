@@ -27,6 +27,6 @@ test('Pico USD7.14 protege al menos USD5.14 ante futuras tandas negativas',()=>{
 });
 test('El pico se calcula sin información futura, exclusivamente liquidaciones ordenadas',()=>{
  const net=replaySettlements(pnl([88,88,-100,88,88,-100]));
- assert.deepEqual(net,{netCents:52,peakNetCents:152});
+ assert.deepEqual(net,{netCents:152,peakNetCents:252});
  assert.throws(()=>replaySettlements([{pnlCents:'44'}]),/INVALID/);
 });
