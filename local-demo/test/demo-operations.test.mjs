@@ -299,7 +299,7 @@ test('Programa DEMO reintenta rechazos sin ejecutar compra y obtiene 10 liquidac
   getRiskStatus:()=>({dailyLossStopActive:false,accountFloorStopActive:false,
    pendingOrders:0,unresolvedOrders:0,dailyRemainingRiskCents:10000}),
   requestIntent:x=>(calls.push(x),{id:'test-'+calls.length}),markBatch:()=>{},
-  approve:async id=>calls.length<=2?
+  approve:async id=>Number(id.replace('test-',''))<=2?
    {state:'REJECTED',brokerOrders:0,error:'DEMO_SIGNAL_STALE_OR_CONTRARY'}:
    {state:'SETTLED',brokerOrders:1}
  };
