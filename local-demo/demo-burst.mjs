@@ -8,6 +8,21 @@ const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
 const STAKES=[35,50,75,90,100];
 const MAX_PARALLEL=5;
 const epoch=()=>Math.floor(Date.now()/1000);
+/** Never place duplicate contracts on one index AND one closed candle. */
+export function selectDistinctCandidates(candidates,limit,usedCandleEpoch=new Map()){
+ const picks=[],unique=new Set();
+ for(const item of candidates){
+  if(!item||typeof item.symbol!=='string'||unique.has(item.symbol))continue;
+  const candleEpoch=item.candles?.at(-1)?.epoch??item.epoch;
+  if(!Number.isInteger(candleEpoch)||candleEpoch<=0)continue;
+  if((usedCandleEpoch.get(item.symbol)??-1)>=candleEpoch)continue;
+  unique.add(item.symbol);
+  picks.push({...item,selectedCandleEpoch:candleEpoch});
+  if(picks.length>=limit)break;
+ }
+ return picks;
+}
+
 export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAccount,audit}){
  db.exec("CREATE TABLE IF NOT EXISTS demo_bursts(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,state TEXT NOT NULL,count_requested INTEGER NOT NULL,stake_cents INTEGER NOT NULL,symbol TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,stop_reason TEXT)");
  db.prepare("UPDATE demo_bursts SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(epoch());
@@ -44,19 +59,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   // Señal de mayor intensidad descriptiva, no probabilidad de acierto.
   eligible.sort((a,b)=>(b.signalStrength||0)-(a.signalStrength||0)||
    a.ageReceivedMs-b.ageReceivedMs);
-  const picks=[],unique=new Set();
-  // Un contrato por índice por ola, y nunca volver a usar la misma vela
-  // cerrada para otra compra de esa tanda. Permite índices DIFERENTES en paralelo.
-  for(const item of eligible){
-   if(unique.has(item.symbol))continue;
-   const candleEpoch=item.candles?.at(-1)?.epoch??item.epoch;
-   if(!Number.isInteger(candleEpoch)||candleEpoch<=0)continue;
-   if((batch.usedCandleEpoch.get(item.symbol)??-1)>=candleEpoch)continue;
-   unique.add(item.symbol);
-   picks.push({...item,selectedCandleEpoch:candleEpoch});
-   if(picks.length>=limit)break;
-  }
-  return picks;
+  return selectDistinctCandidates(eligible,limit,batch.usedCandleEpoch);
  }
  async function run(batch){
   let executed=0,settled=0,attempts=0,state='RUNNING',reason=null;
