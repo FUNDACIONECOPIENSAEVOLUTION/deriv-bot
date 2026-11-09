@@ -140,3 +140,17 @@ test('Un objetivo no permitido es rechazado antes de autorizar la tanda',()=>{
   /DEMO_PROGRAM_PROFIT_LOCK_INVALID/);
  db.close();
 });
+
+test('Un riesgo potencial mayor que US$2 impide otro BUY antes de intentar recuperar',async()=>{
+ const {db,burst,orders}=setupBurst([-100,88,-100,88,88]);
+ try{
+  const started=burst.start(args);
+  assert.equal(started.concurrent,1);
+  const row=await wait(burst);
+  assert.equal(row.state,'PAUSED');
+  assert.equal(row.stopReason,'BATCH_LOSS_BUDGET_INSUFFICIENT');
+  assert.equal(row.netCents,-112);
+  assert.equal(row.settled,3);
+  assert.equal(orders(),3);
+ }finally{db.close();}
+});
