@@ -72,12 +72,17 @@
   <option value="RESEARCH_DEMO">AUTO · analizar y comprar 5 o 10 ticks</option>
   <option value="RESEARCH_FIVE_ONLY">Piloto 5 ticks · comprobar señal solo a 5 ticks</option>
  </select></label></p>
+ <p><label>Modalidad de salida <select id="program-exit-policy">
+  <option value="TRAILING_GREEN" selected>Verde progresivo · continuar rachas, asegurar ganancias cuando sea posible</option>
+  <option value="FIXED_TARGET">Meta fija · terminar al alcanzar la ganancia objetivo</option>
+ </select></label></p>
  <p><label>Objetivo de cierre de cada tanda <select id="program-profit-target">
   <option value="0">Normal · completar 10 compras por tanda (sin cierre anticipado)</option>
   <option value="50" selected>Proteger al alcanzar +US$0,50 · máximo 10 compras</option>
   <option value="100">Proteger al alcanzar +US$1,00 · máximo 10 compras</option>
   <option value="150">Proteger al alcanzar +US$1,50 · máximo 10 compras</option>
  </select></label></p>
+ <p><strong>Verde progresivo:</strong> tras ganar la primera compra puede buscar otra oportunidad. Con dos victorias consecutivas arma un piso de beneficio y comprueba antes del siguiente BUY que una derrota completa no destruya la meta. Si pierde después de una racha y todavía queda verde, cierra; si estaba en rojo y recupera la meta, cierra. Si llega a diez compras sin verde, registra la pérdida y solo continúa al siguiente grupo con Investigación extendida. No garantiza cerrar en verde ni aumenta las apuestas.</p>
  <p><strong>Regla DEMO: meta positiva O diez compras, lo que ocurra primero.</strong> Con objetivo positivo las compras son de una en una, esperando una señal y la liquidación antes de comprar de nuevo. Si se alcanza la meta, la tanda cierra anticipadamente. Si llega a la décima compra sin alcanzar la meta, termina con su resultado real, incluso rojo; con <strong>Investigación extendida</strong> marcada pasa a la siguiente tanda. Se retira únicamente el antiguo límite de −US$2 por tanda; permanecen el límite diario de pérdida, saldo, señales vigentes y contratos inciertos. Las diez tandas pueden sumar menos de 100 compras y <strong>no se garantiza cerrar en verde</strong>.</p>
  <p><label><input id="program-continue-negative" type="checkbox" checked> <b>Investigación extendida:</b> continuar a la siguiente tanda aunque la anterior complete diez compras en rojo. Viene marcada para evaluar hasta diez tandas; puedes desmarcarla. No se fuerzan compras si no hay señales válidas y siguen activos los límites diarios, el control de saldo y los bloqueos por órdenes OPEN/UNKNOWN.</label></p>
  <div class="actions">
