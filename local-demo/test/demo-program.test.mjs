@@ -11,12 +11,12 @@ function setup({risk=validRisk(),state='COMPLETED',settled=10,wins=6}={}){
  db.exec(`CREATE TABLE demo_bursts(id TEXT PRIMARY KEY,program_id TEXT,state TEXT,
  created_at INTEGER,count_requested INTEGER,stop_reason TEXT);
  CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER,stake_cents INTEGER)`);
- let seq=0,stopped=0,riskNow=risk;
+ let seq=0,stopped=0,riskNow=risk;const modes=[];
  const trading={canUpdate:()=>true,getRiskStatus:()=>riskNow};
  const bursts={
   status:()=>({running:false,batches:seq?[{id:'b'+seq,state,settled,unknown:0,stopReason:state==='COMPLETED'?null:'NO_SIGNAL'}]:[]}),
   start:args=>{
-   seq++;
+   modes.push(args.mode);seq++;
    db.prepare('INSERT INTO demo_bursts(id,program_id,state,created_at,count_requested) VALUES(?,?,?,?,?)').run('b'+seq,args.programId,state,1794190000+seq,10);
    if(state==='COMPLETED'){
     const add=db.prepare('INSERT INTO demo_local_orders(id,batch_id,state,pnl_cents,stake_cents) VALUES(?,?,?,?,?)');
@@ -27,7 +27,7 @@ function setup({risk=validRisk(),state='COMPLETED',settled=10,wins=6}={}){
   stop:()=>{stopped++;return {stopped:true};}
  };
  const program=createDemoProgram({db,bursts,trading,audit:()=>{},settlePollMs:1,betweenRoundsMs:1});
- return {db,program,bursts,trading,counts:()=>({seq,stopped}),
+ return {db,program,bursts,trading,modes,counts:()=>({seq,stopped}),
   setRisk:r=>riskNow=r};
 }
 async function done(program){
@@ -38,15 +38,17 @@ async function done(program){
  throw Error('PROGRAM_DID_NOT_FINISH');
 }
 const request=()=>({rounds:10,perRound:10,stakeCents:100,
- symbol:'AUTO',concurrency:5,confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'});
+ symbol:'AUTO',concurrency:5,mode:'RESEARCH_DEMO',confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'});
 
 test('10 rondas DEMO se autorizan una vez y se ejecutan estrictamente en secuencia',async()=>{
- const {db,program,counts}=setup();
+ const {db,program,counts,modes}=setup();
  const started=program.start(request());
  assert.equal(started.maxCommittedCents,10000);
+ assert.equal(started.mode,'RESEARCH_DEMO');
  assert.equal(started.realEnabled,false);
  await done(program);
  assert.equal(counts().seq,10);
+ assert.ok(modes.every(m=>m==='RESEARCH_DEMO'));
  const row=program.status().programs[0];
  assert.equal(row.roundsCompleted,10);
  assert.equal(row.burstsStarted,10);
