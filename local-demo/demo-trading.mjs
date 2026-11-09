@@ -3,6 +3,7 @@
 import {randomUUID} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import {diagnoseTrade} from './trade-analysis.mjs';
+import {isVolatilitySymbol} from './synthetic-catalog.mjs';
 
 const SYMBOLS=new Set(['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500']);
@@ -92,7 +93,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
     &&Number.isInteger(s.epoch)&&Math.abs(Date.now()-s.epoch*1000)<=2000;
  }
  function riskCheck(symbol,direction,stakeCents,balanceCents,ownId=null){
-  if(!SYMBOLS.has(symbol)||!['CALL','PUT'].includes(direction)||!STAKES.has(stakeCents))
+  if(!isVolatilitySymbol(symbol)||!['CALL','PUT'].includes(direction)||!STAKES.has(stakeCents))
     throw Error('DEMO_PARAMETERS_INVALID');
   const a=getAccount();
   if(!a||a.currency!=='USD'||typeof a.accountId!=='string')throw Error('DEMO_ACCOUNT_NOT_VERIFIED');
