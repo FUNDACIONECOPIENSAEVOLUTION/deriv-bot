@@ -4,11 +4,17 @@ const fmt=x=>Number.isFinite(x)?Number(x).toLocaleString('es-CO',{maximumFractio
 const usd=x=>Number.isFinite(x)?'US$'+Number(x).toFixed(2):'—';
 const signedCents=x=>Number.isFinite(x)?(x>0?'+':x<0?'−':'')+usd(Math.abs(x)/100):'—';
 const markets=new Map();let chosen='R_100',loadedVersion=null,lastAutoBalance=0;
+let runtimeVersionMismatch=false;
 const versionTenths=v=>{const m=/^v?(\d+)\.(\d)$/.exec(String(v||''));return m?Number(m[1])*10+Number(m[2]):null;};
 const escapeText=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function get(url){const r=await fetch(url,{cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error||'HTTP '+r.status);return data;}
 async function post(path,data){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Ecopiensa-Local':'1'},body:JSON.stringify(data)});const result=await r.json();if(!r.ok)throw Error(result.error||'HTTP '+r.status);return result;}
 async function poll(){try{const s=await get('/api/status');if(loadedVersion&&loadedVersion!==s.version){location.reload();return;}loadedVersion=s.version;$('online').textContent='SERVIDOR LOCAL ACTIVO';
+runtimeVersionMismatch=Boolean(s.runtimeVersionMismatch);
+if(runtimeVersionMismatch){
+ $('online').textContent='VERSION CAMBIADA SIN REINICIO';
+ $('update-message').textContent='Node conserva el codigo de una version anterior. Reinicia desde el actualizador antes de operar.';
+}
 const localNumber=versionTenths(s.version),githubNumber=versionTenths(s.githubVersion);
 const outdated=githubNumber!==null&&localNumber!==null&&githubNumber>localNumber;
 $('pending-update').hidden=!(s.updatePending||outdated);
@@ -300,7 +306,7 @@ async function updateDemoProgram(){
   const current=p.programs?.[0]||null;
   const blocked=!!b.risk?.dailyLossStopActive||!!b.risk?.accountFloorStopActive||
    !!b.risk?.pendingOrders||!!b.risk?.unresolvedOrders;
-  $('program-start').disabled=!!p.running||!!b.running||blocked;
+  $('program-start').disabled=runtimeVersionMismatch||!!p.running||!!b.running||blocked;
   $('program-stop').disabled=!p.running;
   $('program-status').textContent=p.running?
    (b.waitingForSignal?'Bot en ESPERAR: analizando índices, sin señal apta · ':'Programa DEMO autorizado en curso · ')+
@@ -386,13 +392,16 @@ $('program-start').onclick=async()=>{
    rounds:10,perRound:10,stakeCents:100,symbol:'AUTO',concurrency:5,
    mode:$('program-mode').value,
    profitTargetCents:Number($('program-profit-target').value),
+   exitPolicy:Number($('program-profit-target').value)===0?
+    'FIXED_TARGET':$('program-exit-policy').value,
    continueAfterNegativeRound:$('program-continue-negative').checked===true,
    confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'
   });
   $('program-status').textContent='Programa '+r.id.slice(0,8)+
    ' autorizado para investigación DEMO · hasta 100 compras de US$1; '+ 
    (r.profitTargetCents>0?
-    'cierre anticipado en '+signedCents(r.profitTargetCents)+
+    'salida '+(r.exitPolicy==='TRAILING_GREEN'?'verde progresivo':'meta fija')+
+    ' con objetivo '+signedCents(r.profitTargetCents)+
     ', hasta 10 compras por tanda, una a la vez; SIN corte −US$2 por tanda. '+
     (r.continueAfterNegativeRound?'Continúa después de la décima compra en rojo. ':'Pausa si la tanda acaba en rojo. '):
     (r.continueAfterNegativeRound?'continuará tras rondas negativas. ':'parará ante ronda negativa. '))+
@@ -468,7 +477,7 @@ async function updateBurstPanel(){
     risk.accountFloorStopActive?
     'Saldo por debajo del mínimo configurado. No enviar órdenes.':
     'El siguiente inicio requiere autorización local y señal válida.');
-  $('burst-start').disabled=!!b.running||d.pendingOrOpen>0||blocked;
+  $('burst-start').disabled=runtimeVersionMismatch||!!b.running||d.pendingOrOpen>0||blocked;
   $('reconcile-open').disabled=d.pendingOrOpen===0;
   $('burst-stop').disabled=!b.running;
   if(last){
