@@ -58,10 +58,15 @@
   <button id="program-start">Autorizar 10 tandas DEMO · 10 compras de US$1</button>
   <button id="program-stop" class="outline" disabled>Detener programa después de ola en curso</button>
   <button id="program-refresh" class="outline">Revisar 10 × 10</button>
+  <a class="download-link" href="/api/demo/program/results.csv" download>Descargar CSV de las tandas 10 × 10</a>
  </div>
  <p id="program-status" class="msg">Sin programa autorizado.</p>
- <div class="table-wrap"><table><thead><tr><th>ID</th><th>Estado</th><th>Tandas completas</th><th>Compras ejecutadas</th><th>Neto liquidado</th><th>Motivo de parada</th></tr></thead>
- <tbody id="program-history"><tr><td colspan="6">No hay programas DEMO.</td></tr></tbody></table></div>
+ <div class="table-wrap"><table><thead><tr><th>ID</th><th>Estado</th><th>Tandas completas</th><th>Compras ejecutadas</th><th>Aciertos</th><th>Rentabilidad</th><th>Neto liquidado</th><th>Motivo de parada</th></tr></thead>
+ <tbody id="program-history"><tr><td colspan="8">No hay programas DEMO.</td></tr></tbody></table></div>
+ <h3>Desglose de cada tanda</h3>
+ <p>**Aciertos:** compras ganadoras sobre liquidadas. **Rentabilidad:** resultado neto sobre valor total apostado en contratos liquidados. Son indicadores diferentes.</p>
+ <div class="table-wrap"><table><thead><tr><th>Tanda</th><th>Estado</th><th>Liquidadas</th><th>Ganadas / perdidas</th><th>Aciertos</th><th>Ganancias brutas</th><th>Pérdidas brutas</th><th>Neto</th><th>Rentabilidad</th></tr></thead>
+ <tbody id="program-round-results"><tr><td colspan="9">Sin tandas ejecutadas.</td></tr></tbody></table></div>
  <p class="warning">Esta función solo opera la cuenta DEMO desde este PC. No implica acceso remoto de ChatGPT, no habilita REAL y no supera límites de riesgo. La estrategia sigue siendo experimental; los resultados se registran para evaluar el aprendizaje.</p>
  </section>
  <section id="burst-panel"><h2>6. Tandas DEMO autorizadas — sin límite global</h2>
