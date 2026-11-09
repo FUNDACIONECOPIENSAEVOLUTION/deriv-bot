@@ -257,3 +257,37 @@ test('Sin downshift la modalidad histórica conserva apuestas de US$1',async()=>
   assert.deepEqual(stakes(),[100]);
  }finally{db.close();}
 });
+
+test('Guardia de programa detiene quinta compra tras dos pérdidas US$1 y dos US$0.50',async()=>{
+ const {db,burst,orders,stakes}=setupBurst([-100,-100,-50,-50,-50]);
+ try{
+  db.exec('CREATE TABLE demo_programs(id TEXT PRIMARY KEY,global_protection INTEGER NOT NULL)');
+  db.prepare('INSERT INTO demo_programs(id,global_protection) VALUES(?,?)').run('p1',1);
+  const row=await (burst.start({...args,downshiftAfterTwoLosses:true,
+   globalProtection:true}),wait(burst));
+  assert.equal(row.state,'PAUSED');
+  assert.equal(row.stopReason,'PROGRAM_LOSS_BUDGET_INSUFFICIENT');
+  assert.equal(row.settled,4);
+  assert.equal(row.netCents,-300);
+  assert.equal(orders(),4);
+  assert.deepEqual(stakes(),[100,100,50,50]);
+ }finally{db.close();}
+});
+test('Protector de beneficio global impide nuevo BUY después de perder margen desde el pico',async()=>{
+ const {db,burst,orders}=setupBurst([88,88,88]);
+ try{
+  db.exec('CREATE TABLE demo_programs(id TEXT PRIMARY KEY,global_protection INTEGER NOT NULL)');
+  db.prepare('INSERT INTO demo_programs(id,global_protection) VALUES(?,?)').run('p1',1);
+  db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol) VALUES(?,?,?,?,?,?,?)')
+   .run('previous',1794300000,1794300000,'COMPLETED',10,100,'AUTO');
+  db.prepare('UPDATE demo_bursts SET program_id=? WHERE id=?').run('p1','previous');
+  const insert=db.prepare('INSERT INTO demo_local_orders(id,batch_id,state,pnl_cents) VALUES(?,?,?,?)');
+  [88,88,88,88,88,-100,-100].forEach((p,i)=>
+   insert.run('previous-'+i,'previous','SETTLED',p));
+  const row=await (burst.start({...args,globalProtection:true}),wait(burst));
+  assert.equal(row.state,'PAUSED');
+  assert.equal(row.stopReason,'PROGRAM_PROFIT_FLOOR_PROTECTED');
+  assert.equal(row.executed,0);
+  assert.equal(orders(),0);
+ }finally{db.close();}
+});
