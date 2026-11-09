@@ -290,3 +290,39 @@ test('Piloto FIVE_ONLY prioriza 5 ticks aunque un modelo de 10 ticks tenga 80%',
   mode:'RESEARCH_FIVE_ONLY',confirmation:'CONFIRMAR TANDA DEMO'}),/DEMO_EXPLORATORY_MAX_1USD/);
  db.close();
 });
+
+test('Programa DEMO reintenta rechazos sin ejecutar compra y obtiene 10 liquidaciones sin duplicar',async()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec('CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)');
+ const account={accountId:'DEMO-TEST',currency:'USD',balance:10000};
+ const calls=[],trading={canUpdate:()=>true,
+  getRiskStatus:()=>({dailyLossStopActive:false,accountFloorStopActive:false,
+   pendingOrders:0,unresolvedOrders:0,dailyRemainingRiskCents:10000}),
+  requestIntent:x=>(calls.push(x),{id:'test-'+calls.length}),markBatch:()=>{},
+  approve:async id=>calls.length<=2?
+   {state:'REJECTED',brokerOrders:0,error:'DEMO_SIGNAL_STALE_OR_CONTRARY'}:
+   {state:'SETTLED',brokerOrders:1}
+ };
+ let tick=0;
+ const model={durationTicks:5,direction:'CALL',selectedPolicy:'MOMENTUM_5',
+  trainingDecisions:50,validationDecisions:30,observedValidationHitRate:.60,
+  conservativeWinRateLower95:.43,readyForProposal:false};
+ const runner=createDemoBurst({db,trading,
+  getSymbols:()=>['R_10','R_25','R_100'],
+  marketSnapshot:symbol=>({symbol,available:true,ready:true,candleCount:60,fresh:true,
+   epoch:Math.floor(Date.now()/1000)+tick++,ageReceivedMs:20,
+   tickHorizonModels:[model]}),
+  refreshAccount:async()=>account,getAccount:()=>account,audit:()=>{}});
+ const burst=runner.start({count:10,stakeCents:100,symbol:'AUTO',
+  concurrency:3,mode:'RESEARCH_FIVE_ONLY',programId:'p1',
+  confirmation:'CONFIRMAR TANDA DEMO'});
+ assert.equal(burst.requested,10);
+ for(let i=0;i<160&&runner.status().running;i++)await pause(10);
+ const b=runner.status().batches[0];
+ assert.equal(b.state,'COMPLETED');
+ assert.equal(b.settled,10);
+ assert.equal(calls.length,12);
+ assert.equal(b.rejected,0); // fixture no persiste rechazos; la ejecución los descuenta
+ assert.ok(calls.every(x=>x.durationTicks===5&&x.stakeCents===100));
+ db.close();
+});

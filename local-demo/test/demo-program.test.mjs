@@ -190,3 +190,15 @@ test('Programa 10x10 propaga el piloto de 5 ticks y respeta la pausa por perdida
  assert.equal(program.status().programs[0].stopReason,'DEMO_PERFORMANCE_STOP_NEGATIVE_ROUND');
  db.close();
 });
+
+test('Programa de evaluación completa sigue tras 5/5 negativo con la opción activada',async()=>{
+ const {db,program,counts}=setup({wins:5});
+ const result=program.start({...request(),continueAfterNegativeRound:true});
+ assert.equal(result.continueAfterNegativeRound,true);
+ await done(program);
+ const row=program.status().programs[0];
+ assert.equal(row.roundsCompleted,10);
+ assert.equal(row.purchasesExecuted,100);
+ assert.equal(counts().seq,10);
+ db.close();
+});

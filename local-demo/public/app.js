@@ -386,7 +386,9 @@ $('program-start').onclick=async()=>{
    confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'
   });
   $('program-status').textContent='Programa '+r.id.slice(0,8)+
-   ' autorizado para investigación DEMO · hasta 100 compras de US$1, condicionado a señales y riesgo. REAL no se habilita.';
+   ' autorizado para investigación DEMO · hasta 100 compras de US$1; '+ 
+   (r.continueAfterNegativeRound?'continuará tras rondas negativas. ':'parará ante ronda negativa. ')+
+   'Se detendrá si hay riesgo, datos insuficientes o contrato incierto. REAL bloqueada.';
  }catch(e){$('program-status').textContent='Programa no iniciado: '+e.message;}
  await updateDemoProgram();
 };

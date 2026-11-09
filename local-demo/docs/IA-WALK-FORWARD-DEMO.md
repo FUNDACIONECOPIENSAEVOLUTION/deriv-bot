@@ -149,3 +149,27 @@ Motivacion observada (NO promesa): CSV v15.9 mostro 44/69 compras ganadoras
 en cinco ticks, +USD13.84; 47/96 en diez ticks, -USD7.34. La comparacion
 es retrospectiva, por indices y politicas seleccionados de forma
 distinta; para evaluar causalidad se requieren pruebas prospectivas.
+
+## Continuidad de las 10 tandas DEMO — v16.1
+
+El panel local ofrece inicialmente marcada la casilla
+`Investigación extendida` para programas 10x10: una sola
+autorizacion local permite intentar 100 compras demostrativas, en diez
+tandas estrictamente secuenciales, aunque haya una tanda 5/5 o peor.
+Si el usuario desmarca la casilla, conserva el corte por rendimiento
+negativo de cada tanda.
+
+Durante las tandas integrantes del 10x10, un rechazo seguro de BUY
+no se considera contrato comprado. El motor conserva el veto de señal
+desactualizada y no repite contratos UNKNOWN; espera una nueva vela
+y permite hasta 15*10 intentos y periodos de hasta 300 segundos de
+busqueda de señales por tramo. Para tandas individuales permanece el
+plazo antiguo de 40 segundos y 3*count intentos.
+
+La modalidad extendida NO garantiza 100 compras: permanece el limite
+diario de perdida neta de 100 USD, el saldo minimo, las cuotas del
+broker, la frescura del feed, la reconciliacion de ordenes, maximo
+cinco contratos simultaneos y bloqueo total de REAL. No se reanuda
+un programa desde un proceso reiniciado; el usuario debe aprobar
+otro programa localmente. Todo se audita por ID, estado y motivo de
+parada. No usar este modo como prueba de ventaja estadistica.

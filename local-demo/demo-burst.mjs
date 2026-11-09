@@ -171,7 +171,23 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  }
  async function run(batch){
   let executed=0,settled=0,attempts=0,state='RUNNING',reason=null;
-  const maxAttempts=batch.count*3;
+  // Investigacion 10x10: tolera rechazos sin BUY y espera señales nuevas,
+  // pero nunca vuelve a enviar una compra incierta ni supera count operaciones.
+  const researchProgram=!!batch.programId&&
+   ['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(batch.mode);
+  const maxAttempts=batch.count*(researchProgram?15:3);
+  const noSignalMaxPolls=researchProgram?1200:160; // 5 min o 40 s por tramo
+  const hardRiskStop=()=>{
+   const risk=trading.getRiskStatus?.();
+   if(risk?.dailyLossStopActive)return 'DEMO_DAILY_NET_LOSS_STOP';
+   if(risk?.accountFloorStopActive)return 'DEMO_ACCOUNT_FLOOR_STOP';
+   if(risk&&(risk.pendingOrders||risk.unresolvedOrders))
+    return 'DEMO_OPEN_OR_UNKNOWN_ORDERS';
+   if(risk&&Number.isFinite(risk.dailyRemainingRiskCents)&&
+    risk.dailyRemainingRiskCents<batch.stakeCents)return 'DEMO_DAILY_NET_LOSS_EXPOSURE';
+   if(!trading.canUpdate())return 'DEMO_ORDER_REQUIRES_RECONCILIATION';
+   return null;
+  };
   const purchase=async chosen=>{
    let pending=null;
    try{
@@ -194,21 +210,33 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   try{
    while(executed<batch.count&&attempts<maxAttempts){
     if(batch.stopRequested){state='STOPPED';reason='OWNER_STOP_REQUESTED';break;}
-    let picks=[];
-    for(let poll=0;poll<160;poll++){
+    const beforeSelectRisk=hardRiskStop();
+    if(beforeSelectRisk){state='PAUSED';reason=beforeSelectRisk;break;}
+    let picks=[],pollBlock=null;
+    for(let poll=0;poll<noSignalMaxPolls;poll++){
      if(batch.stopRequested)break;
+     if(poll%20===0){
+      pollBlock=hardRiskStop();
+      if(pollBlock)break;
+     }
      picks=select(batch.symbol,Math.min(batch.concurrency,batch.count-executed),batch);
      if(picks.length)break;
      await pause(250);
     }
     if(batch.stopRequested){state='STOPPED';reason='OWNER_STOP_REQUESTED';break;}
+    if(pollBlock){state='PAUSED';reason=pollBlock;break;}
     if(!picks.length){
-     state='PAUSED';reason='NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS';
+     state='PAUSED';reason=researchProgram?
+      'NO_DISTINCT_FRESH_SIGNAL_WITHIN_300_SECONDS':
+      'NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS';
      const allowed=batch.symbol==='AUTO'?getSymbols():[batch.symbol];
      saveInspection.run(JSON.stringify(inspectSignalAvailability(allowed,marketSnapshot,
       batch.usedCandleEpoch,getAdaptiveVerdict,Date.now(),true,batch.mode)),batch.id);
      break;
     }
+    // Los datos pueden caducar mientras se consulta saldo. No eludir riskStop.
+    const beforeAccountRisk=hardRiskStop();
+    if(beforeAccountRisk){state='PAUSED';reason=beforeAccountRisk;break;}
     await refreshAccount();
     if(!getAccount()){state='HALTED';reason='DEMO_ACCOUNT_UNAVAILABLE';break;}
     // Medición en sombra de alternativas conocidas ANTES del BUY;
@@ -274,7 +302,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(risk?.dailyLossStopActive)throw Error('DEMO_DAILY_NET_LOSS_STOP');
   if(risk?.accountFloorStopActive)throw Error('DEMO_LOSS_STOP_100USD');
   if(risk&&risk.dailyRemainingRiskCents<stakeCents)throw Error('DEMO_DAILY_NET_LOSS_EXPOSURE');
-  const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,mode,
+  const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,mode,programId,
    inFlight:0,stopRequested:false,
    usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
   insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,
@@ -282,7 +310,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    mode==='RESEARCH_DEMO'?'TICK_5_10_RESEARCH_DEMO_V1':
     'TICK_5_10_VALIDATED_V1',programId,mode);
   active=batch;
-  audit('DEMO_BURST_AUTHORIZED','Count '+count+' stake '+stakeCents+' DEMO only');
+  audit('DEMO_BURST_AUTHORIZED','Count '+count+' stake '+stakeCents+
+   ' programResearch='+Boolean(programId)+' DEMO only');
   void run(batch);
   return {id,state:'RUNNING',requested:count,stakeCents,symbol,mode,accountType:'demo',
    realEnabled:false,concurrent:concurrency,maxGrossCents:count*stakeCents};
