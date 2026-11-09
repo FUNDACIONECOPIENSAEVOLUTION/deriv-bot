@@ -7,10 +7,10 @@ import {isVolatilitySymbol} from './synthetic-catalog.mjs';
 
 const SYMBOLS=new Set(['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500']);
-const STAKES=new Set([35,50,75,90,100]);
+const STAKES=new Set([35,50,75,90,100,200,500,1000]);
 const STOP_BALANCE_CENTS=990000; // DEMO 10000 USD: parada con pérdida de 100 USD.
 // Compras DEMO autorizadas sin límite acumulativo.
-const MAX_DAILY_LOSS_CENTS=10000;
+const MAX_DAILY_NET_LOSS_CENTS=10000; // Parada por P&L neto liquidado, US$100.
 const MAX_CONCURRENT=5; // SOLO cinco contratos DEMO en paralelo; REAL bloqueada.
 const TERMINAL=new Set(['SETTLED','REJECTED','CANCELLED','EXPIRED']);
 const epoch=()=>Math.floor(Date.now()/1000);
@@ -51,8 +51,10 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const unresolved=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state IN ('PREPARING','SENDING','UNKNOWN','OPEN')");
  const unknown=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state='UNKNOWN'");
  const exposure=db.prepare("SELECT COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN') AND id<>?");
- const losses=db.prepare("SELECT COALESCE(SUM(CASE WHEN pnl_cents<0 THEN -pnl_cents ELSE 0 END),0) AS loss FROM demo_local_orders WHERE state='SETTLED' AND created_at>=?");
- const dayResults=db.prepare("SELECT COUNT(*) AS settled,COALESCE(SUM(CASE WHEN pnl_cents<0 THEN -pnl_cents ELSE 0 END),0) AS grossLoss,COALESCE(SUM(CASE WHEN pnl_cents>0 THEN pnl_cents ELSE 0 END),0) AS grossWin,COALESCE(SUM(pnl_cents),0) AS net FROM demo_local_orders WHERE state='SETTLED' AND created_at>=?");
+ // Resultados por fecha de LIQUIDACION UTC, no por fecha de apertura.
+ // Registros antiguos conservan updated_at como respaldo de fecha.
+ const resultEpoch="COALESCE(CAST(settled_at_ms/1000 AS INTEGER),updated_at,created_at)";
+ const dayResults=db.prepare("SELECT COUNT(*) AS settled,COALESCE(SUM(CASE WHEN pnl_cents<0 THEN -pnl_cents ELSE 0 END),0) AS grossLoss,COALESCE(SUM(CASE WHEN pnl_cents>0 THEN pnl_cents ELSE 0 END),0) AS grossWin,COALESCE(SUM(pnl_cents),0) AS net FROM demo_local_orders WHERE state='SETTLED' AND "+resultEpoch+">=? AND "+resultEpoch+"<?");
  const listSql=`SELECT id,created_at AS createdAt,created_at_ms AS createdAtMs,bought_at_ms AS boughtAtMs,settled_at_ms AS settledAtMs,batch_id AS batchId,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode,proposal_latency_ms AS proposalLatencyMs,buy_latency_ms AS buyLatencyMs,signal_age_ms AS signalAgeMs,signal_rsi AS rsi,signal_sma_fast AS smaFast,signal_sma_slow AS smaSlow,
   signal_ema20 AS ema20,signal_ema50 AS ema50,signal_atr14 AS atr14,
   signal_momentum5 AS momentum5,signal_strength AS signalStrength,
@@ -82,14 +84,18 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  // el límite ni altera las órdenes para poder operar después de una pérdida.
  function getRiskStatus(){
   const at=epoch(),dayStart=Math.floor(at/86400)*86400;
-  const d=dayResults.get(dayStart),account=getAccount();
+  const d=dayResults.get(dayStart,dayStart+86400),account=getAccount();
   const balance=account&&Number.isFinite(account.balance)?cents(account.balance):null;
   const grossLossCents=Number(d.grossLoss)||0;
-  const dailyLossStopActive=grossLossCents>=MAX_DAILY_LOSS_CENTS;
+  const dailyNetCents=Number(d.net)||0;
+  const dailyNetLossCents=Math.max(0,-dailyNetCents);
+  const dailyLossStopActive=dailyNetCents<=-MAX_DAILY_NET_LOSS_CENTS;
+  const pendingExposureCents=Number(exposure.get('').gross)||0;
+  const dailyRemainingRiskCents=Math.max(0,MAX_DAILY_NET_LOSS_CENTS+dailyNetCents-pendingExposureCents);
   const accountFloorStopActive=balance!==null&&balance<=STOP_BALANCE_CENTS;
   const unresolvedOrders=unresolved.get().n;
   const pendingOrders=active.get().n;
-  const stopReason=dailyLossStopActive?'DEMO_DAILY_LOSS_STOP':
+  const stopReason=dailyLossStopActive?'DEMO_DAILY_NET_LOSS_STOP':
    accountFloorStopActive?'DEMO_LOSS_STOP_100USD':
    unresolvedOrders>0?'DEMO_UNKNOWN_BUY_REQUIRES_RECONCILIATION':
    pendingOrders>0?'DEMO_ORDER_REQUIRES_RECONCILIATION':null;
@@ -97,8 +103,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    demoOnly:true,realEnabled:false,nowEpoch:at,dayStartEpoch:dayStart,
    nextDailyResetEpoch:dayStart+86400,
    dailyGrossLossCents:grossLossCents,dailyGrossWinCents:Number(d.grossWin)||0,
-   dailyNetCents:Number(d.net)||0,dailySettled:Number(d.settled)||0,
-   dailyLossLimitCents:MAX_DAILY_LOSS_CENTS,
+   dailyNetCents,dailyNetLossCents,dailySettled:Number(d.settled)||0,
+   dailyLossLimitCents:MAX_DAILY_NET_LOSS_CENTS,dailyLossMethod:'NET_SETTLED_PNL_UTC',
+   pendingExposureCents,dailyRemainingRiskCents,
    dailyLossStopActive,accountFloorStopActive,
    balanceCents:balance,minimumBalanceCents:STOP_BALANCE_CENTS,
    pendingOrders,unresolvedOrders,stopReason,
@@ -140,7 +147,12 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   if(balanceCents<STOP_BALANCE_CENTS||
      balanceCents-exposure.get(ownId||'').gross-stakeCents<STOP_BALANCE_CENTS)
     throw Error('DEMO_LOSS_STOP_100USD');
-  if(getRiskStatus().dailyLossStopActive)throw Error('DEMO_DAILY_LOSS_STOP');
+  const risk=getRiskStatus();
+  if(risk.dailyLossStopActive)throw Error('DEMO_DAILY_NET_LOSS_STOP');
+  // Reserva el peor escenario de los contratos todavía pendientes.
+  // ownId excluye el contrato actual cuando está siendo confirmado.
+  if(risk.dailyNetCents-exposure.get(ownId||'').gross-stakeCents<
+     -MAX_DAILY_NET_LOSS_CENTS)throw Error('DEMO_DAILY_NET_LOSS_EXPOSURE');
   // Sin tope histórico; conservar protecciones de saldo, pérdidas y señal.
   if(!signalValid(symbol,direction))throw Error('DEMO_SIGNAL_STALE_OR_CONTRARY');
  }
