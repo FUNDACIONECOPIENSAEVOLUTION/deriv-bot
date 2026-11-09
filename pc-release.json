@@ -1,11 +1,11 @@
 {
-  "version": "16.3",
+  "version": "16.4",
   "channel": "pc-local",
   "runtime": "Windows desktop only",
   "distribution": "versioned source archive + readable source files",
   "parts": 5,
-  "archiveSha256": "bb4c5a5adf932ae69de42ae4ff75f906a665be3638b50b8fee2b3cd52748e307",
-  "archive": "pc-bundles/ecopiensa-local-16.3.zip.b64.part00",
+  "archiveSha256": "33f3647556418b9ba4f43dc3bb5a7986e3d0719a1528abd42b7fd4584cb73b1a",
+  "archive": "pc-bundles/ecopiensa-local-16.4.zip.b64.part00",
   "trading": "demo-owner-authorized-bursts",
   "summary": "Compras DEMO 1-10, OHLC, P&L, CSV, MCP privado y actualización automática",
   "updatedAt": "2026-11-09"
