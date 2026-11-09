@@ -112,7 +112,13 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
     const earlyGreen=session.profitTargetCents>0&&
      terminal.state==='COMPLETED'&&terminal.stopReason==='TAKE_PROFIT_REACHED'&&
      terminal.settled>=1&&terminal.settled<=10&&terminal.executed===terminal.settled;
-    if(terminal.state!=='COMPLETED'||(!earlyGreen&&terminal.settled!==10)||
+    const maxTen=session.profitTargetCents>0&&
+     terminal.state==='COMPLETED'&&
+     terminal.stopReason==='TEN_BUYS_REACHED_WITHOUT_TARGET'&&
+     terminal.settled===10&&terminal.executed===10;
+    const completedEnough=session.profitTargetCents>0?
+     (earlyGreen||maxTen):terminal.settled===10;
+    if(terminal.state!=='COMPLETED'||!completedEnough||
      terminal.unknown>0){
      state=terminal.state==='STOPPED'?'STOPPED':'PAUSED';
      reason='BURST_'+terminal.state+'_'+(terminal.stopReason||'INCOMPLETE');
@@ -127,12 +133,16 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
      ?.batches.find(b=>b.batchId===burst.id);
     if(!settledRound||settledRound.settled!==terminal.settled||
      settledRound.executed!==terminal.settled||
-     (earlyGreen&&settledRound.netCents<session.profitTargetCents)){
+     (earlyGreen&&settledRound.netCents<session.profitTargetCents)||
+     (maxTen&&settledRound.netCents>=session.profitTargetCents)){
      state='HALTED';reason='DEMO_ROUND_RESULTS_NOT_VERIFIED';break;
     }
-    if(session.profitTargetCents>0&&!earlyGreen){
-     // No perseguir pérdidas ni avanzar como si la tanda fuese verde.
-     state='PAUSED';reason='DEMO_PROFIT_TARGET_NOT_REACHED';break;
+    if(maxTen){
+     // Se agotaron las diez operaciones sin llegar a la meta. Se registra
+     // el signo real del resultado. Solo con la casilla de continuidad
+     // autorizada puede empezar la proxima tanda en caso negativo.
+     audit('DEMO_TEN_BUYS_LIMIT_REACHED',burst.id+' netCents='+
+      settledRound.netCents+' settled=10');
     }
     if(settledRound.netCents<0&&settledRound.wins<=settledRound.losses){
      if(!session.continueAfterNegativeRound){
@@ -183,7 +193,10 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   if(blocked)throw Error(blocked);
   const id=randomUUID();
   const actualConcurrency=profitTargetCents>0?1:concurrency;
-  const lossCapCents=profitTargetCents>0?200:0;
+  // Este perfil busca la meta positiva como maximo en 10 compras.
+  // No utiliza el limite opcional -US$2 por tanda; el limite de perdida
+  // diaria y demas cortacircuitos NO se desactivan.
+  const lossCapCents=0;
   add.run(id,now(),now(),'RUNNING',10,10,100,actualConcurrency,'AUTO',mode,
    continueAfterNegativeRound?1:0,profitTargetCents,lossCapCents);
   const session={id,concurrency:actualConcurrency,mode,continueAfterNegativeRound,
@@ -194,6 +207,7 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS$1, '+mode+
    ' continueNegative='+continueAfterNegativeRound+
    ' profitTargetCents='+profitTargetCents+' lossCapCents='+lossCapCents+
+   ' roundPolicy=TAKE_PROFIT_OR_TEN'+
    ' effectiveConcurrency='+actualConcurrency+' DEMO ONLY');
   void run(session);
   return {id,state:'RUNNING',mode,continueAfterNegativeRound,
