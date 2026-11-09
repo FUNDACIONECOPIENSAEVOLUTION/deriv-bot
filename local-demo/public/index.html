@@ -66,7 +66,7 @@
   <div class="warning">Solo entrenamiento DEMO; los importes altos son opcionales y no tienen ventaja estadística. Sin acceso a REAL ni retiros.</div>
  </section>
  <section id="program-panel"><h2>Programa DEMO de investigación · 10 × 10</h2>
- <p>Una autorización local permite hasta <b>10 tandas consecutivas</b> de 10 compras DEMO de US$1, con máximo 5 contratos simultáneos. Total máximo de apuestas: US$100, <b>no una promesa de ganar</b>. Cada tanda debe terminar y liquidarse antes de iniciar la siguiente. Ante bloqueo, ausencia de señal, contratos inciertos o pérdidas, el programa se detiene sin reanudarse solo.</p>
+ <p>Una autorización local permite hasta <b>10 tandas consecutivas</b> de 10 compras DEMO de US$1, con máximo 5 contratos simultáneos. Total máximo de apuestas: US$100, <b>no una promesa de ganar</b>. Cada tanda debe terminar y liquidarse antes de iniciar la siguiente. INVESTIGACIÓN DEMO: el programa puede comprar con señales preliminares sin ventaja demostrada, pero exige muestra y cotización suficientes. Tras 5/5 con neto negativo (o peor), fallo de señal o contratos inciertos, se detiene sin reanudarse solo.</p>
  <div class="actions">
   <button id="program-start">Autorizar 10 tandas DEMO · 10 compras de US$1</button>
   <button id="program-stop" class="outline" disabled>Detener programa después de ola en curso</button>
@@ -83,11 +83,15 @@
  <p class="warning">Esta función solo opera la cuenta DEMO desde este PC. No implica acceso remoto de ChatGPT, no habilita REAL y no supera límites de riesgo. La estrategia sigue siendo experimental; los resultados se registran para evaluar el aprendizaje.</p>
  </section>
  <section id="burst-panel"><h2>6. Tandas DEMO autorizadas — sin límite global</h2>
- <p>Selecciona de 1 a 10 compras DEMO (presupuesto máximo US$100 por tanda) y hasta 5 simultáneas. AUTO compara índices disponibles y modelos de 5/10 ticks; si falta evidencia o un pago favorable, se abstiene. Puedes iniciar todas las tandas consecutivas que autorices. El control diario se calcula con la pérdida NETA de las compras liquidadas (US$100); las ganancias compensan las pérdidas del mismo día UTC. Si no hay señal fiable, espera; siguen vigentes los límites de riesgo y simultaneidad. Nunca opera REAL.</p>
+ <p>Selecciona de 1 a 10 compras DEMO (presupuesto máximo US$100 por tanda) y hasta 5 simultáneas. AUTO compara índices y modelos de 5/10 ticks. El modo investigación DEMO admite muestras preliminares con riesgo y máximo US$1 por contrato; el conservador exige evidencia más estricta. Sin datos o pago suficiente, el bot espera. Puedes iniciar todas las tandas consecutivas que autorices. El control diario se calcula con la pérdida NETA de las compras liquidadas (US$100); las ganancias compensan las pérdidas del mismo día UTC. Si no hay señal fiable, espera; siguen vigentes los límites de riesgo y simultaneidad. Nunca opera REAL.</p>
  <div class="actions">
   <label>Número de compras <input type="number" id="burst-count" min="1" max="10" value="1"></label>
   <label>Apuesta por compra <select id="burst-stake"><option value="35">US$0,35</option><option value="50" selected>US$0,50</option><option value="75">US$0,75</option><option value="90">US$0,90</option><option value="100">US$1,00</option><option value="200">US$2,00</option><option value="500">US$5,00</option><option value="1000">US$10,00</option></select></label>
   <label>Índice <select id="burst-symbol"><option value="AUTO">AUTO · bot selecciona</option><option value="R_100">Volatility 100</option><option value="R_75">Volatility 75</option><option value="R_50">Volatility 50</option><option value="R_25">Volatility 25</option><option value="R_10">Volatility 10</option><option value="1HZ100V">Volatility 100 (1s)</option><option value="1HZ50V">Volatility 50 (1s)</option><option value="1HZ500V">Volatility 500 (1s) si disponible</option><option value="R_500">Volatility 500 si disponible</option></select></label>
+  <label>Modo de señal <select id="burst-mode">
+   <option value="RESEARCH_DEMO" selected>Investigación DEMO · muestras preliminares (máx. US$1)</option>
+   <option value="VALIDATED_ONLY">Conservador · solo evidencia estadística estricta</option>
+  </select></label>
   <label>Máximo simultáneas <select id="burst-concurrency"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5" selected>5</option></select></label>
  </div>
  <p><small>Un clic autoriza únicamente la tanda DEMO, el número de compras y el presupuesto seleccionados. Aumentar la apuesta no mejora la predicción ni produce más observaciones: para entrenar conviene mantener apuestas pequeñas y generar más operaciones autorizadas.</small></p><div class="actions"><button id="burst-start">Iniciar tanda DEMO autorizada</button><button id="burst-stop" class="outline">Detener siguientes compras</button><button id="burst-check" class="outline">Actualizar resultados</button></div>
