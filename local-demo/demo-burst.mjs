@@ -224,7 +224,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   const headers=['id','createdAt','updatedAt','appVersion','strategyVersion',
    'state','requested','executed','settled','rejected','wins','losses','netCents',
    'stopReason','inspection'];
-  const safe=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,'_&')+'"';
+  const safe=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+allBatches.all().map(raw=>{
    const row=withInspection(raw);
    return headers.map(key=>safe(key==='inspection'?JSON.stringify(row.inspection??{}):row[key])).join(',');
