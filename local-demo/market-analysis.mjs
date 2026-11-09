@@ -1,5 +1,6 @@
 // Indicadores de investigación sobre ticks oficiales. NO son probabilidad de éxito ni BUY.
 import {evaluateTickHorizons} from './tick-horizon-model.mjs';
+import {performance} from 'node:perf_hooks';
 export const CONTRACT_HORIZON_TICKS=5;
 export const TICKS_PER_CANDLE=10;
 export const CANDLES_VISIBLE=60;
@@ -50,12 +51,17 @@ export function fiveTickDirectionStudy(prices){
   validatedForTrading:false};
 }
 export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}={}){
+ const analysisStart=performance.now();
  const valid=ticks.filter(x=>Number.isFinite(x?.price)&&x.price>0&&Number.isInteger(x?.epoch));
  const prices=valid.map(x=>x.price);
  const last5=prices.length>=6?prices.at(-1)-prices.at(-6):null;
  const tickRsi14=rsi(prices,14);
+ const studyStart=performance.now();
  const fiveTickStudy=fiveTickDirectionStudy(prices);
+ const studyMs=performance.now()-studyStart;
+ const horizonsStart=performance.now();
  const tickHorizonModels=evaluateTickHorizons(prices);
+ const horizonsMs=performance.now()-horizonsStart;
  // Proyección ingenua del siguiente tick para INVESTIGACIÓN; no interviene en BUY.
  const n=prices.length,lookback=10;
  const projectedNextTick=n>lookback?prices[n-1]+(prices[n-1]-prices[n-1-lookback])/lookback:null;
@@ -103,7 +109,14 @@ export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}
  // Intensidad descriptiva 0-100, NO estimación calibrada de acierto.
  const strength=ready&&ema20!==null&&ema50!==null&&atr14>0?
   Math.min(100,Math.round(Math.abs(ema20-ema50)/atr14*40)):null;
- return {candles,candleCount:candles.length,requiredCandles:CANDLES_VISIBLE,
+ const roundedMs=x=>Number(x.toFixed(3));
+ const analysisTelemetry={schemaVersion:1,
+  computeTotalMs:roundedMs(performance.now()-analysisStart),
+  horizonModelsTotalMs:roundedMs(horizonsMs),
+  fiveTickStudyMs:roundedMs(studyMs),
+  analyzer5Ms:tickHorizonModels.find(x=>x.durationTicks===5)?.computeMs??null,
+  analyzer10Ms:tickHorizonModels.find(x=>x.durationTicks===10)?.computeMs??null};
+ return {analysisTelemetry,candles,candleCount:candles.length,requiredCandles:CANDLES_VISIBLE,
   ticksAnalyzed:prices.length,ema20,ema50,rsi14,atr14,momentum5,slope10,
   projectedNextTick,modelMae,naiveMae,projectionIsResearchOnly:true,
   fiveTickMomentum:last5,tickRsi14,fiveTickStudy,tickHorizonModels,

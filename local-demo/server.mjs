@@ -135,6 +135,8 @@ function snapshot(m){
  const age=m.receivedAtMs?Math.round(performance.now()-m.receivedAtMs):null;
  const a=computeMarketAnalysis(m.ticks,{connected:publicConnected&&m.available,ageReceivedMs:age});
  return {symbol:m.symbol,available:m.available,quote:m.quote,epoch:m.epoch,
+  analysisGeneratedAtMs:Date.now(),
+  feedReceivedAtMs:Number.isFinite(m.feedReceivedAtMs)?m.feedReceivedAtMs:null,
   liveTickSeq:m.liveTickSeq||0,
   ageReceivedMs:age,sampleSize:m.ticks.length,...a,
   source:'Deriv WebSocket: ticks históricos y en vivo; solo DEMO',
@@ -241,7 +243,7 @@ function publicSocket(){
    const future=m.ticks.filter(x=>rows.length&&x.epoch>rows.at(-1).epoch);
    m.ticks=trimTickHistory([...rows,...future]);
    if(m.ticks.length){m.epoch=m.ticks.at(-1).epoch;m.quote=m.ticks.at(-1).price;
-    m.receivedAtMs=performance.now();}
+    m.receivedAtMs=performance.now();m.feedReceivedAtMs=Date.now();}
    pushMarket(m);
   }
   if(o.msg_type==='tick'){
@@ -254,7 +256,7 @@ function publicSocket(){
    if(watchName){Object.assign(watchlist.get(watchName),{quote:price,epoch});return;}
    const m=market.get(symbol);
    if(!m||!m.available||(m.epoch&&epoch<m.epoch))return;
-   m.epoch=epoch;m.quote=price;m.receivedAtMs=performance.now();
+   m.epoch=epoch;m.quote=price;m.receivedAtMs=performance.now();m.feedReceivedAtMs=Date.now();
    m.liveTickSeq=(m.liveTickSeq||0)+1;
    m.ticks.push({price,epoch});trimTickHistory(m.ticks);
    // La señal de 5 ticks se liquida solo tras 5 ticks públicos recibidos.

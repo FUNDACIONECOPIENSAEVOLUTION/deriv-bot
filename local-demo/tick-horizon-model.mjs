@@ -1,6 +1,7 @@
 // Analizadores por HORIZONTE de ticks. No utilizan velas como tick ni datos futuros
 // para generar una prediccion. Los resultados de la muestra posterior NO son
 // garantia de rentabilidad, y nunca tienen permisos de BUY por si mismos.
+import {performance} from 'node:perf_hooks';
 export const SUPPORTED_TICK_HORIZONS=Object.freeze([5,10]);
 const POLICIES=Object.freeze(['MOMENTUM_5','MOMENTUM_10','MOMENTUM_20',
  'VOTE_5_10_20','REVERSION_5']);
@@ -46,6 +47,7 @@ export function evaluateTickHorizons(rawPrices,{minTraining=30,minValidation=20}
  }
  const prices=rawPrices;
  return SUPPORTED_TICK_HORIZONS.map(h=>{
+  const horizonStart=performance.now();
   // Etiquetas independientes: cada vencimiento usa h ticks posteriores,
   // y los inicios de entrenamiento y validacion avanzan en bloques de h.
   const cases=[];
@@ -67,6 +69,8 @@ export function evaluateTickHorizons(rawPrices,{minTraining=30,minValidation=20}
   const enough=!!selected&&verify.decisions>=minValidation;
   const readyForProposal=enough&&verify.wilson95Lower>=.58&&direction!=='ESPERAR';
   return {durationTicks:h,lookbacksTicks:[5,10,20],
+   computeMs:Number((performance.now()-horizonStart).toFixed(3)),
+   computedAtMs:Date.now(),
    selectedPolicy:selected?.policy||null,
    direction,trainingDecisions:selected?.decisions||0,
    validationDecisions:verify?.decisions||0,
