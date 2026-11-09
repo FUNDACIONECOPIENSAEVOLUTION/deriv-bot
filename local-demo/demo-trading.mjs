@@ -67,6 +67,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const active=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN')");
  const unresolved=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state IN ('PREPARING','SENDING','UNKNOWN','OPEN')");
  const unknown=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state='UNKNOWN'");
+ const openOrders=db.prepare("SELECT id,contract_id FROM demo_local_orders WHERE state='OPEN' AND contract_id IS NOT NULL ORDER BY created_at ASC,id ASC LIMIT 10");
+ let reconcilingOpen=false;
  const exposure=db.prepare("SELECT COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN') AND id<>?");
  // Resultados por fecha de LIQUIDACION UTC, no por fecha de apertura.
  // Registros antiguos conservan updated_at como respaldo de fecha.
@@ -463,19 +465,62 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  async function reconcile(id){
   const row=one.get(id);
   if(!row||row.state!=='OPEN'||!row.contract_id)throw Error('DEMO_RECONCILE_MANUAL_REQUIRED');
-  const creds=await getCredentials(),url=await otpLookup(creds);
+  // Solo consultar el contrato existente de la CUENTA DEMO autenticada:
+  // no crear ni reenviar BUY y no borrar UNKNOWN sin identificador verificable.
+  const creds=await getCredentials(),account=getAccount();
+  if(!account||account.accountId!==creds.accountId||account.currency!=='USD')
+   throw Error('DEMO_ACCOUNT_MISMATCH');
+  const contractId=Number(row.contract_id);
+  if(!Number.isSafeInteger(contractId)||contractId<=0)
+   throw Error('DEMO_CONTRACT_ID_INVALID');
+  const url=await otpLookup(creds);
+  if(new URL(url).pathname!=='/trading/v1/options/ws/demo')
+   throw Error('DEMO_ONLY_REQUIRED');
   const socket=await socketConnect(url);
   try{
-   const res=await sendAndWait(socket,{proposal_open_contract:1,contract_id:Number(row.contract_id),req_id:806},'proposal_open_contract');
+   const res=await sendAndWait(socket,{proposal_open_contract:1,contract_id:contractId,req_id:806},'proposal_open_contract');
    const contract=res.proposal_open_contract;
-   if(contract?.is_sold===1||contract?.is_sold===true){
+   if(!contract||String(contract.contract_id)!==String(row.contract_id))
+    throw Error('DEMO_RECONCILE_CONTRACT_MISMATCH');
+   if(contract.is_sold===1||contract.is_sold===true){
     const profit=Number(contract.profit);
     if(!Number.isFinite(profit))throw Error('DEMO_PROFIT_INVALID');
+    // Revalidar la fila justo antes de persistir; otro reconciliador puede
+    // haberla liquidado, pero nunca se duplica el resultado.
+    if(one.get(id)?.state!=='OPEN')
+     return {id,state:one.get(id)?.state||'UNKNOWN',alreadyUpdated:true};
     recordSettlement.run(epoch(),cents(profit),Date.now(),...settlementFields(contract),id);
+    audit('DEMO_OPEN_RECONCILED','Liquidación DEMO confirmada para registro '+id);
     return {id,state:'SETTLED',pnlCents:cents(profit)};
    }
-   return {id,state:'OPEN',note:'La liquidación no ha sido confirmada.'};
-  }finally{socket.close();}
+   return {id,state:'OPEN',note:'Contrato aun abierto según Deriv; no se habilita otra compra.'};
+  }finally{try{socket.close();}catch{}}
+ }
+ async function reconcileOpenOrders({limit=5}={}){
+  if(!Number.isInteger(limit)||limit<1||limit>10)
+   throw Error('DEMO_RECONCILE_LIMIT_INVALID');
+  if(reconcilingOpen)return {busy:true,checked:0,settled:0,
+   remaining:openOrders.all().length,results:[]};
+  reconcilingOpen=true;
+  try{
+   const items=openOrders.all().slice(0,limit),results=[];
+   for(const item of items){
+    try{
+     const state=await reconcile(item.id);
+     results.push({id:item.id,state:state.state,
+      pnlCents:state.state==='SETTLED'?state.pnlCents:null});
+    }catch(error){
+     // No se cambia OPEN ante timeout, fallo de red o respuesta dudosa.
+     const code=cleanError(error);
+     audit('DEMO_RECONCILE_RETRY_NEEDED',code);
+     results.push({id:item.id,state:'OPEN',error:code});
+    }
+   }
+   return {busy:false,checked:results.length,
+    settled:results.filter(x=>x.state==='SETTLED').length,
+    remaining:openOrders.all().length,unknown:unknown.get().n,
+    results,realEnabled:false,brokerOrdersSent:0};
+  }finally{reconcilingOpen=false;}
  }
  function exportCsv(scope='all'){
   // Exportar todo SQLite; el límite de 60 se usa SOLO para la interfaz.
@@ -510,6 +555,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    return headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(row).code:row[h])).join(',');
   }).join('\r\n')+'\r\n';
  }
- return {getSummary,requestIntent,cancel,approve,reconcile,markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
+ return {getSummary,requestIntent,cancel,approve,reconcile,reconcileOpenOrders,
+  markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
   getStrategyVersion:()=>STRATEGY_VERSION,getRiskStatus,canUpdate:()=>active.get().n===0};
 }

@@ -216,3 +216,24 @@ repetidas en el tiempo: mide riesgo observado, no causalidad.
 La cotizacion exacta y los controles del broker permanecen vigentes.
 Cuenta REAL bloqueada. Endpoint solo lectura:
 `GET /api/learning/market-risk`. No borrar el historial anterior.
+
+## Conciliación automática de OPEN en DEMO — v16.3
+
+Los contratos ya comprados que permanecen como `OPEN` al superar
+el plazo inicial de lectura de liquidación conservan su registro,
+contractId y exposición. Un reconciliador de SOLO LECTURA
+consulta cada 20 segundos mediante el endpoint de contratos
+abiertos de la cuenta DEMO autenticada, mientras no haya una tanda
+en ejecución; sólo los contratos con ID exacto y `is_sold` de
+Deriv pasan a `SETTLED` con P&L oficial. El socket debe
+ser `/trading/v1/options/ws/demo`. Nunca compra, simula o
+inventa liquidaciones. Un bloqueo UNKNOWN sin contractId sigue
+requiriendo conciliación supervisada.
+
+Si el flujo de liquidación se interrumpe durante una ola, el
+ejecutor permite tres consultas posteriores al contrato OPEN
+(confirmación por broker, sin reenviar BUY). Hay botón explícito
+en el panel para consultar los contratos abiertos inmediatamente,
+`POST /api/demo/reconcile-open` limitado a cinco contratos.
+Los errores de red NO liberan la exposición. La actualización
+de Windows sigue prohibida con operaciones abiertas o UNKNOWN.

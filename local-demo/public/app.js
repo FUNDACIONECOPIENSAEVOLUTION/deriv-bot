@@ -462,6 +462,7 @@ async function updateBurstPanel(){
     'Saldo por debajo del mínimo configurado. No enviar órdenes.':
     'El siguiente inicio requiere autorización local y señal válida.');
   $('burst-start').disabled=!!b.running||d.pendingOrOpen>0||blocked;
+  $('reconcile-open').disabled=d.pendingOrOpen===0;
   $('burst-stop').disabled=!b.running;
   if(last){
    $('burst-message').textContent='Tanda '+last.id.slice(0,8)+' · '+last.state+
@@ -649,6 +650,19 @@ $('pat-connect').onclick=async()=>{
  finally{input.value='';}
 };
 $('refresh').onclick=async()=>{try{setMessage('Consultando saldo en Deriv...');await post('/api/demo/refresh',{});await poll();setMessage('Saldo DEMO consultado oficialmente.');}catch(e){setMessage(e.message);}};
+$('reconcile-open').onclick=async()=>{
+ const button=$('reconcile-open');button.disabled=true;
+ $('reconcile-message').textContent='Conciliando contratos OPEN con Deriv DEMO (sin BUY)...';
+ try{
+  const r=await post('/api/demo/reconcile-open',{});
+  $('reconcile-message').textContent=
+   'Verificados: '+r.checked+' · liquidados por Deriv: '+r.settled+
+   ' · todavía OPEN: '+r.remaining+' · UNKNOWN: '+(r.unknown??0)+
+   '. '+(r.results||[]).filter(x=>x.error).map(x=>x.error).join(' · ');
+  await updateBurstPanel();await showDemoOrders();await updateDemoProgram();
+ }catch(e){$('reconcile-message').textContent='Conciliación sin completar: '+e.message;}
+ finally{button.disabled=false;}
+};
 $('history').onclick=async()=>{try{setMessage('Consultando los últimos contratos oficiales...');const d=await post('/api/demo/profit',{});const t=d.trades||[];$('trades').innerHTML='<p>'+t.length+' registros obtenidos de Deriv (consulta sin comprar).</p><div style="overflow-x:auto"><table><thead><tr><th>Contrato</th><th>Mercado</th><th>P&L</th></tr></thead><tbody>'+t.slice(0,30).map(x=>'<tr><td>'+escapeText(x.contractId)+'</td><td>'+escapeText(x.symbol)+'</td><td>'+usd(x.profit)+'</td></tr>').join('')+'</tbody></table></div>';setMessage('Consulta terminada.');}catch(e){setMessage(e.message);}};
 $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando propuesta (sin comprar)...';const r=await post('/api/demo/quote',{symbol:$('quote-symbol').value,direction:$('quote-dir').value,stake:Number($('quote-stake').value)});$('quote-message').textContent='Deriv: apuesta '+usd(r.askPrice)+' · pago posible '+usd(r.payout)+' · latencia propuesta '+r.proposalRttMs+' ms. NINGUNA COMPRA.';}catch(e){$('quote-message').textContent=e.message;}};
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}

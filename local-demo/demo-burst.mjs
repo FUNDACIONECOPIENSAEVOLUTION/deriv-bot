@@ -211,7 +211,25 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     if(batch.stopRequested){
      trading.cancel(pending.id);return {state:'STOPPED',brokerOrders:0};
     }
-    return await trading.approve(pending.id,'CONFIRMAR COMPRA DEMO');
+    const result=await trading.approve(pending.id,'CONFIRMAR COMPRA DEMO');
+    // Una compra confirmada puede perder el feed de liquidación a los 45 s.
+    // Antes de pausar la tanda, consultar el contrato DEMO existente, nunca
+    // reenviar BUY ni asumir que OPEN sea una pérdida.
+    if(result?.state==='OPEN'&&typeof trading.reconcile==='function'){
+     for(let retry=0;retry<3&&!batch.stopRequested;retry++){
+      await pause(2500);
+      try{
+       const checked=await trading.reconcile(pending.id);
+       if(checked?.state==='SETTLED')
+        return {...result,state:'SETTLED',pnlCents:checked.pnlCents};
+       if(checked?.state!=='OPEN')break;
+      }catch(error){
+       audit('DEMO_SETTLEMENT_RECHECK_FAILED',
+        String(error?.message||'RECONCILE_ERROR').slice(0,80));
+      }
+     }
+    }
+    return result;
    }catch(e){
     if(pending){try{trading.cancel(pending.id);}catch{}}
     return {state:'REJECTED',brokerOrders:0,

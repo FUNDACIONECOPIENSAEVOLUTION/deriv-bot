@@ -107,6 +107,9 @@
  </div>
  <p><small>Un clic autoriza únicamente la tanda DEMO, el número de compras y el presupuesto seleccionados. Aumentar la apuesta no mejora la predicción ni produce más observaciones: para entrenar conviene mantener apuestas pequeñas y generar más operaciones autorizadas.</small></p><div class="actions"><button id="burst-start">Iniciar tanda DEMO autorizada</button><button id="burst-stop" class="outline">Detener siguientes compras</button><button id="burst-check" class="outline">Actualizar resultados</button></div>
  <p class="msg" id="burst-risk-status">Consultando límite de pérdidas DEMO...</p>
+ <p>Si una compra aparece OPEN, primero debe confirmarse su liquidación oficial para habilitar nuevas tandas. Esta consulta no compra contratos ni modifica órdenes UNKNOWN.</p>
+ <div class="actions"><button class="outline" id="reconcile-open">Conciliar contratos OPEN con Deriv DEMO (sin comprar)</button></div>
+ <p class="msg" id="reconcile-message">Los contratos OPEN se consultan automáticamente cuando no hay una tanda en curso. Los UNKNOWN requieren revisión.</p>
  <p class="msg" id="burst-message">Sin tanda activa. Verifica el saldo DEMO antes de comprar.</p>
  <div class="cards metrics">
   <article><span>Resultado de la última tanda</span><strong id="burst-net">US$0,00</strong><small id="burst-net-label">Sin operaciones liquidadas</small></article>

@@ -368,6 +368,16 @@ const programAuditRows=db.prepare(`SELECT b.program_id AS programId,o.batch_id A
  (SELECT id FROM demo_programs ORDER BY created_at DESC,id DESC LIMIT 5)
  ORDER BY o.created_at ASC,o.id ASC`);
 const isMaintenance=()=>existsSync(join(DATA,'actualizacion-en-curso.flag'));
+// Conciliador exclusivo de lectura oficial: cada 20 s verifica OPEN
+// solamente cuando no hay una tanda ejecutándose. Nunca reintenta BUY.
+const openReconciliationTimer=setInterval(()=>{
+ if(isMaintenance()||bursts.status().running||program.isRunning())return;
+ void trading.reconcileOpenOrders({limit:5})
+  .then(r=>{if(r.settled>0)audit('DEMO_AUTO_RECONCILED',
+   r.settled+' liquidaciones oficiales');})
+  .catch(e=>audit('DEMO_AUTO_RECONCILE_ERROR',errorCode(e)));
+},20000);
+openReconciliationTimer.unref?.();
 const mcpHandlers={
  version:()=>localVersion(),
  status:()=>({...status(),orders:trading.getSummary()}),
@@ -521,6 +531,8 @@ server=http.createServer(async(req,res)=>{
    if(path==='/api/demo/confirm')return answer(res,200,await trading.approve(String(b.id||''),String(b.confirmation||'')));
    if(path==='/api/demo/cancel')return answer(res,200,trading.cancel(String(b.id||'')));
    if(path==='/api/demo/reconcile')return answer(res,200,await trading.reconcile(String(b.id||'')));
+   if(path==='/api/demo/reconcile-open')
+    return answer(res,200,await trading.reconcileOpenOrders({limit:5}));
    if(path==='/api/demo/burst/start')return answer(res,200,bursts.start({
     count:b.count,stakeCents:b.stakeCents,symbol:b.symbol,concurrency:b.concurrency,
      mode:b.mode,confirmation:b.confirmation
@@ -553,7 +565,7 @@ server=http.createServer(async(req,res)=>{
 });
 server.listen(PORT,HOST,()=>console.log(`Ecopiensa Deriv DEMO LOCAL (compras virtuales autorizadas, REAL bloqueada) ${BASE}`));
 function shutdown(){
- clearInterval(heartbeat);
+ clearInterval(heartbeat);clearInterval(openReconciliationTimer);
  for(const r of streams){try{r.end();}catch{}}
  // Do not delete OAuth, SQLite or the private encryption key.
  server.close(()=>{try{db.close();}catch{}process.exit(0);});
