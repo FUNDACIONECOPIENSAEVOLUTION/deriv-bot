@@ -5,6 +5,7 @@ export const MCP_TOOLS=[
  {name:'get_bot_status',description:'Estado de Ecopiensa, conexión DEMO y versión; sin credenciales.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_market_signals',description:'Señales SMA/RSI públicas con antigüedad de cada cotización.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_training_statistics',description:'Historial experimental de contratos DEMO, no modelo entrenado.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
+ {name:'get_walk_forward_validation',description:'Validación de modelo logístico DEMO con datos solo de liquidaciones anteriores, sin autorización de BUY, ni REAL.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'get_demo_orders',description:'Compras locales confirmadas, pendientes y P&L en la cuenta DEMO.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
  {name:'request_demo_buy_review',description:'Solicita autorización en el panel local para UNA compra DEMO. Nunca envía BUY al broker.',inputSchema:{type:'object',properties:{symbol:{type:'string',enum:['R_100','R_75','R_10','1HZ100V']},direction:{type:'string',enum:['CALL','PUT']},stakeCents:{type:'integer',enum:[35,50,75,90,100]}},required:['symbol','direction','stakeCents'],additionalProperties:false}}
 ];
@@ -29,6 +30,7 @@ export async function dispatchMcp(message,handlers){
   if(name==='get_bot_status')result=handlers.status();
   if(name==='get_market_signals')result=handlers.signals();
   if(name==='get_training_statistics')result=handlers.training();
+  if(name==='get_walk_forward_validation')result=handlers.walkForward();
   if(name==='get_demo_orders')result=handlers.orders();
   if(name==='request_demo_buy_review'){
    if(!args||!['R_100','R_75','R_10','1HZ100V'].includes(args.symbol)||!['CALL','PUT'].includes(args.direction)
