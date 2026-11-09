@@ -211,6 +211,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   const risk=trading.getRiskStatus?.();
   if(risk?.dailyLossStopActive)throw Error('DEMO_DAILY_NET_LOSS_STOP');
   if(risk?.accountFloorStopActive)throw Error('DEMO_LOSS_STOP_100USD');
+  if(risk&&risk.dailyRemainingRiskCents<stakeCents)throw Error('DEMO_DAILY_NET_LOSS_EXPOSURE');
   const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,inFlight:0,stopRequested:false,usedCandleEpoch:new Map()};
   insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,getVersion(),getStrategyVersion());
   active=batch;
