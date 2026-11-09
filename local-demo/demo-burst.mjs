@@ -71,7 +71,8 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
 
 export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAccount,audit,
  getSymbols=()=>SYMBOLS,getAdaptiveVerdict=()=>({blocked:false}),
- getVersion=()=>null,getStrategyVersion=()=>null,onSignalSelection=()=>null}){
+ getVersion=()=>null,getStrategyVersion=()=>null,onSignalSelection=()=>null,
+ signalPollMs=250}){
  db.exec("CREATE TABLE IF NOT EXISTS demo_bursts(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,state TEXT NOT NULL,count_requested INTEGER NOT NULL,stake_cents INTEGER NOT NULL,symbol TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,stop_reason TEXT)");
  db.prepare("UPDATE demo_bursts SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(epoch());
  const fields=new Set(db.prepare('PRAGMA table_info(demo_bursts)').all().map(x=>x.name));
@@ -122,7 +123,13 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  };
  let active=null;
  function status(){return {running:!!active,stopRequested:!!active?.stopRequested,
-  inFlight:active?.inFlight||0,liveId:active?.id||null,batches:latest.all().map(withInspection),
+  inFlight:active?.inFlight||0,liveId:active?.id||null,
+  waitingForSignal:Boolean(active?.waitingSinceMs),
+  waitingSinceMs:active?.waitingSinceMs||null,
+  waitingReason:active?.waitingReason||null,
+  batches:latest.all().map(x=>({...withInspection(x),
+   waitingForSignal:active?.id===x.id&&Boolean(active.waitingSinceMs),
+   waitingSinceMs:active?.id===x.id?active.waitingSinceMs||null:null})),
   maxConcurrent:MAX_PARALLEL,risk:trading.getRiskStatus?.()??null,realEnabled:false,demoOnly:true};}
  function select(symbol,limit,batch){
   const allowed=symbol==='AUTO'?getSymbols():[symbol];
@@ -175,8 +182,12 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   // pero nunca vuelve a enviar una compra incierta ni supera count operaciones.
   const researchProgram=!!batch.programId&&
    ['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(batch.mode);
-  const maxAttempts=batch.count*(researchProgram?15:3);
-  const noSignalMaxPolls=researchProgram?1200:160; // 5 min o 40 s por tramo
+  // Una campaña autorizada de investigacion no tiene reloj de compra:
+  // si no aparece ventaja demostrable, se mantiene vigilando el mercado.
+  // No existe derecho a forzar 100 operaciones ni a reintentar BUY incierto.
+  const maxAttempts=batch.count*3;
+  const noSignalMaxPolls=160; // solo tandas individuales: 40 s
+  const scanPauseMs=researchProgram?Math.max(250,signalPollMs*4):signalPollMs;
   const hardRiskStop=()=>{
    const risk=trading.getRiskStatus?.();
    if(risk?.dailyLossStopActive)return 'DEMO_DAILY_NET_LOSS_STOP';
@@ -208,12 +219,12 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    }
   };
   try{
-   while(executed<batch.count&&attempts<maxAttempts){
+   while(executed<batch.count&&(researchProgram||attempts<maxAttempts)){
     if(batch.stopRequested){state='STOPPED';reason='OWNER_STOP_REQUESTED';break;}
     const beforeSelectRisk=hardRiskStop();
     if(beforeSelectRisk){state='PAUSED';reason=beforeSelectRisk;break;}
     let picks=[],pollBlock=null;
-    for(let poll=0;poll<noSignalMaxPolls;poll++){
+    for(let poll=0;researchProgram||poll<noSignalMaxPolls;poll++){
      if(batch.stopRequested)break;
      if(poll%20===0){
       pollBlock=hardRiskStop();
@@ -221,20 +232,39 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
      }
      picks=select(batch.symbol,Math.min(batch.concurrency,batch.count-executed),batch);
      if(picks.length)break;
-     await pause(250);
+     if(researchProgram){
+      if(!batch.waitingSinceMs){
+       batch.waitingSinceMs=Date.now();
+       batch.waitingReason='ESPERANDO_SEÑAL_VALIDADA_Y_COTIZACION';
+       audit('DEMO_BURST_WAITING_SIGNAL',batch.id+' no eligible signals, monitoring');
+      }
+      // Telemetria solo cada minuto. No reconsulta la cuenta ni dispara
+      // solicitudes a Deriv mientras no exista una señal candidata.
+      if(poll%60===0){
+       const allowed=batch.symbol==='AUTO'?getSymbols():[batch.symbol];
+       saveInspection.run(JSON.stringify(inspectSignalAvailability(allowed,
+        marketSnapshot,batch.usedCandleEpoch,getAdaptiveVerdict,Date.now(),
+        true,batch.mode)),batch.id);
+      }
+     }
+     await pause(scanPauseMs);
     }
     if(batch.stopRequested){state='STOPPED';reason='OWNER_STOP_REQUESTED';break;}
     if(pollBlock){state='PAUSED';reason=pollBlock;break;}
     if(!picks.length){
-     state='PAUSED';reason=researchProgram?
-      'NO_DISTINCT_FRESH_SIGNAL_WITHIN_300_SECONDS':
-      'NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS';
+     state='PAUSED';reason='NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS';
      const allowed=batch.symbol==='AUTO'?getSymbols():[batch.symbol];
      saveInspection.run(JSON.stringify(inspectSignalAvailability(allowed,marketSnapshot,
       batch.usedCandleEpoch,getAdaptiveVerdict,Date.now(),true,batch.mode)),batch.id);
      break;
     }
-    // Los datos pueden caducar mientras se consulta saldo. No eludir riskStop.
+    // Salir de ESPERANDO solo al encontrar una opcion causal. BUY todavia
+    // exige una cotizacion favorable, control de saldo y señal vigente.
+    if(batch.waitingSinceMs){
+     audit('DEMO_BURST_SIGNAL_RECOVERED',batch.id+' waitedMs='+
+      (Date.now()-batch.waitingSinceMs));
+     batch.waitingSinceMs=null;batch.waitingReason=null;
+    }
     const beforeAccountRisk=hardRiskStop();
     if(beforeAccountRisk){state='PAUSED';reason=beforeAccountRisk;break;}
     await refreshAccount();
@@ -265,7 +295,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     audit('DEMO_BURST_PROGRESS',batch.id+' executed='+executed+
      ' settled='+settled+' safeRejects='+safeRejects);
     if(state!=='RUNNING')break;
-    if(executed<batch.count)await pause(350);
+    if(executed<batch.count)await pause(researchProgram&&safeRejects?
+     Math.max(1500,scanPauseMs):350);
    }
    if(state==='RUNNING')state=executed===batch.count?'COMPLETED':'PAUSED';
    if(state==='COMPLETED')reason=null; // Rechazos previos se reportan en 'rejected'; no son un fallo de tanda completada.
@@ -303,7 +334,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(risk?.accountFloorStopActive)throw Error('DEMO_LOSS_STOP_100USD');
   if(risk&&risk.dailyRemainingRiskCents<stakeCents)throw Error('DEMO_DAILY_NET_LOSS_EXPOSURE');
   const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,mode,programId,
-   inFlight:0,stopRequested:false,
+   inFlight:0,stopRequested:false,waitingSinceMs:null,waitingReason:null,
    usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
   insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,
    getVersion(),mode==='RESEARCH_FIVE_ONLY'?'TICK_5_ONLY_PILOT_DEMO_V1':

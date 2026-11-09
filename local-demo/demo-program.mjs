@@ -89,7 +89,10 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
      mode:session.mode});
     session.round=i+1;
     let terminal=null;
-    for(let check=0;check<2400;check++){
+    // Un piloto puede mantenerse en ESPERAR mientras no haya una buena
+    // prediccion y cuota. Sin limite artificial de 10 minutos por tanda.
+    // Las restricciones duras se verifican continuamente dentro de burst.
+    for(;;){
      const snapshot=bursts.status();
      if(!snapshot.running){
       terminal=snapshot.batches.find(b=>b.id===burst.id)||null;

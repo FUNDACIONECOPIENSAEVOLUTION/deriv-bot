@@ -328,3 +328,42 @@ test('Programa DEMO reintenta rechazos sin ejecutar compra y obtiene 10 liquidac
  assert.ok(calls.every(x=>x.durationTicks===5&&x.stakeCents===100));
  db.close();
 });
+
+test('En 10x10 el bot puede ESPERAR y reanudar compras al llegar una nueva oportunidad',async()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec("CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)");
+ const account={accountId:'DEMO-TEST',currency:'USD',balance:10000};
+ let reads=0;
+ const approved=[];
+ const model={durationTicks:5,direction:'CALL',selectedPolicy:'MOMENTUM_5',
+  trainingDecisions:45,validationDecisions:25,observedValidationHitRate:.62,
+  conservativeWinRateLower95:.4,readyForProposal:false};
+ const trading={canUpdate:()=>true,
+  getRiskStatus:()=>({dailyLossStopActive:false,accountFloorStopActive:false,
+   pendingOrders:0,unresolvedOrders:0,dailyRemainingRiskCents:10000}),
+  requestIntent:x=>(approved.push(x),{id:'ok-'+approved.length}),
+  markBatch:()=>{},approve:async()=>({state:'SETTLED',brokerOrders:1})};
+ const runner=createDemoBurst({db,trading,signalPollMs:1,
+  getSymbols:()=>['R_10'],
+  marketSnapshot:symbol=>{
+   reads++;
+   if(reads<170)return {symbol,available:true,ready:true,candleCount:60,
+    fresh:false,ageReceivedMs:3000,epoch:Math.floor(Date.now()/1000)};
+   return {symbol,available:true,ready:true,candleCount:60,fresh:true,
+    epoch:Math.floor(Date.now()/1000),ageReceivedMs:20,
+    candles:[{epoch:Math.floor(Date.now()/1000)-100+Math.floor(reads++/4)}],
+    tickHorizonModels:[model]};
+  },refreshAccount:async()=>account,getAccount:()=>account,audit:()=>{}});
+ const batch=runner.start({count:1,stakeCents:100,symbol:'AUTO',concurrency:1,
+  mode:'RESEARCH_FIVE_ONLY',programId:'p-patient',
+  confirmation:'CONFIRMAR TANDA DEMO'});
+ assert.equal(batch.state,'RUNNING');
+ await pause(50);
+ assert.equal(runner.status().running,true);
+ assert.equal(runner.status().waitingForSignal,true);
+ for(let i=0;i<250&&runner.status().running;i++)await pause(10);
+ assert.equal(runner.status().batches[0].state,'COMPLETED');
+ assert.equal(approved.length,1);
+ assert.equal(approved[0].durationTicks,5);
+ db.close();
+});

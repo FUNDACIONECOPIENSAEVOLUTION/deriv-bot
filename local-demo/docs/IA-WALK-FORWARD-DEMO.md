@@ -173,3 +173,27 @@ cinco contratos simultaneos y bloqueo total de REAL. No se reanuda
 un programa desde un proceso reiniciado; el usuario debe aprobar
 otro programa localmente. Todo se audita por ID, estado y motivo de
 parada. No usar este modo como prueba de ventaja estadistica.
+
+## ESPERAR con paciencia, no por tiempo de reloj
+
+Un programa 10x10 de investigacion ya autorizado **no dispara
+compras por calendario**: evalua los indices uno por uno y compra
+unicamente cuando existan señales y cotizaciones que pasen los filtros.
+Si no hay señal, permanece RUNNING / `waitingForSignal=true` y
+consulta el feed local con intervalos de ~1 segundo; el panel muestra
+`Bot en ESPERAR`. Si vuelve la oportunidad, se reevalua saldo, señal
+y payout antes de comprar. La comprobacion de riesgo continua mientras
+espera. Para no saturar Deriv, no se solicitan propuestas durante ESPERAR.
+
+En investigacion 10x10, las solicitudes rechazadas sin BUY no consumen
+el cupo de 100 compras: el proceso espera una nueva vela y puede
+retomar cuando sea valida, con pausa adicional tras rechazos.
+No se fuerza la entrada ni se deshabilitan validaciones. El usuario
+puede detenerlo desde el panel. Si se apaga el servidor o se reinicia,
+se marca INTERRUPTED y **no** se reinicia de manera autonoma ni se
+hace seguimiento fuera del PC; se requiere nueva autorizacion local.
+
+El objetivo 100 compras es un **techo y una intencion**. Si un limite
+de riesgo, datos desconectados persistentes, orden UNKNOWN, o
+problema de broker impiden continuar, el programa debe detenerse o
+esperar segun el caso, nunca fingir 100 compras.

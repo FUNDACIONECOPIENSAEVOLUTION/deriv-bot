@@ -303,7 +303,8 @@ async function updateDemoProgram(){
   $('program-start').disabled=!!p.running||!!b.running||blocked;
   $('program-stop').disabled=!p.running;
   $('program-status').textContent=p.running?
-   'Programa DEMO autorizado en curso · tanda '+(p.round||1)+' de 10. '+
+   (b.waitingForSignal?'Bot en ESPERAR: analizando índices, sin señal apta · ':'Programa DEMO autorizado en curso · ')+
+   'tanda '+(p.round||1)+' de 10. '+
    'Siguiente tanda solo tras liquidación y revisión del riesgo.':
    current?'Último programa: '+current.state+' · tandas completadas '+
     current.roundsCompleted+'/10 · '+(current.stopReason||'sin errores registrados')+
