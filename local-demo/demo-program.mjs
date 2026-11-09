@@ -9,13 +9,15 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   state TEXT NOT NULL,rounds_requested INTEGER NOT NULL,rounds_completed INTEGER NOT NULL DEFAULT 0,
   count_per_round INTEGER NOT NULL,stake_cents INTEGER NOT NULL,concurrency INTEGER NOT NULL,
   symbol TEXT NOT NULL,stop_reason TEXT)`);
+ const fields=new Set(db.prepare('PRAGMA table_info(demo_programs)').all().map(x=>x.name));
+ if(!fields.has('signal_mode'))db.exec("ALTER TABLE demo_programs ADD COLUMN signal_mode TEXT DEFAULT 'VALIDATED_ONLY'");
  const now=()=>Math.floor(Date.now()/1000);
  db.prepare("UPDATE demo_programs SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART_NO_AUTO_RESUME' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(now());
- const add=db.prepare('INSERT INTO demo_programs(id,created_at,updated_at,state,rounds_requested,count_per_round,stake_cents,concurrency,symbol) VALUES(?,?,?,?,?,?,?,?,?)');
+ const add=db.prepare('INSERT INTO demo_programs(id,created_at,updated_at,state,rounds_requested,count_per_round,stake_cents,concurrency,symbol,signal_mode) VALUES(?,?,?,?,?,?,?,?,?,?)');
  const save=db.prepare('UPDATE demo_programs SET state=?,updated_at=?,rounds_completed=?,stop_reason=? WHERE id=?');
  const recent=db.prepare(`SELECT p.id,p.created_at AS createdAt,p.updated_at AS updatedAt,p.state,
  p.rounds_requested AS roundsRequested,p.rounds_completed AS roundsCompleted,
- p.count_per_round AS countPerRound,p.stake_cents AS stakeCents,p.concurrency,p.symbol,p.stop_reason AS stopReason,
+ p.count_per_round AS countPerRound,p.stake_cents AS stakeCents,p.concurrency,p.symbol,p.signal_mode AS signalMode,p.stop_reason AS stopReason,
  (SELECT COUNT(*) FROM demo_bursts b WHERE b.program_id=p.id) AS burstsStarted,
  (SELECT COALESCE(SUM(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 ELSE 0 END),0)
  FROM demo_bursts b JOIN demo_local_orders o ON o.batch_id=b.id WHERE b.program_id=p.id) AS purchasesExecuted,
@@ -79,7 +81,8 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
     // El programa no abre otra tanda mientras la anterior no esté liquidada.
     const burst=bursts.start({count:10,stakeCents:100,symbol:'AUTO',
      concurrency:session.concurrency,confirmation:'CONFIRMAR TANDA DEMO',
-     programId:session.id,usedCandleEpoch:session.usedCandleEpoch});
+     programId:session.id,usedCandleEpoch:session.usedCandleEpoch,
+     mode:session.mode});
     session.round=i+1;
     let terminal=null;
     for(let check=0;check<2400;check++){
@@ -130,9 +133,11 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   }
  }
  function start({rounds=10,perRound=10,stakeCents=100,concurrency=5,
-  symbol='AUTO',confirmation}={}){
+  symbol='AUTO',mode='VALIDATED_ONLY',confirmation}={}){
   if(confirmation!=='CONFIRMAR PROGRAMA DEMO 10X10')
    throw Error('DEMO_PROGRAM_LOCAL_APPROVAL_REQUIRED');
+  if(!['VALIDATED_ONLY','RESEARCH_DEMO'].includes(mode))
+   throw Error('DEMO_PROGRAM_SIGNAL_MODE_INVALID');
   // Cap estricto de esta función. Nunca expandir a órdenes ilimitadas o REAL.
   if(rounds!==10||perRound!==10||stakeCents!==100||symbol!=='AUTO'||
    !Number.isSafeInteger(concurrency)||concurrency<1||concurrency>5)
@@ -141,13 +146,13 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   const blocked=riskStop();
   if(blocked)throw Error(blocked);
   const id=randomUUID();
-  add.run(id,now(),now(),'RUNNING',10,10,100,concurrency,'AUTO');
-  const session={id,concurrency,round:0,roundsCompleted:0,stopRequested:false,
+  add.run(id,now(),now(),'RUNNING',10,10,100,concurrency,'AUTO',mode);
+  const session={id,concurrency,mode,round:0,roundsCompleted:0,stopRequested:false,
    usedCandleEpoch:new Map()};
   current=session;
-  audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS$1, DEMO ONLY');
+  audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS$1, '+mode+' DEMO ONLY');
   void run(session);
-  return {id,state:'RUNNING',roundsRequested:10,perRound:10,stakeCents:100,
+  return {id,state:'RUNNING',mode,roundsRequested:10,perRound:10,stakeCents:100,
    maxCommittedCents:10000,maxConcurrent:concurrency,realEnabled:false};
  }
  function stop(){
