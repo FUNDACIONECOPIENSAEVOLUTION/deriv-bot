@@ -38,7 +38,9 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   rsi14:59,sma8:101,sma21:100,ema20:103,ema50:102,atr14:0.4,
   momentum5:0.02,signalStrength:70,
   candles:[{open:100.1,high:100.8,low:99.9,close:100.7,epoch:Math.floor(Date.now()/1000)-1}],
-  projectedNextTick:100.75,modelMae:0.12,naiveMae:0.13};
+  projectedNextTick:100.75,modelMae:0.12,naiveMae:0.13,
+  fiveTickMomentum:-0.32,tickRsi14:43,fiveTickStudy:{hitRate:.57,holdoutCount:20},
+  reason:'TENDENCIA_ALCISTA_MULTIFACTOR'};
  try{
   const trading=createDemoTrading({db,
    getAccount:()=>account,getCredentials:async()=>({accountId:account.accountId}),
@@ -72,6 +74,10 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   assert.ok(totals.orders.every(x=>x.projectedNextTick===100.75&&x.modelMae===0.12));
   assert.match(csv,/candleEpoch/);
   assert.match(csv,/projectedNextTick/);
+  assert.ok(totals.orders.every(x=>x.fiveTickMomentum===-0.32&&x.tickRsi14===43));
+  assert.ok(totals.orders.every(x=>x.fiveTickStudyHitRate===.57&&x.fiveTickStudyN===20));
+  assert.ok(totals.orders.every(x=>x.signalReason==='TENDENCIA_ALCISTA_MULTIFACTOR'));
+  assert.match(csv,/fiveTickMomentum,tickRsi14,fiveTickStudyHitRate/);
   assert.match(csv,/diagnosisCode/);
  }finally{
   db.close();globalThis.WebSocket=original;
