@@ -3,6 +3,19 @@ export const TICKS_PER_CANDLE=10;
 export const CANDLES_VISIBLE=60;
 export const HISTORY_TICKS=660;
 export const MAX_TICKS=700;
+/**
+ * Conserva límites de velas OHLC de 10 ticks estables incluso después de
+ * completar la ventana de memoria. NO elimina un solo tick en cada actualización:
+ * eliminar un tick desplaza todas las particiones y "re-pinta" el RSI/EMA.
+ * El historial inicial se solicita con 660 ticks (múltiplo de 10).
+ */
+export function trimTickHistory(ticks,maxTicks=MAX_TICKS){
+ if(!Array.isArray(ticks)||!Number.isSafeInteger(maxTicks)||maxTicks<TICKS_PER_CANDLE)
+  throw Error('INVALID_TICK_WINDOW');
+ while(ticks.length>maxTicks)ticks.splice(0,TICKS_PER_CANDLE);
+ return ticks;
+}
+
 const mean=x=>x.reduce((a,b)=>a+b,0)/x.length;
 function ema(values,span){
  if(values.length<span)return null;
