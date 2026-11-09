@@ -5,7 +5,7 @@ import {createDemoTrading} from '../demo-trading.mjs';
 
 test('Five separate DEMO websocket approvals settle concurrently without real network',async()=>{
  const original=globalThis.WebSocket;
- let contract=970000,active=0,peak=0;
+ let contract=970000,active=0,peak=0;const proposalDurations=[];
  class FakeWs extends EventTarget {
   constructor(url){
    super();assert.match(url,/\/ws\/demo/);
@@ -15,8 +15,11 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   send(raw){
    const request=JSON.parse(raw);
    let reply;
-   if(request.proposal)reply={msg_type:'proposal',req_id:request.req_id,
-    proposal:{id:'q'.repeat(40),ask_price:0.50,payout:0.85}};
+   if(request.proposal){
+    proposalDurations.push(request.duration);
+    reply={msg_type:'proposal',req_id:request.req_id,
+     proposal:{id:'q'.repeat(40),ask_price:0.50,payout:0.85}};
+   }
    else if(request.buy)reply={msg_type:'buy',req_id:request.req_id,
     buy:{contract_id:++contract,buy_price:0.50}};
    else if(request.proposal_open_contract)reply={msg_type:'proposal_open_contract',
@@ -45,7 +48,10 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   lastPrices:Array.from({length:40},(_,i)=>100+i*.004),
   projectedNextTick:100.75,modelMae:0.12,naiveMae:0.13,
   fiveTickMomentum:-0.32,tickRsi14:43,fiveTickStudy:{hitRate:.57,holdoutCount:20},
-  reason:'TENDENCIA_ALCISTA_MULTIFACTOR'};
+  reason:'TENDENCIA_ALCISTA_MULTIFACTOR',
+  tickHorizonModels:[{durationTicks:10,direction:'CALL',selectedPolicy:'MOMENTUM_20',
+   trainingDecisions:41,validationDecisions:26,observedValidationHitRate:.65,
+   conservativeWinRateLower95:.40,readyForProposal:false}]};
  try{
   const trading=createDemoTrading({db,
    getAccount:()=>account,getCredentials:async()=>({accountId:account.accountId}),
@@ -53,8 +59,9 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
    otpLookup:async()=> 'wss://api.derivws.com/trading/v1/options/ws/demo?otp=MOCK',
    marketSnapshot:()=>market,audit:()=>{}
   });
-  const requests=Array.from({length:5},()=>trading.requestIntent({
-   symbol:'R_100',direction:'CALL',stakeCents:50,source:'LOCAL_OWNER'
+  const requests=Array.from({length:5},(_,i)=>trading.requestIntent({
+   symbol:'R_100',direction:'CALL',stakeCents:50,source:'LOCAL_OWNER',
+   ...(i===0?{durationTicks:10,modelMode:'DEMO_EXPLORATORY_5_10'}:{})
   }));
   assert.equal(trading.getSummary().awaitingApproval,5);
   const settled=await Promise.all(requests.map(x=>trading.approve(x.id,'CONFIRMAR COMPRA DEMO')));
@@ -62,7 +69,12 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   assert.ok(settled.every(x=>x.state==='SETTLED'&&x.brokerOrders===1));
   assert.equal(new Set(settled.map(x=>x.contractId)).size,5);
   assert.ok(peak>=2,'more than one independent DEMO websocket must overlap');
+  assert.equal(proposalDurations.length,5);
+  assert.equal(proposalDurations.filter(x=>x===10).length,1);
+  assert.equal(proposalDurations.filter(x=>x===5).length,4);
   const totals=trading.getSummary();
+  assert.ok(totals.orders.some(row=>row.durationTicks===10&&
+   row.predictionMode==='DEMO_EXPLORATORY_5_10'&&row.state==='SETTLED'));
   assert.equal(totals.campaignPurchases,5);
   assert.equal(totals.pendingOrOpen,0);
   assert.equal(totals.settled,5);
