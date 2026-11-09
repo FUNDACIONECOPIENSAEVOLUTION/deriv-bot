@@ -336,6 +336,7 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/api/learning/quality')
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
    if(req.method==='GET'&&path==='/api/demo/orders')return answer(res,200,trading.getSummary());
+   if(req.method==='GET'&&path==='/api/demo/risk')return answer(res,200,trading.getRiskStatus());
    if(req.method==='GET'&&path==='/api/demo/burst/status')return answer(res,200,bursts.status());
    if(req.method==='GET'&&path==='/api/demo/burst-history.csv'){
     res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
