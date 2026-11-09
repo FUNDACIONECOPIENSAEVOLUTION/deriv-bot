@@ -36,7 +36,9 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
  const market={symbol:'R_100',direction:'CALL',available:true,ready:true,candleCount:60,
   fresh:true,ageReceivedMs:100,epoch:Math.floor(Date.now()/1000),
   rsi14:59,sma8:101,sma21:100,ema20:103,ema50:102,atr14:0.4,
-  momentum5:0.02,signalStrength:70};
+  momentum5:0.02,signalStrength:70,
+  candles:[{open:100.1,high:100.8,low:99.9,close:100.7,epoch:Math.floor(Date.now()/1000)-1}],
+  projectedNextTick:100.75,modelMae:0.12,naiveMae:0.13};
  try{
   const trading=createDemoTrading({db,
    getAccount:()=>account,getCredentials:async()=>({accountId:account.accountId}),
@@ -66,6 +68,10 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   assert.match(csv,/entryTick/);
   assert.ok(totals.orders.every(x=>x.entryTick===100.21&&x.exitTick===100.45));
   assert.ok(totals.orders.every(x=>x.diagnosis.code==='DIRECCION_FAVORABLE'));
+  assert.ok(totals.orders.every(x=>x.candleOpen===100.1&&x.candleClose===100.7));
+  assert.ok(totals.orders.every(x=>x.projectedNextTick===100.75&&x.modelMae===0.12));
+  assert.match(csv,/candleEpoch/);
+  assert.match(csv,/projectedNextTick/);
   assert.match(csv,/diagnosisCode/);
  }finally{
   db.close();globalThis.WebSocket=original;
