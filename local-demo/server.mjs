@@ -271,7 +271,7 @@ const trading=createDemoTrading({
  accountLookup:async(c,id)=>selectAccount(await boundedFetch(API,{headers:brokerHeaders(c)}),id),
  otpLookup:async c=>otpUrl(await boundedFetch(API+'/'+encodeURIComponent(c.accountId)+'/otp',
   {method:'POST',headers:brokerHeaders(c)})),
- marketSnapshot:symbol=>{const entry=market.get(symbol);return entry?snapshot(entry):null;},audit
+ marketSnapshot:symbol=>{const entry=market.get(symbol);return entry?snapshot(entry):null;},audit,getVersion:localVersion
 });
 // A dedicated MCP access key is generated on the PC, never in the public repo.
 const mcpKeyPath=join(DATA,'.mcp-local-secret');
@@ -296,7 +296,7 @@ const getAdaptiveReport=()=>{
 };
 const bursts=createDemoBurst({
  db,trading,marketSnapshot:symbol=>{const item=market.get(symbol);return item?snapshot(item):null;},
- getSymbols:()=>SYMBOLS.slice(),
+ getSymbols:()=>SYMBOLS.slice(),getVersion:localVersion,getStrategyVersion:()=>trading.getStrategyVersion(),
  getAdaptiveVerdict:(symbol,direction)=>adaptiveVerdict(getAdaptiveReport(),symbol,direction),
  refreshAccount:async()=>{
   const c=await credentials();
