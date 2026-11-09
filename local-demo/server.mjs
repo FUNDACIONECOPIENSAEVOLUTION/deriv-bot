@@ -13,6 +13,7 @@ import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
 import {createOpportunityShadow} from './opportunity-shadow.mjs';
 import {createDemoProgram} from './demo-program.mjs';
+import {analyzeProgramRounds} from './demo-round-diagnostics.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
 import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
 import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
@@ -334,6 +335,17 @@ const bursts=createDemoBurst({
  },getAccount:()=>get('account'),audit
 });
 const program=createDemoProgram({db,bursts,trading,audit});
+const programAuditRows=db.prepare(`SELECT b.program_id AS programId,o.batch_id AS batchId,
+ o.state,o.symbol,o.direction,o.stake_cents AS stakeCents,o.pnl_cents AS pnlCents,
+ o.duration_ticks AS durationTicks,o.prediction_mode AS predictionMode,
+ o.prediction_policy AS predictionPolicy,o.error_code AS errorCode,
+ o.buy_latency_ms AS buyLatencyMs,o.proposal_latency_ms AS proposalLatencyMs,
+ o.signal_age_ms AS signalAgeMs,
+ (o.telemetry_buy_attempt_at_ms-o.telemetry_intent_received_at_ms) AS intentToBuyMs
+ FROM demo_local_orders o JOIN demo_bursts b ON b.id=o.batch_id
+ WHERE b.program_id IS NOT NULL AND b.program_id IN
+ (SELECT id FROM demo_programs ORDER BY created_at DESC,id DESC LIMIT 5)
+ ORDER BY o.created_at ASC,o.id ASC`);
 const isMaintenance=()=>existsSync(join(DATA,'actualizacion-en-curso.flag'));
 const mcpHandlers={
  version:()=>localVersion(),
@@ -388,6 +400,11 @@ server=http.createServer(async(req,res)=>{
    if(req.method==='GET'&&path==='/api/demo/risk')return answer(res,200,trading.getRiskStatus());
    if(req.method==='GET'&&path==='/api/demo/burst/status')return answer(res,200,bursts.status());
    if(req.method==='GET'&&path==='/api/demo/program/status')return answer(res,200,program.status());
+   if(req.method==='GET'&&path==='/api/demo/program/diagnostics'){
+    const programs=program.status().programs,orders=programAuditRows.all();
+    return answer(res,200,{readOnly:true,realEnabled:false,
+     programs:programs.map(p=>analyzeProgramRounds(p,orders))});
+   }
    if(req.method==='GET'&&path==='/api/demo/program/results.csv'){
     res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
      'X-Content-Type-Options':'nosniff',

@@ -307,7 +307,9 @@ async function updateDemoProgram(){
    'Siguiente tanda solo tras liquidación y revisión del riesgo.':
    current?'Último programa: '+current.state+' · tandas completadas '+
     current.roundsCompleted+'/10 · '+(current.stopReason||'sin errores registrados')+
-    (current.continueOnNegativeRound?' · investigación extendida autorizada':''):
+    (current.continueOnNegativeRound?
+     ' · investigación extendida autorizada':
+     ' · parada protectora por tanda negativa activa (investigación extendida sin autorizar)'):
     'Sin programa DEMO. Autoriza localmente una secuencia de hasta 100 contratos.';
   const pct=x=>Number.isFinite(x)?x.toFixed(2)+' %':'—';
   const tbody=$('program-history');tbody.replaceChildren();
@@ -342,6 +344,34 @@ async function updateDemoProgram(){
    const tr=document.createElement('tr'),td=document.createElement('td');
    td.colSpan=9;td.textContent='No hay tandas liquidadas o iniciadas en el programa más reciente.';
    tr.appendChild(td);rounds.appendChild(tr);
+  }
+  // Contraste descriptivo de operaciones guardadas: no inferir causas por azar.
+  const diagnostics=await get('/api/demo/program/diagnostics');
+  const detail=$('program-round-diagnostics');
+  detail.replaceChildren();
+  const analysis=diagnostics.programs?.find(x=>x.programId===current?.id);
+  const groupLabel=groups=>(groups||[]).filter(x=>x.settled||x.rejected)
+   .map(x=>x.value+': '+x.wins+'/'+x.settled+
+    ' · '+signedCents(x.netCents)+(x.rejected?' ('+x.rejected+' sin compra)':'')).join(' | ')||'Sin datos';
+  for(const round of analysis?.rounds||[]){
+   const tr=document.createElement('tr');
+   const timing='BUY '+(Number.isFinite(round.medianBuyLatencyMs)?
+    round.medianBuyLatencyMs.toFixed(0)+' ms':'—')+
+    ' · intención→BUY '+(Number.isFinite(round.medianIntentToBuyMs)?
+    round.medianIntentToBuyMs.toFixed(0)+' ms':'—');
+   const rejected=(round.rejectReasons||[]).map(x=>
+    x.reason+': '+x.count).join(' | ')||'Ninguno';
+   [round.round,groupLabel(round.bySymbol),groupLabel(round.byDuration),
+    groupLabel(round.byDirection),groupLabel(round.byPolicy),
+    timing,rejected].forEach(value=>{
+     const td=document.createElement('td');td.textContent=String(value);
+     tr.appendChild(td);
+   });detail.appendChild(tr);
+  }
+  if(!detail.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=7;td.textContent='Sin operaciones detalladas de este programa.';
+   tr.appendChild(td);detail.appendChild(tr);
   }
  }catch(e){$('program-status').textContent='Programa DEMO no disponible: '+e.message;}
 }
