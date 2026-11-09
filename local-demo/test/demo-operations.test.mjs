@@ -310,7 +310,9 @@ test('Programa DEMO reintenta rechazos sin ejecutar compra y obtiene 10 liquidac
  const runner=createDemoBurst({db,trading,
   getSymbols:()=>['R_10','R_25','R_100'],
   marketSnapshot:symbol=>({symbol,available:true,ready:true,candleCount:60,fresh:true,
-   epoch:Math.floor(Date.now()/1000)+tick++,ageReceivedMs:20,
+   epoch:Math.floor(Date.now()/1000),ageReceivedMs:20,
+   // Cada nueva ola simula una vela cerrada distinta, sin tick futuro.
+   candles:[{epoch:Math.floor(Date.now()/1000)-100+Math.floor(tick++/3)}],
    tickHorizonModels:[model]}),
   refreshAccount:async()=>account,getAccount:()=>account,audit:()=>{}});
  const burst=runner.start({count:10,stakeCents:100,symbol:'AUTO',
