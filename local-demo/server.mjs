@@ -286,8 +286,10 @@ const mcpAuthPath=join(DATA,'.mcp-local-authorization');
 if(!existsSync(mcpAuthPath)){writeFileSync(mcpAuthPath,'Bearer '+mcpKey,{mode:0o600,flag:'wx'});}
 // Aprendizaje conservador a partir de liquidaciones oficiales guardadas en SQLite.
 const qualityRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
- app_version,strategy_version,bought_at_ms,created_at,
- signal_age_ms,proposal_latency_ms,buy_latency_ms,
+ app_version,strategy_version,bought_at_ms,settled_at_ms,created_at,
+ signal_age_ms,proposal_latency_ms,buy_latency_ms,signal_strength,signal_rsi,
+ signal_five_tick_momentum,signal_tick_rsi14,
+ five_tick_study_hit_rate,five_tick_study_n,
  entry_tick,exit_tick,signal_quote,projection_model_mae,projection_naive_mae,error_code
  FROM demo_local_orders WHERE state IN ('SETTLED','REJECTED')
  ORDER BY created_at ASC`);

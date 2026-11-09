@@ -6,6 +6,9 @@ const mock=(i,{version='13.6',symbol='R_100',dir='CALL',pnl=44}={})=>({
  state:'SETTLED',symbol,direction:dir,pnl_cents:pnl,stake_cents:50,
  app_version:version,strategy_version:'EMA20_EMA50_RSI14_ATR14_OHLC10_V1',
  created_at:1794190000+i,bought_at_ms:1794190000000+i*10000,
+ settled_at_ms:1794190000000+i*10000+6500,
+ signal_strength:62,signal_rsi:43,signal_five_tick_momentum:-0.18,
+ signal_tick_rsi14:48,five_tick_study_hit_rate:.52,five_tick_study_n:40,
  signal_age_ms:200+i,proposal_latency_ms:180,buy_latency_ms:245,
  entry_tick:100,exit_tick:pnl>0?100.1:99.9,signal_quote:99.95,
  projection_model_mae:.3,projection_naive_mae:.2,
@@ -65,4 +68,27 @@ test('Diagnóstico separa latencias, movimiento contrario y proyección',()=>{
  assert.equal(r.lossExamples[0].code,'MOVIMIENTO_CONTRARIO');
  assert.equal(r.projection.modelWorse,2);
  assert.equal(r.quoteToEntry.observed,2);
+});
+
+test('Liquidaciones simultáneas NO alimentan predicciones anteriores al cierre',()=>{
+ const rows=Array.from({length:12},(_,i)=>({
+  ...mock(i,{pnl:i%2?44:-50}), bought_at_ms:1794190000000+i*100,
+  settled_at_ms:1794190000000+20000+i*100,
+ }));
+ const report=buildTradeQualityReport(rows);
+ assert.equal(report.shadow.evaluated,0,
+  'Ninguno de los 12 contratos aún estaba liquidado antes de la siguiente compra');
+ assert.equal(report.shadow.causalSettlementOnly,true);
+});
+test('La investigación a cinco ticks es independiente de la selección CALL/PUT',()=>{
+ const samples=[mock(0,{pnl:44}),mock(1,{pnl:-50}),mock(2,{pnl:44})];
+ samples[0].signal_five_tick_momentum=.1;
+ samples[2].signal_five_tick_momentum=.2;
+ const report=buildTradeQualityReport(samples);
+ assert.equal(report.research.fiveTickRecorded,3);
+ assert.equal(report.research.momentumAligned.n,2);
+ assert.equal(report.research.momentumOpposed.n,1);
+ assert.equal(report.research.studyIsHistoricalOnly,true);
+ assert.equal(report.predictionAltersBuy,false);
+ assert.equal(report.research.strengthBands.reduce((n,x)=>n+x.n,0),3);
 });

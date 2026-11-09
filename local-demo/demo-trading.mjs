@@ -33,7 +33,10 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   signal_strength:'INTEGER',proposal_payout_cents:'INTEGER',signal_quote:'REAL',
   entry_tick:'REAL',exit_tick:'REAL',entry_tick_epoch:'INTEGER',exit_tick_epoch:'INTEGER',
   candle_open:'REAL',candle_high:'REAL',candle_low:'REAL',candle_close:'REAL',candle_epoch:'INTEGER',
-  projected_next_tick:'REAL',projection_model_mae:'REAL',projection_naive_mae:'REAL',app_version:'TEXT',strategy_version:'TEXT'})){
+  projected_next_tick:'REAL',projection_model_mae:'REAL',projection_naive_mae:'REAL',app_version:'TEXT',strategy_version:'TEXT',
+   signal_five_tick_momentum:'REAL',signal_tick_rsi14:'REAL',
+   five_tick_study_hit_rate:'REAL',five_tick_study_n:'INTEGER',
+   signal_snapshot_epoch:'INTEGER',signal_reason:'TEXT'})){
   if(!columns.has(name))db.exec('ALTER TABLE demo_local_orders ADD COLUMN '+name+' '+sqlType);
  }
  const STRATEGY_VERSION='EMA20_EMA50_RSI14_ATR14_OHLC10_V1';
@@ -58,12 +61,17 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   candle_open AS candleOpen,candle_high AS candleHigh,candle_low AS candleLow,
   candle_close AS candleClose,candle_epoch AS candleEpoch,
   projected_next_tick AS projectedNextTick,projection_model_mae AS modelMae,
-  projection_naive_mae AS naiveMae,app_version AS appVersion,strategy_version AS strategyVersion FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
+  projection_naive_mae AS naiveMae,app_version AS appVersion,strategy_version AS strategyVersion,
+   signal_five_tick_momentum AS fiveTickMomentum,signal_tick_rsi14 AS tickRsi14,
+   five_tick_study_hit_rate AS fiveTickStudyHitRate,five_tick_study_n AS fiveTickStudyN,
+   signal_snapshot_epoch AS snapshotEpoch,signal_reason AS signalReason FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
  const list=db.prepare(listSql+' LIMIT 60');
  const csvList=db.prepare(listSql);
  const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents,app_version,strategy_version) VALUES(?,?,?,?,?,?,?,?,?,?)');
  const change=db.prepare('UPDATE demo_local_orders SET state=?,updated_at=?,error_code=? WHERE id=?');
- const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=?,candle_open=?,candle_high=?,candle_low=?,candle_close=?,candle_epoch=?,projected_next_tick=?,projection_model_mae=?,projection_naive_mae=? WHERE id=?");
+ const recordBuy=db.prepare(`UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=?,candle_open=?,candle_high=?,candle_low=?,candle_close=?,candle_epoch=?,projected_next_tick=?,projection_model_mae=?,projection_naive_mae=?,
+   signal_five_tick_momentum=?,signal_tick_rsi14=?,five_tick_study_hit_rate=?,
+   five_tick_study_n=?,signal_snapshot_epoch=?,signal_reason=? WHERE id=?`);
  const markBatch=db.prepare("UPDATE demo_local_orders SET batch_id=? WHERE id=?");
  const purchasedAt=db.prepare("UPDATE demo_local_orders SET created_at_ms=? WHERE id=?");
  const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=?,settled_at_ms=?,entry_tick=COALESCE(?,entry_tick),exit_tick=COALESCE(?,exit_tick),entry_tick_epoch=COALESCE(?,entry_tick_epoch),exit_tick_epoch=COALESCE(?,exit_tick_epoch) WHERE id=?");
@@ -239,7 +247,10 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
      observed?.quote??null,
      lastClosed?.open??null,lastClosed?.high??null,lastClosed?.low??null,
      lastClosed?.close??null,lastClosed?.epoch??null,
-     observed?.projectedNextTick??null,observed?.modelMae??null,observed?.naiveMae??null,id);
+     observed?.projectedNextTick??null,observed?.modelMae??null,observed?.naiveMae??null,
+     observed?.fiveTickMomentum??null,observed?.tickRsi14??null,
+     observed?.fiveTickStudy?.hitRate??null,observed?.fiveTickStudy?.holdoutCount??null,
+     observed?.epoch??null,observed?.reason??null,id);
    audit('DEMO_BUY_CONFIRMED','Contrato DEMO confirmado por broker');
    const result=await readSettlement(socket,contractId);
    if(result.settled){
@@ -281,7 +292,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const rows=csvList.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
-  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','errorCode','diagnosisCode'];
+  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','fiveTickMomentum','tickRsi14','fiveTickStudyHitRate','fiveTickStudyN','snapshotEpoch','signalReason','errorCode','diagnosisCode'];
    const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(x).code:x[h])).join(',')).join('\r\n')+'\r\n';
  }
