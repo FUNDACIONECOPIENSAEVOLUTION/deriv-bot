@@ -104,6 +104,28 @@ function drawEquity(rows){
  points.forEach((v,i)=>{if(i===0)ctx.moveTo(x(i),y(v));else ctx.lineTo(x(i),y(v));});ctx.stroke();
  ctx.fillStyle='#a8c7d4';ctx.font='13px Arial';ctx.fillText('P&L DEMO acumulado '+usd(points.at(-1)),12,17);
 }
+async function showOpportunityShadow(){
+ try{
+  const d=await get('/api/learning/opportunities');
+  $('shadow-opportunities-status').textContent='Oportunidades observadas: '+
+   d.observations+' · pendientes '+d.pendingInMemory+
+   '. Solo dirección del precio a cinco ticks, NO simula beneficios ni controla BUY.';
+  const body=$('shadow-opportunities-results');body.replaceChildren();
+  for(const x of d.selectedVsUnselected||[]){
+   const tr=document.createElement('tr');
+   [x.selectedForAttempt?'Elegidas para intento':'Descartadas',
+    x.n,x.favorable+' / '+x.n,
+    x.hitRatePct===null?'—':x.hitRatePct.toFixed(1)+' %']
+    .forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.appendChild(td);});
+   body.appendChild(tr);
+  }
+  if(!body.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=4;td.textContent='El estudio comenzará con las nuevas olas DEMO, sin enviar órdenes adicionales.';
+   tr.appendChild(td);body.appendChild(tr);
+  }
+ }catch(e){$('shadow-opportunities-status').textContent='Estudio no disponible: '+e.message;}
+}
 async function showWalkForwardAudit(){
  try{
   const d=await get('/api/learning/walk-forward');
@@ -557,6 +579,7 @@ $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando
  await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
  await showQualityAudit();setInterval(showQualityAudit,20000);
  await showWalkForwardAudit();setInterval(showWalkForwardAudit,20000);
+ await showOpportunityShadow();setInterval(showOpportunityShadow,20000);
  async function diagnose(){
   try{
    const d=await get('/api/market/diagnostic');
