@@ -95,6 +95,20 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   }
   assert.match(csv,/fiveTickMomentum,tickRsi14,fiveTickStudyHitRate/);
   assert.match(csv,/diagnosisCode/);
+  const trace=totals.orders;
+  for(const field of ['intentReceivedAtMs','proposalSentAtMs','proposalReceivedAtMs',
+   'buyAttemptAtMs','buyAckAtMs','accountLookupMs','otpLookupMs','wsConnectMs',
+   'preBuyValidationMs']){
+    assert.ok(trace.every(row=>Number.isFinite(row[field])),field);
+  }
+  assert.ok(trace.every(row=>row.buyAttemptAtMs<=row.buyAckAtMs));
+  assert.ok(trace.every(row=>row.buyAckAtMs<=row.settledAtMs));
+  assert.ok(trace.every(row=>row.selectedAtMs===null));
+  for(const field of ['intentToQuoteMs','quoteToBuyMs','intentToBuyMs',
+   'buyFeedToBuyMs','buyAttemptToSettlementMs','buyAckToSettlementMs',
+   'analyzer5ComputeMs','analyzer10ComputeMs','timingSchemaVersion']){
+   assert.ok(csv.includes(field),field);
+  }
  }finally{
   db.close();globalThis.WebSocket=original;
  }
