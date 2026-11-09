@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluateTickHorizons,conservativeQuoteDecision} from '../tick-horizon-model.mjs';
+import {evaluateTickHorizons,conservativeQuoteDecision,isExploratoryCandidate,exploratoryQuoteDecision} from '../tick-horizon-model.mjs';
 import {computeMarketAnalysis} from '../market-analysis.mjs';
 const rising=Array.from({length:660},(_,i)=>100+i*.001);
 test('Predicciones independientes de exactamente 5 y 10 ticks usando ventanas 5/10/20',()=>{
@@ -39,4 +39,21 @@ test('Analisis principal conserva 60 velas pero expone un evaluador multi horizo
  assert.equal(m.tickHorizonAudit.momentum5CandlesLookbackTicks,50);
  assert.equal(m.tickHorizonModels[0].durationTicks,5);
  assert.equal(m.tickHorizonModels[1].durationTicks,10);
+});
+
+test('Investigacion DEMO distingue una muestra de 57% de una ventaja validada',()=>{
+ const sample={durationTicks:5,direction:'CALL',selectedPolicy:'MOMENTUM_10',
+  trainingDecisions:65,validationDecisions:51,observedValidationHitRate:.569,
+  conservativeWinRateLower95:.45,readyForProposal:false};
+ assert.equal(sample.readyForProposal,false);
+ assert.equal(isExploratoryCandidate(sample),true);
+ assert.equal(conservativeQuoteDecision(sample,1,1.88).approved,false);
+ const exploratory=exploratoryQuoteDecision(sample,1,1.88);
+ assert.equal(exploratory.approved,true);
+ assert.equal(exploratory.validatedEdge,false);
+ assert.ok(exploratory.observedNetReturn>0);
+ assert.equal(exploratoryQuoteDecision(sample,1,1.1).approved,false);
+ assert.equal(isExploratoryCandidate({...sample,validationDecisions:5}),false);
+ assert.equal(isExploratoryCandidate({...sample,observedValidationHitRate:.52}),false);
+ assert.equal(isExploratoryCandidate({...sample,direction:'ESPERAR'}),false);
 });
