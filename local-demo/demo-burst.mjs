@@ -82,14 +82,18 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  if(!fields.has('inspection_json'))db.exec('ALTER TABLE demo_bursts ADD COLUMN inspection_json TEXT');
  if(!fields.has('program_id'))db.exec('ALTER TABLE demo_bursts ADD COLUMN program_id TEXT');
  if(!fields.has('signal_mode'))db.exec("ALTER TABLE demo_bursts ADD COLUMN signal_mode TEXT DEFAULT 'VALIDATED_ONLY'");
- const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent,app_version,strategy_version,program_id,signal_mode) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');
+ if(!fields.has('profit_target_cents'))db.exec('ALTER TABLE demo_bursts ADD COLUMN profit_target_cents INTEGER NOT NULL DEFAULT 0');
+ if(!fields.has('loss_cap_cents'))db.exec('ALTER TABLE demo_bursts ADD COLUMN loss_cap_cents INTEGER NOT NULL DEFAULT 0');
+ const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent,app_version,strategy_version,program_id,signal_mode,profit_target_cents,loss_cap_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
  const update=db.prepare('UPDATE demo_bursts SET state=?,updated_at=?,completed=?,stop_reason=? WHERE id=?');
  const saveInspection=db.prepare('UPDATE demo_bursts SET inspection_json=? WHERE id=?');
+ const profitLockResult=db.prepare("SELECT COUNT(*) AS settled,COALESCE(SUM(pnl_cents),0) AS netCents FROM demo_local_orders WHERE batch_id=? AND state='SETTLED'");
  // Totales durables desde TODAS las órdenes SQLite de cada tanda (sin límite de 60 filas UI).
  const latest=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.state,
  b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,b.concurrent,
  b.app_version AS appVersion,b.strategy_version AS strategyVersion,b.program_id AS programId,
- b.signal_mode AS signalMode,
+ b.signal_mode AS signalMode,b.profit_target_cents AS profitTargetCents,
+ b.loss_cap_cents AS lossCapCents,
  b.completed,b.stop_reason AS stopReason,b.inspection_json AS inspectionJson,
  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
@@ -105,7 +109,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  const allBatches=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.updated_at AS updatedAt,
  b.state,b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,
  b.concurrent,b.app_version AS appVersion,b.strategy_version AS strategyVersion,b.program_id AS programId,
- b.signal_mode AS signalMode,
+ b.signal_mode AS signalMode,b.profit_target_cents AS profitTargetCents,
+ b.loss_cap_cents AS lossCapCents,
  b.stop_reason AS stopReason,b.inspection_json AS inspectionJson,
  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
@@ -313,11 +318,32 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     audit('DEMO_BURST_PROGRESS',batch.id+' executed='+executed+
      ' settled='+settled+' safeRejects='+safeRejects);
     if(state!=='RUNNING')break;
+    if(batch.profitTargetCents>0){
+     // El cierre en verde se decide solo despues de la liquidacion oficial.
+     // Concurrencia 1: no quedan compras paralelas que reduzcan lo ganado.
+     const verified=profitLockResult.get(batch.id);
+     if(verified.settled!==settled){
+      state='HALTED';reason='PROFIT_LOCK_SETTLEMENT_NOT_VERIFIED';break;
+     }
+     if(verified.netCents>=batch.profitTargetCents){
+      state='COMPLETED';reason='TAKE_PROFIT_REACHED';
+      audit('DEMO_PROFIT_LOCK',batch.id+' settled='+settled+' netCents='+verified.netCents);
+      break;
+     }
+     if(verified.netCents<=-batch.lossCapCents){
+      state='PAUSED';reason='BATCH_LOSS_CAP_REACHED';
+      audit('DEMO_BATCH_LOSS_CAP',batch.id+' netCents='+verified.netCents);
+      break;
+     }
+     if(executed===batch.count){
+      state='PAUSED';reason='BATCH_GREEN_TARGET_NOT_REACHED';break;
+     }
+    }
     if(executed<batch.count)await pause(researchProgram&&safeRejects?
      Math.max(1500,scanPauseMs):350);
    }
    if(state==='RUNNING')state=executed===batch.count?'COMPLETED':'PAUSED';
-   if(state==='COMPLETED')reason=null; // Rechazos previos se reportan en 'rejected'; no son un fallo de tanda completada.
+   if(state==='COMPLETED'&&reason!=='TAKE_PROFIT_REACHED')reason=null; // Preservar cierre anticipado.
    if(state==='PAUSED'&&!reason)reason='SAFE_MAX_ATTEMPTS_REACHED';
   }catch(e){
    state='HALTED';
@@ -331,12 +357,18 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   }
  }
  function start({count,stakeCents,symbol,confirmation,concurrency=1,programId=null,
-  usedCandleEpoch=null,mode='VALIDATED_ONLY'}){
+  usedCandleEpoch=null,mode='VALIDATED_ONLY',profitTargetCents=0,lossCapCents=0}){
   if(confirmation!=='CONFIRMAR TANDA DEMO')throw Error('DEMO_BURST_APPROVAL_REQUIRED');
   if(!['VALIDATED_ONLY','RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
    throw Error('DEMO_SIGNAL_MODE_INVALID');
   if(['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode)&&stakeCents>100)
    throw Error('DEMO_EXPLORATORY_MAX_1USD');
+  if(profitTargetCents!==0){
+   if(!programId||![50,100,150].includes(profitTargetCents)||
+    lossCapCents!==200||concurrency!==1||stakeCents!==100||count!==10||
+    !['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
+    throw Error('DEMO_PROFIT_LOCK_PARAMETERS_INVALID');
+  }else if(lossCapCents!==0)throw Error('DEMO_PROFIT_LOCK_PARAMETERS_INVALID');
   if(!Number.isSafeInteger(count)||count<1||count>10||
    !Number.isSafeInteger(concurrency)||concurrency<1||concurrency>Math.min(count,MAX_PARALLEL)||
    !STAKES.includes(stakeCents)||!(symbol==='AUTO'||(isVolatilitySymbol(symbol)&&getSymbols().includes(symbol))))
@@ -352,17 +384,19 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(risk?.accountFloorStopActive)throw Error('DEMO_LOSS_STOP_100USD');
   if(risk&&risk.dailyRemainingRiskCents<stakeCents)throw Error('DEMO_DAILY_NET_LOSS_EXPOSURE');
   const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,mode,programId,
+   profitTargetCents,lossCapCents,
    inFlight:0,stopRequested:false,waitingSinceMs:null,waitingReason:null,
    usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
   insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,
    getVersion(),mode==='RESEARCH_FIVE_ONLY'?'TICK_5_ONLY_PILOT_DEMO_V1':
    mode==='RESEARCH_DEMO'?'TICK_5_10_RESEARCH_DEMO_V1':
-    'TICK_5_10_VALIDATED_V1',programId,mode);
+    'TICK_5_10_VALIDATED_V1',programId,mode,profitTargetCents,lossCapCents);
   active=batch;
   audit('DEMO_BURST_AUTHORIZED','Count '+count+' stake '+stakeCents+
    ' programResearch='+Boolean(programId)+' DEMO only');
   void run(batch);
-  return {id,state:'RUNNING',requested:count,stakeCents,symbol,mode,accountType:'demo',
+  return {id,state:'RUNNING',requested:count,stakeCents,symbol,mode,
+   profitTargetCents,lossCapCents,accountType:'demo',
    realEnabled:false,concurrent:concurrency,maxGrossCents:count*stakeCents};
  }
  function stop(){
@@ -374,7 +408,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  }
  function exportBatchesCsv(){
   const headers=['id','createdAt','updatedAt','appVersion','strategyVersion',
-   'state','requested','executed','settled','rejected','wins','losses','netCents','programId','signalMode',
+   'state','requested','executed','settled','rejected','wins','losses','netCents','programId','signalMode','profitTargetCents','lossCapCents',
    'stopReason','inspection'];
   const safe=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+allBatches.all().map(raw=>{
