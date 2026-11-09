@@ -50,7 +50,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const reserved=db.prepare("SELECT COUNT(*) AS n,COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN','SETTLED')");
  const exposure=db.prepare("SELECT COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN') AND id<>?");
  const losses=db.prepare("SELECT COALESCE(SUM(CASE WHEN pnl_cents<0 THEN -pnl_cents ELSE 0 END),0) AS loss FROM demo_local_orders WHERE state='SETTLED' AND created_at>=?");
- const list=db.prepare(`SELECT id,created_at AS createdAt,created_at_ms AS createdAtMs,bought_at_ms AS boughtAtMs,settled_at_ms AS settledAtMs,batch_id AS batchId,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode,proposal_latency_ms AS proposalLatencyMs,buy_latency_ms AS buyLatencyMs,signal_age_ms AS signalAgeMs,signal_rsi AS rsi,signal_sma_fast AS smaFast,signal_sma_slow AS smaSlow,
+ const listSql=`SELECT id,created_at AS createdAt,created_at_ms AS createdAtMs,bought_at_ms AS boughtAtMs,settled_at_ms AS settledAtMs,batch_id AS batchId,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode,proposal_latency_ms AS proposalLatencyMs,buy_latency_ms AS buyLatencyMs,signal_age_ms AS signalAgeMs,signal_rsi AS rsi,signal_sma_fast AS smaFast,signal_sma_slow AS smaSlow,
   signal_ema20 AS ema20,signal_ema50 AS ema50,signal_atr14 AS atr14,
   signal_momentum5 AS momentum5,signal_strength AS signalStrength,
   proposal_payout_cents AS proposalPayoutCents,signal_quote AS signalQuote,
@@ -59,7 +59,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   candle_open AS candleOpen,candle_high AS candleHigh,candle_low AS candleLow,
   candle_close AS candleClose,candle_epoch AS candleEpoch,
   projected_next_tick AS projectedNextTick,projection_model_mae AS modelMae,
-  projection_naive_mae AS naiveMae FROM demo_local_orders ORDER BY created_at DESC,id DESC LIMIT 60`);
+  projection_naive_mae AS naiveMae FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
+ const list=db.prepare(listSql+' LIMIT 60');
+ const csvList=db.prepare(listSql);
  const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents) VALUES(?,?,?,?,?,?,?,?)');
  const change=db.prepare('UPDATE demo_local_orders SET state=?,updated_at=?,error_code=? WHERE id=?');
  const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=?,candle_open=?,candle_high=?,candle_low=?,candle_close=?,candle_epoch=?,projected_next_tick=?,projection_model_mae=?,projection_naive_mae=? WHERE id=?");
@@ -279,7 +281,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   }finally{socket.close();}
  }
  function exportCsv(scope='all'){
-  const rows=list.all();
+  // Exportar todo SQLite; el límite de 60 se usa SOLO para la interfaz.
+  const rows=csvList.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
   const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','errorCode','diagnosisCode'];
