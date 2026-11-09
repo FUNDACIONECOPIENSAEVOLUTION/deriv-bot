@@ -165,23 +165,24 @@ async function updateBurstPanel(){
   const history=$('burst-history');history.replaceChildren();
   for(const batch of b.batches||[]){
    const tr=document.createElement('tr');
-   const values=[batch.id.slice(0,8),batch.state,
+   const values=[batch.id.slice(0,8),batch.appVersion||'No registrada',
+    batch.strategyVersion||'No registrada',batch.state,
     batch.executed+' / '+batch.requested,batch.wins,batch.losses,batch.rejected,
     signedCents(batch.grossWinCents),signedCents(-batch.grossLossCents),
     signedCents(batch.netCents)];
    values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=value;
-    if(i===8&&Number.isFinite(batch.netCents))td.className=batch.netCents>0?'up':batch.netCents<0?'down':'';
+    if(i===10&&Number.isFinite(batch.netCents))td.className=batch.netCents>0?'up':batch.netCents<0?'down':'';
     tr.appendChild(td);});history.appendChild(tr);
   }
   if(!history.children.length){
    const tr=document.createElement('tr'),td=document.createElement('td');
-   td.colSpan=9;td.textContent='Sin tandas registradas.';tr.appendChild(td);history.appendChild(tr);
+   td.colSpan=11;td.textContent='Sin tandas registradas.';tr.appendChild(td);history.appendChild(tr);
   }
   const tbody=$('burst-rows');tbody.replaceChildren();
-  if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=12;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
+  if(selection.length===0){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=14;td.textContent='No hay órdenes registradas en esta tanda.';tr.appendChild(td);tbody.appendChild(tr);}
   for(const row of selection.slice(0,25)){
    const tr=document.createElement('tr');
-   const values=[printableTime(row.createdAtMs),row.symbol,row.direction+' / '+row.state,
+   const values=[printableTime(row.createdAtMs),row.appVersion||'No registrada',row.strategyVersion||'No registrada',row.symbol,row.direction+' / '+row.state,
     fmt(row.rsi),Number.isFinite(row.signalAgeMs)?row.signalAgeMs+' ms':'—',
     printableTime(row.boughtAtMs),printableTime(row.settledAtMs),
     Number.isFinite(row.buyLatencyMs)?(row.buyLatencyMs/1000).toFixed(3)+' s':'—',
@@ -190,8 +191,8 @@ async function updateBurstPanel(){
      row.state==='REJECTED'?'NO EJECUTADA':row.state==='CANCELLED'?'CANCELADA':'Pendiente',
     row.diagnosis?.code||'SIN_DATOS'];
    values.forEach((value,i)=>{const td=document.createElement('td');td.textContent=value;
-    if(i===10&&Number.isFinite(row.pnlCents))td.className=row.pnlCents>=0?'up':'down';
-    if(i===11)td.title=row.diagnosis?.detail||row.errorCode||'';
+    if(i===12&&Number.isFinite(row.pnlCents))td.className=row.pnlCents>=0?'up':'down';
+    if(i===13)td.title=row.diagnosis?.detail||row.errorCode||'';
     tr.appendChild(td);
    });tbody.appendChild(tr);
   }
@@ -245,8 +246,8 @@ async function showDemoOrders(){
   demoIntentState=awaiting?.state||null;
   $('demo-confirm').disabled=!demoIntentId;
   $('demo-cancel').disabled=!demoIntentId;
-  $('demo-order-stats').textContent='DEMO compras confirmadas o pendientes: '+d.campaignPurchases+
-   '/'+d.maxPurchases+' · apuesta acumulada '+usd((d.campaignGrossCents||0)/100)+
+  $('demo-order-stats').textContent='DEMO · histórico acumulado '+d.campaignPurchases+
+   ' compras ejecutadas, sin límite global de tandas · apuesta histórica '+usd((d.campaignGrossCents||0)/100)+
    ' · pendientes '+d.pendingOrOpen+
    (awaiting?' · SOLICITUD '+awaiting.source+' '+awaiting.symbol+' '+awaiting.direction+
      ' '+usd(awaiting.stakeCents/100)+' (requiere aprobación local)':'')+

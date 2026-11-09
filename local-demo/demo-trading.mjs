@@ -9,8 +9,7 @@ const SYMBOLS=new Set(['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500']);
 const STAKES=new Set([35,50,75,90,100]);
 const STOP_BALANCE_CENTS=990000; // DEMO 10000 USD: parada con pérdida de 100 USD.
-const MAX_CAMPAIGN_PURCHASES=50;
-const MAX_CAMPAIGN_COMMITTED_CENTS=5000;
+// Compras DEMO autorizadas sin límite acumulativo.
 const MAX_DAILY_LOSS_CENTS=10000;
 const MAX_CONCURRENT=5; // SOLO cinco contratos DEMO en paralelo; REAL bloqueada.
 const TERMINAL=new Set(['SETTLED','REJECTED','CANCELLED','EXPIRED']);
@@ -24,7 +23,7 @@ const settlementFields=c=>[optionalNumber(c?.entry_spot??c?.entry_tick),
  optionalNumber(c?.entry_spot_time??c?.entry_tick_time),
  optionalNumber(c?.exit_spot_time??c?.exit_tick_time)];
 
-export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,accountLookup,otpLookup,marketSnapshot,audit}) {
+export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,accountLookup,otpLookup,marketSnapshot,audit,getVersion=()=>null}) {
  db.exec("CREATE TABLE IF NOT EXISTS demo_local_orders (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, state TEXT NOT NULL, source TEXT NOT NULL, symbol TEXT NOT NULL, direction TEXT NOT NULL, stake_cents INTEGER NOT NULL, contract_id TEXT, buy_cents INTEGER, pnl_cents INTEGER, error_code TEXT)");
  const columns=new Set(db.prepare("PRAGMA table_info(demo_local_orders)").all().map(x=>x.name));
  for(const [name,sqlType] of Object.entries({batch_id:'TEXT',created_at_ms:'INTEGER',bought_at_ms:'INTEGER',
@@ -34,9 +33,10 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   signal_strength:'INTEGER',proposal_payout_cents:'INTEGER',signal_quote:'REAL',
   entry_tick:'REAL',exit_tick:'REAL',entry_tick_epoch:'INTEGER',exit_tick_epoch:'INTEGER',
   candle_open:'REAL',candle_high:'REAL',candle_low:'REAL',candle_close:'REAL',candle_epoch:'INTEGER',
-  projected_next_tick:'REAL',projection_model_mae:'REAL',projection_naive_mae:'REAL'})){
+  projected_next_tick:'REAL',projection_model_mae:'REAL',projection_naive_mae:'REAL',app_version:'TEXT',strategy_version:'TEXT'})){
   if(!columns.has(name))db.exec('ALTER TABLE demo_local_orders ADD COLUMN '+name+' '+sqlType);
  }
+ const STRATEGY_VERSION='EMA20_EMA50_RSI14_ATR14_OHLC10_V1';
  // Any interrupted BUY may have reached the broker. Do NOT send another until reconciled.
  db.prepare("UPDATE demo_local_orders SET state='UNKNOWN',updated_at=? WHERE state IN ('PREPARING','SENDING')").run(epoch());
  // Las intenciones de tanda no enviadas de una ejecución interrumpida se cancelan;
@@ -47,7 +47,6 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const active=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN')");
  const unresolved=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state IN ('PREPARING','SENDING','UNKNOWN','OPEN')");
  const unknown=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state='UNKNOWN'");
- const reserved=db.prepare("SELECT COUNT(*) AS n,COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN','SETTLED')");
  const exposure=db.prepare("SELECT COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN') AND id<>?");
  const losses=db.prepare("SELECT COALESCE(SUM(CASE WHEN pnl_cents<0 THEN -pnl_cents ELSE 0 END),0) AS loss FROM demo_local_orders WHERE state='SETTLED' AND created_at>=?");
  const listSql=`SELECT id,created_at AS createdAt,created_at_ms AS createdAtMs,bought_at_ms AS boughtAtMs,settled_at_ms AS settledAtMs,batch_id AS batchId,state,source,symbol,direction,stake_cents AS stakeCents,contract_id AS contractId,buy_cents AS buyCents,pnl_cents AS pnlCents,error_code AS errorCode,proposal_latency_ms AS proposalLatencyMs,buy_latency_ms AS buyLatencyMs,signal_age_ms AS signalAgeMs,signal_rsi AS rsi,signal_sma_fast AS smaFast,signal_sma_slow AS smaSlow,
@@ -59,10 +58,10 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   candle_open AS candleOpen,candle_high AS candleHigh,candle_low AS candleLow,
   candle_close AS candleClose,candle_epoch AS candleEpoch,
   projected_next_tick AS projectedNextTick,projection_model_mae AS modelMae,
-  projection_naive_mae AS naiveMae FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
+  projection_naive_mae AS naiveMae,app_version AS appVersion,strategy_version AS strategyVersion FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
  const list=db.prepare(listSql+' LIMIT 60');
  const csvList=db.prepare(listSql);
- const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents) VALUES(?,?,?,?,?,?,?,?)');
+ const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents,app_version,strategy_version) VALUES(?,?,?,?,?,?,?,?,?,?)');
  const change=db.prepare('UPDATE demo_local_orders SET state=?,updated_at=?,error_code=? WHERE id=?');
  const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=?,candle_open=?,candle_high=?,candle_low=?,candle_close=?,candle_epoch=?,projected_next_tick=?,projection_model_mae=?,projection_naive_mae=? WHERE id=?");
  const markBatch=db.prepare("UPDATE demo_local_orders SET batch_id=? WHERE id=?");
@@ -84,7 +83,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    losses:closed.filter(x=>x.pnlCents<0).length,
    netCents:closed.reduce((a,x)=>a+(x.pnlCents||0),0),
    batches:[...group.values()].sort((a,b)=>b.id.localeCompare(a.id)),
-   campaignPurchases:stats.n,campaignGrossCents:stats.gross,maxPurchases:MAX_CAMPAIGN_PURCHASES,
+   campaignPurchases:stats.n,campaignGrossCents:stats.gross,maxPurchases:null,
+   unlimitedOwnerAuthorizedDemo:true,strategyVersion:STRATEGY_VERSION,
    pendingOrOpen:unresolved.get().n,awaitingApproval:active.get().n-unresolved.get().n,
    orders:rows,canUpdate:active.get().n===0,
    warning:'Los contratos UNKNOWN requieren conciliación; jamás se repite un BUY sin confirmación.'};
@@ -105,11 +105,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
     throw Error('DEMO_LOSS_STOP_100USD');
   const day=Math.floor(epoch()/86400)*86400;
   if(losses.get(day).loss>=MAX_DAILY_LOSS_CENTS)throw Error('DEMO_DAILY_LOSS_STOP');
-  const s=reserved.get(),own=ownId?one.get(ownId):null;
-  const alreadyReserved=own&&['PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN','SETTLED'].includes(own.state);
-  if(s.n+(alreadyReserved?0:1)>MAX_CAMPAIGN_PURCHASES||
-     s.gross+(alreadyReserved?0:stakeCents)>MAX_CAMPAIGN_COMMITTED_CENTS)
-    throw Error('DEMO_CAMPAIGN_LIMIT');
+  // Sin tope histórico; conservar protecciones de saldo, pérdidas y señal.
   if(!signalValid(symbol,direction))throw Error('DEMO_SIGNAL_STALE_OR_CONTRARY');
  }
  function requestIntent({symbol,direction,stakeCents,source='LOCAL_OWNER'}){
@@ -121,7 +117,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   if(active.get().n>=MAX_CONCURRENT)throw Error('DEMO_CONCURRENCY_LIMIT');
   riskCheck(symbol,direction,stakeCents,cents(a.balance));
   const id=randomUUID();
-  insert.run(id,epoch(),epoch(),'PENDING_APPROVAL',source,symbol,direction,stakeCents);
+  insert.run(id,epoch(),epoch(),'PENDING_APPROVAL',source,symbol,direction,stakeCents,getVersion(),STRATEGY_VERSION);
   purchasedAt.run(Date.now(),id);
   audit('DEMO_REVIEW_REQUEST','Solicitud pendiente. No se envió ningún BUY.');
   return {id,state:'PENDING_APPROVAL',accountType:'demo',symbol,direction,stakeCents,expiresAt:epoch()+45,
@@ -285,10 +281,10 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const rows=csvList.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
-  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','errorCode','diagnosisCode'];
+  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','errorCode','diagnosisCode'];
    const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(x).code:x[h])).join(',')).join('\r\n')+'\r\n';
  }
  return {getSummary,requestIntent,cancel,approve,reconcile,markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
-  canUpdate:()=>active.get().n===0};
+  getStrategyVersion:()=>STRATEGY_VERSION,canUpdate:()=>active.get().n===0};
 }

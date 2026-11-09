@@ -14,7 +14,7 @@ function setup(){
  const logs=[];
  const trading=createDemoTrading({db,getAccount:()=>account,getCredentials:async()=>({accountId:account.accountId}),
   brokerHeaders:()=>({}),accountLookup:async()=>account,otpLookup:async()=>{throw Error('NETWORK_MUST_NOT_RUN')},
-  marketSnapshot:s=>s==='R_100'?m:null,audit:(type,detail)=>logs.push([type,detail])});
+  marketSnapshot:s=>s==='R_100'?m:null,audit:(type,detail)=>logs.push([type,detail]),getVersion:()=> '13.6'});
  return {db,account,m,trading,logs};
 }
 test('DEMO intent stores a pending order without sending a broker BUY',()=>{
@@ -105,5 +105,52 @@ test('CSV completo conserva más de 60 liquidaciones; interfaz limita solo la vi
  const rows=csv.trim().split(/\r?\n/);
  assert.equal(rows.length,76,'header + 75 contratos: CSV no se puede truncar');
  assert.equal(trading.getSummary().orders.length,60,'la lista visual puede limitarse a 60');
+ db.close();
+});
+
+test('DEMO no tiene límite histórico: 75 contratos anteriores permiten iniciar la siguiente tanda',()=>{
+ const {db,trading}=setup();
+ const insert=db.prepare(`INSERT INTO demo_local_orders
+  (id,created_at,updated_at,state,source,symbol,direction,stake_cents,pnl_cents)
+  VALUES (?,?,?,?,?,?,?,?,?)`);
+ for(let i=0;i<75;i++){
+  insert.run('older'+i,1794180000+i,1794180000+i,'SETTLED',
+   'LOCAL_OWNER','R_100','CALL',50,31);
+ }
+ assert.equal(trading.getSummary().campaignPurchases,75);
+ assert.equal(trading.getSummary().maxPurchases,null);
+ assert.equal(trading.getSummary().unlimitedOwnerAuthorizedDemo,true);
+ const intent=trading.requestIntent({symbol:'R_100',direction:'CALL',stakeCents:50,source:'LOCAL_OWNER'});
+ assert.equal(intent.state,'PENDING_APPROVAL');
+ const newRow=trading.getSummary().orders.find(x=>x.id===intent.id);
+ assert.equal(newRow.appVersion,'13.6');
+ assert.equal(newRow.strategyVersion,'EMA20_EMA50_RSI14_ATR14_OHLC10_V1');
+ const csv=trading.exportCsv('all');
+ assert.match(csv,/appVersion,strategyVersion/);
+ assert.match(csv,/13\.6/);
+ assert.equal(csv.trim().split(/\r?\n/).length,77);
+ trading.cancel(intent.id);
+ assert.equal(trading.canUpdate(),true);
+ db.close();
+});
+
+test('Tandas DEMO registran versiones y el historial previo se preserva',async()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec("CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)");
+ const account={accountId:'DEMO-TEST',currency:'USD',balance:10000};
+ const trading={canUpdate:()=>true,requestIntent:()=>({id:'test'}),markBatch:()=>{},
+  approve:async()=>({state:'SETTLED'})};
+ const burst=createDemoBurst({db,trading,marketSnapshot:()=>null,
+  refreshAccount:async()=>account,getAccount:()=>account,audit:()=>{},
+  getVersion:()=> '13.6',getStrategyVersion:()=> 'EMA20_EMA50_RSI14_ATR14_OHLC10_V1'});
+ const next=burst.start({count:10,stakeCents:50,symbol:'AUTO',concurrency:5,confirmation:'CONFIRMAR TANDA DEMO'});
+ const row=db.prepare('SELECT app_version AS appVersion,strategy_version AS strategyVersion,count_requested AS requested FROM demo_bursts WHERE id=?').get(next.id);
+ assert.equal(row.appVersion,'13.6');
+ assert.equal(row.requested,10);
+ assert.equal(row.strategyVersion,'EMA20_EMA50_RSI14_ATR14_OHLC10_V1');
+ burst.stop();
+ for(let i=0;i<20&&burst.status().running;i++)await pause(30);
+ assert.equal(burst.status().running,false);
+ // No se crean órdenes durante la prueba.
  db.close();
 });
