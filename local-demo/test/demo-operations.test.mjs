@@ -90,3 +90,20 @@ test('MCP tools can only queue DEMO review, never directly buy or use REAL',asyn
   params:{name:'buy_real',arguments:{}}},handlers);
  assert.equal(forbidden.error.code,-32602);
 });
+
+test('CSV completo conserva más de 60 liquidaciones; interfaz limita solo la vista',()=>{
+ const {db,trading}=setup();
+ const insert=db.prepare(`INSERT INTO demo_local_orders
+  (id,created_at,updated_at,state,source,symbol,direction,stake_cents,pnl_cents)
+  VALUES (?,?,?,?,?,?,?,?,?)`);
+ for(let i=0;i<75;i++){
+  insert.run('historic-'+i,1794190000+i,1794190000+i,'SETTLED',
+   'LOCAL_OWNER','R_100','CALL',50,i%2?31:-50);
+ }
+ const csv=trading.exportCsv('all');
+ assert.ok(csv.startsWith('\uFEFF'));
+ const rows=csv.trim().split(/\r?\n/);
+ assert.equal(rows.length,76,'header + 75 contratos: CSV no se puede truncar');
+ assert.equal(trading.getSummary().orders.length,60,'la lista visual puede limitarse a 60');
+ db.close();
+});
