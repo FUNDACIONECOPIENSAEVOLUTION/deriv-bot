@@ -127,3 +127,68 @@ test('Five separate DEMO websocket approvals settle concurrently without real ne
   db.close();globalThis.WebSocket=original;
  }
 });
+
+test('Conciliacion oficial de OPEN libera el bloqueo sin enviar un segundo BUY',async()=>{
+ const original=globalThis.WebSocket;
+ const db=new DatabaseSync(':memory:');
+ const account={accountId:'DEMO-MOCK-123',currency:'USD',balance:10000};
+ let wsRequests=[],mode='sold';
+ class ReconcileWs extends EventTarget{
+  constructor(url){
+   super();assert.match(url,/\/ws\/demo/);
+   queueMicrotask(()=>this.dispatchEvent(new Event('open')));
+  }
+  send(raw){
+   const req=JSON.parse(raw);
+   wsRequests.push(req);
+   assert.equal(req.buy,undefined,'solo consultar contratos: no BUY');
+   assert.equal(req.proposal_open_contract,1);
+   const contractId=mode==='mismatch'?777777:req.contract_id;
+   const res={msg_type:'proposal_open_contract',req_id:req.req_id,
+    proposal_open_contract:{contract_id:contractId,is_sold:mode==='open'?0:1,
+     profit:-0.50,entry_spot:'99.1',exit_spot:'99.0',
+     entry_spot_time:1762637000,exit_spot_time:1762637010}};
+   queueMicrotask(()=>this.dispatchEvent(new MessageEvent('message',
+    {data:JSON.stringify(res)})));
+  }
+  close(){this.dispatchEvent(new Event('close'));}
+ }
+ globalThis.WebSocket=ReconcileWs;
+ try{
+  const trading=createDemoTrading({db,getAccount:()=>account,
+   getCredentials:async()=>({accountId:account.accountId}),
+   brokerHeaders:()=>({}),accountLookup:async()=>account,
+   otpLookup:async()=> 'wss://api.derivws.com/trading/v1/options/ws/demo?otp=TEST',
+   marketSnapshot:()=>null,audit:()=>{}});
+  const put=db.prepare(`INSERT INTO demo_local_orders
+   (id,created_at,updated_at,state,source,symbol,direction,stake_cents,contract_id)
+   VALUES(?,?,?,?,?,?,?,?,?)`);
+  const at=Math.floor(Date.now()/1000);
+  put.run('confirmed',at,at,'OPEN','LOCAL_OWNER','R_100','CALL',100,'123456');
+  assert.equal(trading.canUpdate(),false);
+  mode='open';
+  const still=await trading.reconcileOpenOrders();
+  assert.equal(still.remaining,1);
+  assert.equal(still.settled,0);
+  assert.equal(db.prepare("SELECT state FROM demo_local_orders WHERE id='confirmed'").get().state,'OPEN');
+  mode='mismatch';
+  const mismatch=await trading.reconcileOpenOrders();
+  assert.equal(mismatch.settled,0);
+  assert.equal(mismatch.results[0].error,'DEMO_RECONCILE_CONTRACT_MISMATCH');
+  assert.equal(trading.getSummary().pendingOrOpen,1);
+  mode='sold';
+  const yes=await trading.reconcileOpenOrders();
+  assert.equal(yes.settled,1);
+  assert.equal(yes.remaining,0);
+  assert.equal(trading.canUpdate(),true);
+  const row=db.prepare("SELECT state,pnl_cents FROM demo_local_orders WHERE id='confirmed'").get();
+  assert.equal(row.state,'SETTLED');
+  assert.equal(row.pnl_cents,-50);
+  assert.equal(wsRequests.length,3);
+  assert.ok(wsRequests.every(x=>x.buy===undefined));
+  put.run('uncertain',at,at,'UNKNOWN','LOCAL_OWNER','R_100','PUT',100,null);
+  assert.equal((await trading.reconcileOpenOrders()).checked,0);
+  assert.equal(trading.getSummary().pendingOrOpen,1);
+  assert.equal(trading.canUpdate(),false);
+ }finally{globalThis.WebSocket=original;db.close();}
+});
