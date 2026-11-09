@@ -19,7 +19,7 @@ test('Reparador crea mantenimiento y bloquea concurrente antes de cerrar Node',(
  assert.match(src,/COMPRAS_ACTIVAS_AL_INTENTAR_CERRAR/);
  assert.match(src,/Join-Path \$source 'Cerrar-Ecopiensa\.ps1'/);
  assert.ok(src.indexOf('Set-Content -LiteralPath $maintenance')<
-  src.indexOf("Join-Path $app 'Cerrar-Ecopiensa.ps1'"));
+  src.indexOf("Join-Path $source 'Cerrar-Ecopiensa.ps1'"));
  assert.match(src,/SERVIDOR_SIGUE_ACTIVO/);
  assert.match(src,/\$copyStarted/);
  assert.match(src,/\$completed/);
