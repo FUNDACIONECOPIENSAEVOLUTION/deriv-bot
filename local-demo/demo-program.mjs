@@ -103,6 +103,19 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
     session.roundsCompleted++;
     save.run('RUNNING',now(),session.roundsCompleted,null,session.id);
     audit('DEMO_PROGRAM_PROGRESS',session.id+' rounds='+session.roundsCompleted+'/10');
+    // Cortacircuito solicitado: nunca avanzar una serie 10x10 tras una tanda
+    // de 5/5 (o peor) y P&L neto negativo. NO modifica CALL/PUT.
+    const settledRound=getReport().find(p=>p.id===session.id)
+     ?.batches.find(b=>b.batchId===burst.id);
+    if(!settledRound||settledRound.settled!==10){
+     state='HALTED';reason='DEMO_ROUND_RESULTS_NOT_VERIFIED';break;
+    }
+    if(settledRound.netCents<0&&settledRound.wins<=settledRound.losses){
+     state='PAUSED';reason='DEMO_PERFORMANCE_STOP_NEGATIVE_ROUND';
+     audit('DEMO_PERFORMANCE_STOP',burst.id+' netCents='+settledRound.netCents+
+      ' wins='+settledRound.wins+' losses='+settledRound.losses);
+     break;
+    }
     // Cada siguiente tanda requiere análisis nuevo; evita un bucle de 100
     // órdenes sin dar al motor la oportunidad de refrescar datos.
     if(i<9)await pause(betweenRoundsMs);

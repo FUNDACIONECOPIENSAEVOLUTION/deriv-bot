@@ -6,7 +6,7 @@ import {createDemoProgram} from '../demo-program.mjs';
 
 const validRisk=()=>({dailyLossStopActive:false,accountFloorStopActive:false,
  pendingOrders:0,unresolvedOrders:0,dailyRemainingRiskCents:10000});
-function setup({risk=validRisk(),state='COMPLETED',settled=10}={}){
+function setup({risk=validRisk(),state='COMPLETED',settled=10,wins=6}={}){
  const db=new DatabaseSync(':memory:');
  db.exec(`CREATE TABLE demo_bursts(id TEXT PRIMARY KEY,program_id TEXT,state TEXT,
  created_at INTEGER,count_requested INTEGER,stop_reason TEXT);
@@ -20,7 +20,7 @@ function setup({risk=validRisk(),state='COMPLETED',settled=10}={}){
    db.prepare('INSERT INTO demo_bursts(id,program_id,state,created_at,count_requested) VALUES(?,?,?,?,?)').run('b'+seq,args.programId,state,1794190000+seq,10);
    if(state==='COMPLETED'){
     const add=db.prepare('INSERT INTO demo_local_orders(id,batch_id,state,pnl_cents,stake_cents) VALUES(?,?,?,?,?)');
-    for(let i=0;i<10;i++)add.run('x'+seq+'-'+i,'b'+seq,'SETTLED',i<6?80:-100,100);
+    for(let i=0;i<10;i++)add.run('x'+seq+'-'+i,'b'+seq,'SETTLED',i<wins?80:-100,100);
    }
    return {id:'b'+seq,state:'RUNNING'};
   },
@@ -67,6 +67,35 @@ test('10 rondas DEMO se autorizan una vez y se ejecutan estrictamente en secuenc
  assert.match(csv,/programId,round,batchId/);
  assert.equal(csv.trim().split(/\r?\n/).length,11);
  assert.equal(program.canUpdate(),true);
+ db.close();
+});
+
+test('Corte automático tras tanda 5 ganadas / 5 perdidas con neto negativo',async()=>{
+ const {db,program,counts}=setup({wins:5});
+ program.start(request());
+ await done(program);
+ const row=program.status().programs[0];
+ assert.equal(row.state,'PAUSED');
+ assert.equal(row.roundsCompleted,1);
+ assert.equal(row.burstsStarted,1);
+ assert.equal(counts().seq,1);
+ assert.equal(row.wins,5);
+ assert.equal(row.losses,5);
+ assert.equal(row.netCents,-100);
+ assert.equal(row.stopReason,'DEMO_PERFORMANCE_STOP_NEGATIVE_ROUND');
+ assert.equal(program.status().realEnabled,false);
+ db.close();
+});
+test('Corte automático tras tanda 4 ganadas / 6 perdidas con neto negativo',async()=>{
+ const {db,program,counts}=setup({wins:4});
+ program.start(request());
+ await done(program);
+ const row=program.status().programs[0];
+ assert.equal(row.state,'PAUSED');
+ assert.equal(row.roundsCompleted,1);
+ assert.equal(counts().seq,1);
+ assert.equal(row.netCents,-280);
+ assert.equal(row.stopReason,'DEMO_PERFORMANCE_STOP_NEGATIVE_ROUND');
  db.close();
 });
 test('Bloqueo neto antes de iniciar impide las 100 órdenes y no crea programa',()=>{
