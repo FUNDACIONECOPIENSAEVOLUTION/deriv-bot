@@ -5,7 +5,8 @@ import {performance} from 'node:perf_hooks';
 import {diagnoseTrade} from './trade-analysis.mjs';
 import {isVolatilitySymbol} from './synthetic-catalog.mjs';
 import {captureCandleContext} from './candle-patterns.mjs';
-import {conservativeQuoteDecision} from './tick-horizon-model.mjs';
+import {conservativeQuoteDecision,isExploratoryCandidate,
+ exploratoryQuoteDecision} from './tick-horizon-model.mjs';
 
 const SYMBOLS=new Set(['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500']);
@@ -202,6 +203,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   if(modelMode==='PREDICTIVE_5_10')
    return !!s.tickHorizonModels?.some(x=>x.durationTicks===durationTicks&&
     x.direction===direction&&x.readyForProposal);
+  if(modelMode==='DEMO_EXPLORATORY_5_10')
+   return !!s.tickHorizonModels?.some(x=>x.durationTicks===durationTicks&&
+    x.direction===direction&&isExploratoryCandidate(x));
   return modelMode==='LEGACY_60_CANDLES'&&durationTicks===5&&s.direction===direction;
  }
  function riskCheck(symbol,direction,stakeCents,balanceCents,ownId=null,durationTicks=5,modelMode='LEGACY_60_CANDLES'){
@@ -224,9 +228,12 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  }
  function requestIntent({symbol,direction,stakeCents,source='LOCAL_OWNER',durationTicks=5,modelMode='LEGACY_60_CANDLES',selectionTelemetry=null}){
   if(!['LOCAL_OWNER','MCP_OWNER_REVIEW'].includes(source))throw Error('DEMO_SOURCE_INVALID');
-  if(modelMode==='PREDICTIVE_5_10'){
+  if(modelMode==='PREDICTIVE_5_10'||modelMode==='DEMO_EXPLORATORY_5_10'){
    if(![5,10].includes(durationTicks)||source!=='LOCAL_OWNER')
     throw Error('DEMO_PREDICTIVE_DURATION_INVALID');
+   // Investigación: apuesta pequena y solo autorizacion local DEMO.
+   if(modelMode==='DEMO_EXPLORATORY_5_10'&&stakeCents>100)
+    throw Error('DEMO_EXPLORATORY_MAX_1USD');
   }else if(modelMode!=='LEGACY_60_CANDLES'||durationTicks!==5)
    throw Error('DEMO_LEGACY_DURATION_INVALID');
   const a=getAccount();
@@ -235,19 +242,22 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   if(unknown.get().n>0)throw Error('DEMO_UNKNOWN_BUY_REQUIRES_RECONCILIATION');
   if(active.get().n>=MAX_CONCURRENT)throw Error('DEMO_CONCURRENCY_LIMIT');
   riskCheck(symbol,direction,stakeCents,cents(a.balance),null,durationTicks,modelMode);
-  const prediction=modelMode==='PREDICTIVE_5_10'?
+  const predictive=modelMode==='PREDICTIVE_5_10'||modelMode==='DEMO_EXPLORATORY_5_10';
+  const prediction=predictive?
    marketSnapshot(symbol)?.tickHorizonModels?.find(x=>x.durationTicks===durationTicks&&
-    x.direction===direction&&x.readyForProposal):null;
-  if(modelMode==='PREDICTIVE_5_10'&&!prediction)throw Error('DEMO_PREDICTIVE_EVIDENCE_MISSING');
+    x.direction===direction&&(modelMode==='PREDICTIVE_5_10'?
+     x.readyForProposal:isExploratoryCandidate(x))):null;
+  if(predictive&&!prediction)throw Error('DEMO_PREDICTIVE_EVIDENCE_MISSING');
   const id=randomUUID();
   insert.run(id,epoch(),epoch(),'PENDING_APPROVAL',source,symbol,direction,stakeCents,
-   getVersion(),prediction?'TICK_HORIZON_5_10_WALK_FORWARD_V1':STRATEGY_VERSION,
+   getVersion(),prediction?(modelMode==='DEMO_EXPLORATORY_5_10'?
+    'TICK_HORIZON_5_10_EXPLORATORY_DEMO_V1':'TICK_HORIZON_5_10_WALK_FORWARD_V1'):STRATEGY_VERSION,
    durationTicks,modelMode,prediction?.selectedPolicy||null,
    prediction?.conservativeWinRateLower95??null);
   const receivedAtMs=Date.now();
   purchasedAt.run(receivedAtMs,id);
   // La entrega entre analizador y ejecutor es LOCAL (no red).
-  const selection=modelMode==='PREDICTIVE_5_10'&&source==='LOCAL_OWNER'?
+  const selection=predictive&&source==='LOCAL_OWNER'?
    selectionTelemetry:null;
   const metric=x=>Number.isFinite(x)&&x>=0?x:null;
   const elapsed=(end,start)=>Number.isFinite(end)&&Number.isFinite(start)&&
@@ -375,20 +385,26 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
      throw Error('DEMO_QUOTE_INVALID');
    if(performance.now()-t>2000||!signalValid(row.symbol,row.direction,
     row.duration_ticks||5,row.prediction_mode||'LEGACY_60_CANDLES'))throw Error('DEMO_QUOTE_STALE');
-   if(row.prediction_mode==='PREDICTIVE_5_10'){
+   if(row.prediction_mode==='PREDICTIVE_5_10'||
+      row.prediction_mode==='DEMO_EXPLORATORY_5_10'){
     const latest=marketSnapshot(row.symbol);
     const model=latest?.tickHorizonModels?.find(x=>x.durationTicks===row.duration_ticks&&
-     x.direction===row.direction&&x.readyForProposal&&
+     x.direction===row.direction&&
      x.selectedPolicy===row.prediction_policy);
-    const decision=conservativeQuoteDecision(model,price,Number(proposal.payout));
-    if(!decision.approved)throw Error('DEMO_PREDICTIVE_NO_QUOTED_EDGE');
-    recordPredictionQuote.run(decision.expectedNetReturnLower,id);
+    const exploratory=row.prediction_mode==='DEMO_EXPLORATORY_5_10';
+    const decision=exploratory?
+     exploratoryQuoteDecision(model,price,Number(proposal.payout)):
+     conservativeQuoteDecision(model,price,Number(proposal.payout));
+    if(!decision.approved)throw Error(exploratory?
+     'DEMO_EXPLORATORY_NO_OBSERVED_EDGE':'DEMO_PREDICTIVE_NO_QUOTED_EDGE');
+    recordPredictionQuote.run(exploratory?
+     decision.observedNetReturn:decision.expectedNetReturnLower,id);
    }
    // Congelar el contexto de 20 velas cerradas ANTES de que se envíe BUY.
    // Se almacena incluso si posteriormente se pierde el acuse del broker.
    const observed=marketSnapshot(row.symbol);
    const candleContext=captureCandleContext(observed,{count:20,atMs:Date.now()});
-   if(row.prediction_mode==='PREDICTIVE_5_10'&&!candleContext)
+   if(['PREDICTIVE_5_10','DEMO_EXPLORATORY_5_10'].includes(row.prediction_mode)&&!candleContext)
     throw Error('DEMO_PREDICTIVE_CONTEXT_MISSING');
    if(candleContext)recordCandleContext.run(JSON.stringify(candleContext),
     candleContext.capturedAtMs,'CANDLE_CONTEXT_V1',id);
