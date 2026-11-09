@@ -251,9 +251,12 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
      if(recorded.settled!==settled){
       state='HALTED';reason='PROFIT_LOCK_SETTLEMENT_NOT_VERIFIED';break;
      }
-     // No abrir otra compra cuya perdida completa pudiese superar
-     // el limite de la tanda, aunque el resultado actual aun sea verde.
-     if(recorded.netCents-batch.stakeCents< -batch.lossCapCents){
+     // En el perfil TAKE_PROFIT_OR_TEN, lossCapCents=0:
+     // el resultado de esta tanda NO bloquea un nuevo BUY dentro de
+     // las diez compras. Los limites diarios, el saldo y UNKNOWN
+     // siguen protegiendo cada operacion.
+     if(batch.lossCapCents>0&&
+      recorded.netCents-batch.stakeCents< -batch.lossCapCents){
       state='PAUSED';reason='BATCH_LOSS_BUDGET_INSUFFICIENT';break;
      }
     }
@@ -341,20 +344,26 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
       audit('DEMO_PROFIT_LOCK',batch.id+' settled='+settled+' netCents='+verified.netCents);
       break;
      }
-     if(verified.netCents<=-batch.lossCapCents){
+     if(batch.lossCapCents>0&&verified.netCents<=-batch.lossCapCents){
       state='PAUSED';reason='BATCH_LOSS_CAP_REACHED';
       audit('DEMO_BATCH_LOSS_CAP',batch.id+' netCents='+verified.netCents);
       break;
      }
      if(executed===batch.count){
-      state='PAUSED';reason='BATCH_GREEN_TARGET_NOT_REACHED';break;
+      // La tanda termina en su 10a compra aunque este en rojo.
+      // No se reintentan mas BUY para convertirla en verde.
+      state='COMPLETED';reason='TEN_BUYS_REACHED_WITHOUT_TARGET';
+      audit('DEMO_TEN_BUYS_LIMIT',batch.id+' settled='+settled+
+       ' netCents='+verified.netCents);break;
      }
     }
     if(executed<batch.count)await pause(researchProgram&&safeRejects?
      Math.max(1500,scanPauseMs):350);
    }
    if(state==='RUNNING')state=executed===batch.count?'COMPLETED':'PAUSED';
-   if(state==='COMPLETED'&&reason!=='TAKE_PROFIT_REACHED')reason=null; // Preservar cierre anticipado.
+   if(state==='COMPLETED'&&
+    !['TAKE_PROFIT_REACHED','TEN_BUYS_REACHED_WITHOUT_TARGET'].includes(reason))
+    reason=null; // Conservar el cierre verde o agotamiento de diez compras.
    if(state==='PAUSED'&&!reason)reason='SAFE_MAX_ATTEMPTS_REACHED';
   }catch(e){
    state='HALTED';
@@ -376,7 +385,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    throw Error('DEMO_EXPLORATORY_MAX_1USD');
   if(profitTargetCents!==0){
    if(!programId||![50,100,150].includes(profitTargetCents)||
-    lossCapCents!==200||concurrency!==1||stakeCents!==100||count!==10||
+    ![0,200].includes(lossCapCents)||concurrency!==1||stakeCents!==100||count!==10||
     !['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
     throw Error('DEMO_PROFIT_LOCK_PARAMETERS_INVALID');
   }else if(lossCapCents!==0)throw Error('DEMO_PROFIT_LOCK_PARAMETERS_INVALID');
