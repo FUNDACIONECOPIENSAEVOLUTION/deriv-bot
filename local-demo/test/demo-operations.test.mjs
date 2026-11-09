@@ -298,10 +298,21 @@ test('Programa DEMO reintenta rechazos sin ejecutar compra y obtiene 10 liquidac
  const calls=[],trading={canUpdate:()=>true,
   getRiskStatus:()=>({dailyLossStopActive:false,accountFloorStopActive:false,
    pendingOrders:0,unresolvedOrders:0,dailyRemainingRiskCents:10000}),
-  requestIntent:x=>(calls.push(x),{id:'test-'+calls.length}),markBatch:()=>{},
-  approve:async id=>Number(id.replace('test-',''))<=2?
-   {state:'REJECTED',brokerOrders:0,error:'DEMO_SIGNAL_STALE_OR_CONTRARY'}:
-   {state:'SETTLED',brokerOrders:1}
+  requestIntent:x=>{
+   calls.push(x);const id='test-'+calls.length;
+   db.prepare('INSERT INTO demo_local_orders(id,state) VALUES(?,?)').run(id,'PENDING');
+   return {id};
+  },
+  markBatch:(id,batchId)=>db.prepare(
+   'UPDATE demo_local_orders SET batch_id=? WHERE id=?').run(batchId,id),
+  approve:async id=>{
+   const rejected=Number(id.replace('test-',''))<=2;
+   db.prepare('UPDATE demo_local_orders SET state=?,pnl_cents=? WHERE id=?')
+    .run(rejected?'REJECTED':'SETTLED',rejected?null:88,id);
+   return rejected?
+    {state:'REJECTED',brokerOrders:0,error:'DEMO_SIGNAL_STALE_OR_CONTRARY'}:
+    {state:'SETTLED',brokerOrders:1};
+  }
  };
  let tick=0;
  const model={durationTicks:5,direction:'CALL',selectedPolicy:'MOMENTUM_5',
@@ -324,7 +335,7 @@ test('Programa DEMO reintenta rechazos sin ejecutar compra y obtiene 10 liquidac
  assert.equal(b.state,'COMPLETED');
  assert.equal(b.settled,10);
  assert.equal(calls.length,12);
- assert.equal(b.rejected,0); // fixture no persiste rechazos; la ejecución los descuenta
+ assert.equal(b.rejected,2); // solo fueron rechazos previos al BUY
  assert.ok(calls.every(x=>x.durationTicks===5&&x.stakeCents===100));
  db.close();
 });
