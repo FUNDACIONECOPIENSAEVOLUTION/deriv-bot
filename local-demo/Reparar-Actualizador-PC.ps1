@@ -29,7 +29,7 @@ New-Item -ItemType Directory -Path $tempRoot -Force | Out-Null
 $env:TEMP=$tempRoot;$env:TMP=$tempRoot
 $work=Join-Path $tempRoot ('EcopiensaPC-Reparar-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
-$stopped=$false;$installed=$false;$backup=''
+$stopped=$false;$installed=$false;$copyStarted=$false;$shutdownAttempted=$false;$completed=$false;$wasServerHealthy=$false;$backup=''
 $maintenance=Join-Path $data 'actualizacion-en-curso.flag'
 $runningFlag=Join-Path $data 'ejecucion-habilitada.flag'
 $wasRunningEnabled=Test-Path -LiteralPath $runningFlag
@@ -88,15 +88,17 @@ try{
    Write-Host 'Servidor sin órdenes abiertas; actualización permitida.' -ForegroundColor Green
   }else{throw 'EXISTEN_COMPRAS_PENDIENTES_O_NO_SE_PUDO_VERIFICAR_SEGURIDAD'}
  }else{
-  $pidPath=Join-Path $data 'servidor.pid'
-  if(Test-Path $pidPath){
-   try{
-    $pidValue=[int]((Get-Content $pidPath -Raw).Trim())
-    $running=Get-CimInstance Win32_Process -Filter "ProcessId=$pidValue" -ErrorAction SilentlyContinue
-    if($running -and $running.Name -match '^node(\.exe)?$' -and $running.CommandLine -match 'local-demo[/\\]server\.mjs'){throw 'NODE_SIGUE_ABIERTO_PERO_SIN_RESPUESTA_CERRAR_ANTES'}
-   }catch{if($_.Exception.Message -match 'NODE_SIGUE_ABIERTO'){throw}}
+  # No depender de servidor.pid cuando /health no responde: buscar el proceso
+  # exacto, sin interferir con los servidores Node de otros proyectos.
+  $scriptPath=[System.IO.Path]::GetFullPath((Join-Path $app 'server.mjs'))
+  $scriptPattern='(?:^|\s|")'+[regex]::Escape($scriptPath)+'(?=$|\s|")'
+  $nodeInstances=@(Get-CimInstance -ClassName Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop |
+   Where-Object {$_.CommandLine -and $_.CommandLine -match $scriptPattern})
+  if($nodeInstances.Count -gt 0){
+   throw 'NODE_SIGUE_ABIERTO_PERO_SIN_RESPUESTA_CERRAR_ANTES'
   }
  }
+ $wasServerHealthy=[bool]$health
  $backup=Join-Path $Ruta ('copias-privadas-codigo\antes_actualizar_'+$remote+'_'+(Get-Date -Format 'yyyyMMdd_HHmmss'))
  New-Item -ItemType Directory -Path $backup -Force | Out-Null
  foreach($file in Get-ChildItem -LiteralPath $app -Recurse -File -Force){
@@ -128,6 +130,7 @@ try{
   if($currentHealth.safeToUpdate -ne $true){
    throw 'COMPRAS_ACTIVAS_AL_INTENTAR_CERRAR'
   }
+  $shutdownAttempted=$true
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Cerrar-Ecopiensa.ps1') -Ruta $Ruta
   if($LASTEXITCODE -ne 0){throw 'NO_PUDO_CERRAR_ECOPIENSA'}
   for($i=0;$i -lt 30;$i++){
@@ -139,6 +142,7 @@ try{
   catch{if($_.Exception.Message -eq 'SERVIDOR_SIGUE_ACTIVO'){throw}}
  }
  $stopped=$true
+ $copyStarted=$true
  foreach($file in Get-ChildItem -LiteralPath $source -Recurse -File -Force){
   $relative=$file.FullName.Substring($source.Length).TrimStart('\')
   if($relative -match '^(data|node_modules|\.git)(\\|$)'){throw 'DATA_EN_PAQUETE_PROHIBIDA'}
@@ -166,10 +170,11 @@ try{
  if($tasksReady){Write-Host 'Tareas automáticas registradas de forma oculta.' -ForegroundColor Green}
  else{Write-Warning 'Tareas automáticas NO registradas; puedes abrir Ecopiensa manualmente, pero no habrá vigilancia programada.'}
  Write-Host ('Registro de tareas: '+(Join-Path $data 'tareas-ocultas.log'))
+ $completed=$true
 }catch{
  $message=$_.Exception.Message
  Write-Warning ('Actualización interrumpida: '+$message)
- if($stopped -and $installed -and $backup){
+ if($stopped -and $copyStarted -and $backup){
   Write-Warning 'Se detectó un problema tras reemplazar el código. Se restauran los archivos anteriores.'
   foreach($file in Get-ChildItem -LiteralPath $backup -Recurse -File){
    $relative=$file.FullName.Substring($backup.Length).TrimStart('\')
@@ -191,10 +196,19 @@ try{
    catch{Write-Warning ('No se pudo rehabilitar '+$taskName+'; ejecutar Reparar-Tareas-PC.ps1 como administrador.')}
   }
  }
- # Si falló tras cerrar el programa, recuperar el servidor anterior sin compras.
- if(-not $installed -and $stopped -and $wasRunningEnabled){
-  Set-Content -LiteralPath $runningFlag -Value 'ACTIVO' -Encoding Ascii
-  try{& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Vigilar-Ecopiensa.ps1') -Ruta $Ruta | Out-Null}catch{}
+ # Si se detuvo Node pero hubo un error, restaurar el servicio previo.
+ # Comprobar /health para evitar iniciar un segundo servidor en el puerto 8765.
+ if(-not $completed -and $shutdownAttempted -and $wasServerHealthy){
+  $serverAlive=$false
+  try{
+   $check=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 2
+   $serverAlive=($check.ok -eq $true)
+  }catch{}
+  if(-not $serverAlive){
+   Set-Content -LiteralPath $runningFlag -Value 'ACTIVO' -Encoding Ascii
+   try{& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Vigilar-Ecopiensa.ps1') -Ruta $Ruta | Out-Null}
+   catch{Write-Warning 'No se pudo recuperar el servicio. Revisar servidor-stderr.log en la carpeta privada data.'}
+  }
  }
  if($mutexAcquired){$updateMutex.ReleaseMutex()}
  $updateMutex.Dispose()
