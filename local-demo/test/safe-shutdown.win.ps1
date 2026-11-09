@@ -20,6 +20,12 @@ try {
  if(-not (Get-Process -Id $ecopiensaProcess.Id -ErrorAction SilentlyContinue)){throw 'TEST_ECOPIENSA_NO_INICIO'}
  if(-not (Get-Process -Id $otherProcess.Id -ErrorAction SilentlyContinue)){throw 'TEST_AJENO_NO_INICIO'}
  if(Test-Path (Join-Path $data 'servidor.pid')){throw 'TEST_PID_DEBE_ESTAR_AUSENTE'}
+ $procs=@(Get-CimInstance -ClassName Win32_Process -Filter "Name='node.exe'" |
+  Where-Object { $_.ProcessId -in @($ecopiensaProcess.Id,$otherProcess.Id) })
+ foreach($p in $procs){
+  Write-Host ('CI_NODE_PROCESS id='+$p.ProcessId+' cmd='+$p.CommandLine)
+ }
+ Write-Host ('CI_EXPECTED_SCRIPT='+[System.IO.Path]::GetFullPath($target))
  & (Join-Path $PSScriptRoot '..\Cerrar-Ecopiensa.ps1') -Ruta $root
  if($LASTEXITCODE -and $LASTEXITCODE -ne 0){throw 'CIERRE_REGRESO_ERROR'}
  Start-Sleep -Milliseconds 500
