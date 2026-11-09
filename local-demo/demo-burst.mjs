@@ -64,13 +64,14 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  if(!fields.has('app_version'))db.exec('ALTER TABLE demo_bursts ADD COLUMN app_version TEXT');
  if(!fields.has('strategy_version'))db.exec('ALTER TABLE demo_bursts ADD COLUMN strategy_version TEXT');
  if(!fields.has('inspection_json'))db.exec('ALTER TABLE demo_bursts ADD COLUMN inspection_json TEXT');
- const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent,app_version,strategy_version) VALUES(?,?,?,?,?,?,?,?,?,?)');
+ if(!fields.has('program_id'))db.exec('ALTER TABLE demo_bursts ADD COLUMN program_id TEXT');
+ const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent,app_version,strategy_version,program_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)');
  const update=db.prepare('UPDATE demo_bursts SET state=?,updated_at=?,completed=?,stop_reason=? WHERE id=?');
  const saveInspection=db.prepare('UPDATE demo_bursts SET inspection_json=? WHERE id=?');
  // Totales durables desde TODAS las órdenes SQLite de cada tanda (sin límite de 60 filas UI).
  const latest=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.state,
  b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,b.concurrent,
- b.app_version AS appVersion,b.strategy_version AS strategyVersion,
+ b.app_version AS appVersion,b.strategy_version AS strategyVersion,b.program_id AS programId,
  b.completed,b.stop_reason AS stopReason,b.inspection_json AS inspectionJson,
  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
@@ -85,7 +86,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  GROUP BY b.id ORDER BY b.created_at DESC,b.id DESC LIMIT 12`);
  const allBatches=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.updated_at AS updatedAt,
  b.state,b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,
- b.concurrent,b.app_version AS appVersion,b.strategy_version AS strategyVersion,
+ b.concurrent,b.app_version AS appVersion,b.strategy_version AS strategyVersion,b.program_id AS programId,
  b.stop_reason AS stopReason,b.inspection_json AS inspectionJson,
  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
@@ -196,7 +197,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    if(active?.id===batch.id)active=null;
   }
  }
- function start({count,stakeCents,symbol,confirmation,concurrency=1}){
+ function start({count,stakeCents,symbol,confirmation,concurrency=1,programId=null,usedCandleEpoch=null}){
   if(confirmation!=='CONFIRMAR TANDA DEMO')throw Error('DEMO_BURST_APPROVAL_REQUIRED');
   if(!Number.isSafeInteger(count)||count<1||count>10||
    !Number.isSafeInteger(concurrency)||concurrency<1||concurrency>Math.min(count,MAX_PARALLEL)||
@@ -212,8 +213,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(risk?.dailyLossStopActive)throw Error('DEMO_DAILY_NET_LOSS_STOP');
   if(risk?.accountFloorStopActive)throw Error('DEMO_LOSS_STOP_100USD');
   if(risk&&risk.dailyRemainingRiskCents<stakeCents)throw Error('DEMO_DAILY_NET_LOSS_EXPOSURE');
-  const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,inFlight:0,stopRequested:false,usedCandleEpoch:new Map()};
-  insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,getVersion(),getStrategyVersion());
+  const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,inFlight:0,stopRequested:false,usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
+  insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,getVersion(),getStrategyVersion(),programId);
   active=batch;
   audit('DEMO_BURST_AUTHORIZED','Count '+count+' stake '+stakeCents+' DEMO only');
   void run(batch);
@@ -229,7 +230,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  }
  function exportBatchesCsv(){
   const headers=['id','createdAt','updatedAt','appVersion','strategyVersion',
-   'state','requested','executed','settled','rejected','wins','losses','netCents',
+   'state','requested','executed','settled','rejected','wins','losses','netCents','programId',
    'stopReason','inspection'];
   const safe=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
   return '\uFEFF'+headers.join(',')+'\r\n'+allBatches.all().map(raw=>{

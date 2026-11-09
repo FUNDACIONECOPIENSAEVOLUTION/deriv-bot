@@ -47,6 +47,18 @@
   <p><small>La herramienta MCP instalada en este PC permite consultar señales, balance e historial y crear una <b>solicitud</b> de compra. ChatGPT no puede completar una compra automáticamente: se exige confirmación local y autenticación a través del túnel MCP seguro.</small></p>
   <div class="warning">Solo entrenamiento DEMO; los importes altos son opcionales y no tienen ventaja estadística. Sin acceso a REAL ni retiros.</div>
  </section>
+ <section id="program-panel"><h2>Programa DEMO de investigación · 10 × 10</h2>
+ <p>Una autorización local permite hasta <b>10 tandas consecutivas</b> de 10 compras DEMO de US$1, con máximo 5 contratos simultáneos. Total máximo de apuestas: US$100, <b>no una promesa de ganar</b>. Cada tanda debe terminar y liquidarse antes de iniciar la siguiente. Ante bloqueo, ausencia de señal, contratos inciertos o pérdidas, el programa se detiene sin reanudarse solo.</p>
+ <div class="actions">
+  <button id="program-start">Autorizar 10 tandas DEMO · 10 compras de US$1</button>
+  <button id="program-stop" class="outline" disabled>Detener programa después de ola en curso</button>
+  <button id="program-refresh" class="outline">Revisar 10 × 10</button>
+ </div>
+ <p id="program-status" class="msg">Sin programa autorizado.</p>
+ <div class="table-wrap"><table><thead><tr><th>ID</th><th>Estado</th><th>Tandas completas</th><th>Compras ejecutadas</th><th>Neto liquidado</th><th>Motivo de parada</th></tr></thead>
+ <tbody id="program-history"><tr><td colspan="6">No hay programas DEMO.</td></tr></tbody></table></div>
+ <p class="warning">Esta función solo opera la cuenta DEMO desde este PC. No implica acceso remoto de ChatGPT, no habilita REAL y no supera límites de riesgo. La estrategia sigue siendo experimental; los resultados se registran para evaluar el aprendizaje.</p>
+ </section>
  <section id="burst-panel"><h2>6. Tandas DEMO autorizadas — sin límite global</h2>
  <p>Selecciona de 1 a 10 compras DEMO (presupuesto máximo US$100 por tanda) y hasta 5 simultáneas. AUTO evalúa índices disponibles, 60 velas y tendencia. Puedes iniciar todas las tandas consecutivas que autorices. El control diario se calcula con la pérdida NETA de las compras liquidadas (US$100); las ganancias compensan las pérdidas del mismo día UTC. Si no hay señal fiable, espera; siguen vigentes los límites de riesgo y simultaneidad. Nunca opera REAL.</p>
  <div class="actions">

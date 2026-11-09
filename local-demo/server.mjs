@@ -11,6 +11,7 @@ import {spawn} from 'node:child_process';
 import {dispatchMcp} from './mcp-local.mjs';
 import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
+import {createDemoProgram} from './demo-program.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
 import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
 import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
@@ -313,6 +314,7 @@ const bursts=createDemoBurst({
   put('account',a);return a;
  },getAccount:()=>get('account'),audit
 });
+const program=createDemoProgram({db,bursts,trading,audit});
 const isMaintenance=()=>existsSync(join(DATA,'actualizacion-en-curso.flag'));
 const mcpHandlers={
  version:()=>localVersion(),
@@ -320,7 +322,7 @@ const mcpHandlers={
  signals:()=>[...market.values()].map(snapshot),
  training:()=>readTraining(trainingFile),
  orders:()=>trading.getSummary(),
- request:args=>{if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});}
+ request:args=>{if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');if(program.isRunning())throw Error('DEMO_PROGRAM_IN_PROGRESS');return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});}
 };
 let server;
 server=http.createServer(async(req,res)=>{
@@ -338,6 +340,7 @@ server=http.createServer(async(req,res)=>{
    if(req.method==='GET'&&path==='/api/demo/orders')return answer(res,200,trading.getSummary());
    if(req.method==='GET'&&path==='/api/demo/risk')return answer(res,200,trading.getRiskStatus());
    if(req.method==='GET'&&path==='/api/demo/burst/status')return answer(res,200,bursts.status());
+   if(req.method==='GET'&&path==='/api/demo/program/status')return answer(res,200,program.status());
    if(req.method==='GET'&&path==='/api/demo/burst-history.csv'){
     res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
      'X-Content-Type-Options':'nosniff',
@@ -364,7 +367,7 @@ server=http.createServer(async(req,res)=>{
     if(rpc===null){res.writeHead(202,{'Cache-Control':'no-store'});res.end();return;}
     return answer(res,200,rpc);
    }
-  if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
+  if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate()&&program.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
   if(req.method==='GET'&&path==='/api/status')return answer(res,200,{...status(),marketConnected:publicConnected,marketError:publicLastError});
    if(req.method==='GET'&&path==='/api/market/diagnostic')return answer(res,200,marketDiagnosis());
   if(req.method==='GET'&&path==='/api/markets')return answer(res,200,{connected:publicConnected,error:publicLastError,
@@ -416,7 +419,8 @@ server=http.createServer(async(req,res)=>{
   if(path==='/api/demo/refresh')return answer(res,200,await refreshBalance());
   if(path==='/api/demo/quote')return answer(res,200,await quoteDemo(b));
   if(path==='/api/demo/profit')return answer(res,200,await recentProfit());
-   if(isMaintenance()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start'].includes(path))throw Error('LOCAL_UPDATE_IN_PROGRESS');
+   if(isMaintenance()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start','/api/demo/program/start'].includes(path))throw Error('LOCAL_UPDATE_IN_PROGRESS');
+   if(program.isRunning()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start'].includes(path))throw Error('DEMO_PROGRAM_IN_PROGRESS');
    if(path==='/api/demo/intent')return answer(res,200,trading.requestIntent({
     symbol:String(b.symbol||''),direction:String(b.direction||''),stakeCents:Number(b.stakeCents),source:'LOCAL_OWNER'}));
    if(path==='/api/demo/confirm')return answer(res,200,await trading.approve(String(b.id||''),String(b.confirmation||'')));
@@ -425,10 +429,15 @@ server=http.createServer(async(req,res)=>{
    if(path==='/api/demo/burst/start')return answer(res,200,bursts.start({
     count:b.count,stakeCents:b.stakeCents,symbol:b.symbol,concurrency:b.concurrency,confirmation:b.confirmation
    }));
-   if(path==='/api/demo/burst/stop')return answer(res,200,bursts.stop());
+   if(path==='/api/demo/burst/stop')return answer(res,200,program.isRunning()?program.stop():bursts.stop());
+   if(path==='/api/demo/program/start')return answer(res,200,program.start({
+    rounds:b.rounds,perRound:b.perRound,stakeCents:b.stakeCents,
+    concurrency:b.concurrency,symbol:b.symbol,confirmation:b.confirmation
+   }));
+   if(path==='/api/demo/program/stop')return answer(res,200,program.stop());
    if(path==='/api/system/update-now'){
     // Solo una acción local, sin comandos arbitrarios; no interrumpir contratos DEMO.
-    if(!trading.canUpdate()||!bursts.canUpdate())throw Error('DEMO_OPERATIONS_PENDING');
+    if(!trading.canUpdate()||!bursts.canUpdate()||!program.canUpdate())throw Error('DEMO_OPERATIONS_PENDING');
     if(process.platform!=='win32')throw Error('UPDATE_ONLY_WINDOWS');
     const helper=join(HOME,'Tarea-Oculta.vbs'),root=dirname(HOME);
     const wscript=join(process.env.WINDIR||'C:\\Windows','System32','wscript.exe');

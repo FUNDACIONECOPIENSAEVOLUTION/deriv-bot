@@ -199,6 +199,62 @@ async function showAdaptiveLearning(){
   }
  }catch(e){$('learning-status').textContent='Aprendizaje no disponible: '+e.message;}
 }
+async function updateDemoProgram(){
+ try{
+  const p=await get('/api/demo/program/status');
+  const b=await get('/api/demo/burst/status');
+  const current=p.programs?.[0]||null;
+  const blocked=!!b.risk?.dailyLossStopActive||!!b.risk?.accountFloorStopActive||
+   !!b.risk?.pendingOrders||!!b.risk?.unresolvedOrders;
+  $('program-start').disabled=!!p.running||!!b.running||blocked;
+  $('program-stop').disabled=!p.running;
+  $('program-status').textContent=p.running?
+   'Programa DEMO autorizado en curso · tanda '+(p.round||1)+' de 10. '+
+   'Siguiente tanda solo tras liquidación y revisión del riesgo.':
+   current?'Último programa: '+current.state+' · tandas completadas '+
+    current.roundsCompleted+'/10 · '+(current.stopReason||'sin errores registrados'):
+    'Sin programa DEMO. Autoriza localmente una secuencia de hasta 100 contratos.';
+  const tbody=$('program-history');tbody.replaceChildren();
+  for(const x of p.programs||[]){
+   const tr=document.createElement('tr');
+   [x.id.slice(0,8),x.state,x.roundsCompleted+' / '+x.roundsRequested,
+    x.purchasesExecuted,signedCents(x.netCents),x.stopReason||'—'].forEach((value,i)=>{
+     const td=document.createElement('td');td.textContent=value;
+     if(i===4)td.className=x.netCents<0?'down':x.netCents>0?'up':'';
+     tr.appendChild(td);
+   });tbody.appendChild(tr);
+  }
+  if(!tbody.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=6;td.textContent='Aún no se ha autorizado ningún programa.';
+   tr.appendChild(td);tbody.appendChild(tr);
+  }
+ }catch(e){$('program-status').textContent='Programa DEMO no disponible: '+e.message;}
+}
+$('program-start').onclick=async()=>{
+ $('program-start').disabled=true;
+ $('program-status').textContent='Registrando autorización DEMO 10×10 desde este panel...';
+ try{
+  const r=await post('/api/demo/program/start',{
+   rounds:10,perRound:10,stakeCents:100,symbol:'AUTO',concurrency:5,
+   confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'
+  });
+  $('program-status').textContent='Programa '+r.id.slice(0,8)+
+   ' autorizado solo para DEMO · hasta 100 compras de US$1. No se activará cuenta REAL.';
+ }catch(e){$('program-status').textContent='Programa no iniciado: '+e.message;}
+ await updateDemoProgram();
+};
+$('program-stop').onclick=async()=>{
+ try{
+  const r=await post('/api/demo/program/stop',{});
+  $('program-status').textContent=r.stopped?
+   'Parada solicitada. Los contratos en curso se concilian y no habrá nuevas tandas.':
+   'No hay un programa activo.';
+ }catch(e){$('program-status').textContent='No se pudo detener: '+e.message;}
+ await updateDemoProgram();
+};
+$('program-refresh').onclick=updateDemoProgram;
+
 async function updateBurstPanel(){
  try{
   const [b,d]=await Promise.all([get('/api/demo/burst/status'),get('/api/demo/orders')]);
@@ -445,10 +501,10 @@ $('pat-connect').onclick=async()=>{
 $('refresh').onclick=async()=>{try{setMessage('Consultando saldo en Deriv...');await post('/api/demo/refresh',{});await poll();setMessage('Saldo DEMO consultado oficialmente.');}catch(e){setMessage(e.message);}};
 $('history').onclick=async()=>{try{setMessage('Consultando los últimos contratos oficiales...');const d=await post('/api/demo/profit',{});const t=d.trades||[];$('trades').innerHTML='<p>'+t.length+' registros obtenidos de Deriv (consulta sin comprar).</p><div style="overflow-x:auto"><table><thead><tr><th>Contrato</th><th>Mercado</th><th>P&L</th></tr></thead><tbody>'+t.slice(0,30).map(x=>'<tr><td>'+escapeText(x.contractId)+'</td><td>'+escapeText(x.symbol)+'</td><td>'+usd(x.profit)+'</td></tr>').join('')+'</tbody></table></div>';setMessage('Consulta terminada.');}catch(e){setMessage(e.message);}};
 $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando propuesta (sin comprar)...';const r=await post('/api/demo/quote',{symbol:$('quote-symbol').value,direction:$('quote-dir').value,stake:Number($('quote-stake').value)});$('quote-message').textContent='Deriv: apuesta '+usd(r.askPrice)+' · pago posible '+usd(r.payout)+' · latencia propuesta '+r.proposalRttMs+' ms. NINGUNA COMPRA.';}catch(e){$('quote-message').textContent=e.message;}};
-(async()=>{await poll();await showDemoOrders();await updateBurstPanel();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
+(async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
- setInterval(poll,15000);setInterval(showDemoOrders,15000);setInterval(updateBurstPanel,4000);
+ setInterval(poll,15000);setInterval(showDemoOrders,15000);setInterval(updateBurstPanel,4000);setInterval(updateDemoProgram,4000);
  await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
  await showQualityAudit();setInterval(showQualityAudit,20000);
  async function diagnose(){
