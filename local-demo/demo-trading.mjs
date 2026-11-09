@@ -69,9 +69,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  const csvList=db.prepare(listSql);
  const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents,app_version,strategy_version) VALUES(?,?,?,?,?,?,?,?,?,?)');
  const change=db.prepare('UPDATE demo_local_orders SET state=?,updated_at=?,error_code=? WHERE id=?');
- const recordBuy=db.prepare("UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=?,candle_open=?,candle_high=?,candle_low=?,candle_close=?,candle_epoch=?,projected_next_tick=?,projection_model_mae=?,projection_naive_mae=?,
+ const recordBuy=db.prepare(`UPDATE demo_local_orders SET state='OPEN',updated_at=?,contract_id=?,buy_cents=?,bought_at_ms=?,proposal_latency_ms=?,buy_latency_ms=?,signal_age_ms=?,signal_rsi=?,signal_sma_fast=?,signal_sma_slow=?,signal_ema20=?,signal_ema50=?,signal_atr14=?,signal_momentum5=?,signal_strength=?,proposal_payout_cents=?,signal_quote=?,candle_open=?,candle_high=?,candle_low=?,candle_close=?,candle_epoch=?,projected_next_tick=?,projection_model_mae=?,projection_naive_mae=?,
    signal_five_tick_momentum=?,signal_tick_rsi14=?,five_tick_study_hit_rate=?,
-   five_tick_study_n=?,signal_snapshot_epoch=?,signal_reason=? WHERE id=?");
+   five_tick_study_n=?,signal_snapshot_epoch=?,signal_reason=? WHERE id=?`);
  const markBatch=db.prepare("UPDATE demo_local_orders SET batch_id=? WHERE id=?");
  const purchasedAt=db.prepare("UPDATE demo_local_orders SET created_at_ms=? WHERE id=?");
  const recordSettlement=db.prepare("UPDATE demo_local_orders SET state='SETTLED',updated_at=?,pnl_cents=?,settled_at_ms=?,entry_tick=COALESCE(?,entry_tick),exit_tick=COALESCE(?,exit_tick),entry_tick_epoch=COALESCE(?,entry_tick_epoch),exit_tick_epoch=COALESCE(?,exit_tick_epoch) WHERE id=?");
