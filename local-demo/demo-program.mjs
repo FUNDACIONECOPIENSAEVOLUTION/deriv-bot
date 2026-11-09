@@ -234,12 +234,13 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
    round:0,roundsCompleted:0,stopRequested:false,
    usedCandleEpoch:new Map()};
   current=session;
-  audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS
+  audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10 stakeCents='+stakeCents+' '+mode+
    ' continueNegative='+continueAfterNegativeRound+
    ' profitTargetCents='+profitTargetCents+' lossCapCents='+lossCapCents+
    ' roundPolicy='+exitPolicy+'_OR_TEN'+
    ' effectiveConcurrency='+actualConcurrency+
-   ' globalProtection='+globalProtection+' downshift='+downshiftAfterTwoLosses+' DEMO ONLY');
+   ' globalProtection='+globalProtection+
+   ' downshiftAfterTwoLosses='+downshiftAfterTwoLosses+' DEMO_ONLY');
   void run(session);
   return {id,state:'RUNNING',mode,continueAfterNegativeRound,
    profitTargetCents,lossCapCents,exitPolicy,globalProtection,downshiftAfterTwoLosses,
@@ -261,39 +262,6 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
    ...b,continueOnNegativeRound:p.continueOnNegativeRound,
    profitTargetCents:p.profitTargetCents,lossCapCents:p.lossCapCents,
    exitPolicy:p.exitPolicy,globalProtection:p.globalProtection,downshiftAfterTwoLosses:p.downshiftAfterTwoLosses})));
-  const safe=v=>typeof v==='number'&&Number.isFinite(v)?String(v):
-   '"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,m=>'_'+m)+'"';
-  return '\uFEFF'+keys.join(',')+'\r\n'+rows.map(r=>
-   keys.map(k=>safe(r[k])).join(',')).join('\r\n')+'\r\n';
- }
- return {start,stop,status,exportResultsCsv,isRunning:()=>!!current,canUpdate:()=>!current};
-}
-+(stakeCents/100)+', '+mode+
-   ' continueNegative='+continueAfterNegativeRound+
-   ' profitTargetCents='+profitTargetCents+' lossCapCents='+lossCapCents+
-   ' roundPolicy='+exitPolicy+'_OR_TEN'+
-   ' effectiveConcurrency='+actualConcurrency+' DEMO ONLY');
-  void run(session);
-  return {id,state:'RUNNING',mode,continueAfterNegativeRound,
-   profitTargetCents,lossCapCents,exitPolicy,
-   roundsRequested:10,perRound:10,stakeCents:100,
-   maxCommittedCents:10000,maxConcurrent:actualConcurrency,realEnabled:false};
- }
- function stop(){
-  if(!current)return {stopped:false,reason:'NO_RUNNING_PROGRAM'};
-  current.stopRequested=true;
-  bursts.stop();
-  return {stopped:true,reason:'STOP_AFTER_ACTIVE_BURST',id:current.id};
- }
- function exportResultsCsv(){
-  const keys=['programId','round','batchId','state','requested','executed','settled','wins',
-   'losses','rejected','winRatePct','stakedCents','grossWinCents','grossLossCents',
-   'netCents','roiPct','continueOnNegativeRound',
-   'profitTargetCents','lossCapCents','exitPolicy','stopReason'];
-  const rows=getReport().flatMap(p=>p.batches.map(b=>({
-   ...b,continueOnNegativeRound:p.continueOnNegativeRound,
-   profitTargetCents:p.profitTargetCents,lossCapCents:p.lossCapCents,
-   exitPolicy:p.exitPolicy})));
   const safe=v=>typeof v==='number'&&Number.isFinite(v)?String(v):
    '"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,m=>'_'+m)+'"';
   return '\uFEFF'+keys.join(',')+'\r\n'+rows.map(r=>
