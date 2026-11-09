@@ -104,6 +104,49 @@ function drawEquity(rows){
  points.forEach((v,i)=>{if(i===0)ctx.moveTo(x(i),y(v));else ctx.lineTo(x(i),y(v));});ctx.stroke();
  ctx.fillStyle='#a8c7d4';ctx.font='13px Arial';ctx.fillText('P&L DEMO acumulado '+usd(points.at(-1)),12,17);
 }
+async function showQualityAudit(){
+ try{
+  const q=await get('/api/learning/quality');
+  const pct=x=>Number.isFinite(x)?(100*x).toFixed(1)+' %':'—';
+  $('quality-status').textContent='Versión más reciente con operaciones: '+(q.latestVersion||'—')+
+   ' · '+q.latest.n+' liquidadas · aciertos '+pct(q.latest.winRate)+
+   ' · neto '+signedCents(q.latest.netCents)+
+   '. Primer mitad '+pct(q.firstHalf.winRate)+
+   ' vs última mitad '+pct(q.secondHalf.winRate)+
+   ' · últimas 10: '+pct(q.last10.winRate)+'. Estimador: '+q.mode+
+   ' (NO altera compras).';
+  const body=$('quality-versions');body.replaceChildren();
+  for(const v of q.versions){
+   const tr=document.createElement('tr');
+   [v.version,v.n,v.wins,v.losses,signedCents(v.netCents)].forEach((value,i)=>{
+    const td=document.createElement('td');td.textContent=value;
+    if(i===4)td.className=v.netCents<0?'down':v.netCents>0?'up':'';
+    tr.appendChild(td);
+   });body.appendChild(tr);
+  }
+  if(!body.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=5;td.textContent='Aún no hay liquidaciones.';tr.appendChild(td);body.appendChild(tr);
+  }
+  const fmtMs=x=>Number.isFinite(x)?x.toFixed(1)+' ms':'—';
+  $('quality-times').textContent='Medianas de la última versión · señal: ganadoras '+
+   fmtMs(q.latency.winners.signalAgeMedianMs)+' / pérdidas '+fmtMs(q.latency.losers.signalAgeMedianMs)+
+   ' · confirmación BUY: ganadoras '+fmtMs(q.latency.winners.buyMedianMs)+
+   ' / pérdidas '+fmtMs(q.latency.losers.buyMedianMs)+
+   ' · propuesta: ganadoras '+fmtMs(q.latency.winners.proposalMedianMs)+
+   ' / pérdidas '+fmtMs(q.latency.losers.proposalMedianMs)+
+   '. Una diferencia observada no demuestra causalidad.';
+  $('quality-projection').textContent='Proyección siguiente tick (investigación): en '+
+   q.projection.compared+' casos, superó el error de persistencia '+q.projection.modelBetter+
+   ', fue peor '+q.projection.modelWorse+' e igual '+q.projection.modelEqual+
+   '. Aprendizaje secuencial en sombra evaluado en '+q.shadow.evaluated+
+   ' casos; error Brier '+(q.shadow.brier??'—')+
+   ' frente a base '+(q.shadow.baselineBrier??'—')+
+   '. No se usa para comprar.';
+ }catch(e){
+  $('quality-status').textContent='Auditoría no disponible: '+e.message;
+ }
+}
 async function showAdaptiveLearning(){
  try{
   const d=await get('/api/learning');
@@ -345,6 +388,7 @@ $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
  setInterval(poll,15000);setInterval(showDemoOrders,15000);setInterval(updateBurstPanel,4000);
  await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
+ await showQualityAudit();setInterval(showQualityAudit,20000);
  async function diagnose(){
   try{
    const d=await get('/api/market/diagnostic');
