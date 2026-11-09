@@ -8,18 +8,19 @@ const validRisk=()=>({dailyLossStopActive:false,accountFloorStopActive:false,
  pendingOrders:0,unresolvedOrders:0,dailyRemainingRiskCents:10000});
 function setup({risk=validRisk(),state='COMPLETED',settled=10}={}){
  const db=new DatabaseSync(':memory:');
- db.exec(`CREATE TABLE demo_bursts(id TEXT PRIMARY KEY,program_id TEXT,state TEXT);
- CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)`);
+ db.exec(`CREATE TABLE demo_bursts(id TEXT PRIMARY KEY,program_id TEXT,state TEXT,
+ created_at INTEGER,count_requested INTEGER,stop_reason TEXT);
+ CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER,stake_cents INTEGER)`);
  let seq=0,stopped=0,riskNow=risk;
  const trading={canUpdate:()=>true,getRiskStatus:()=>riskNow};
  const bursts={
   status:()=>({running:false,batches:seq?[{id:'b'+seq,state,settled,unknown:0,stopReason:state==='COMPLETED'?null:'NO_SIGNAL'}]:[]}),
   start:args=>{
    seq++;
-   db.prepare('INSERT INTO demo_bursts(id,program_id,state) VALUES(?,?,?)').run('b'+seq,args.programId,state);
+   db.prepare('INSERT INTO demo_bursts(id,program_id,state,created_at,count_requested) VALUES(?,?,?,?,?)').run('b'+seq,args.programId,state,1794190000+seq,10);
    if(state==='COMPLETED'){
-    const add=db.prepare('INSERT INTO demo_local_orders(id,batch_id,state,pnl_cents) VALUES(?,?,?,?)');
-    for(let i=0;i<10;i++)add.run('x'+seq+'-'+i,'b'+seq,'SETTLED',i<6?80:-100);
+    const add=db.prepare('INSERT INTO demo_local_orders(id,batch_id,state,pnl_cents,stake_cents) VALUES(?,?,?,?,?)');
+    for(let i=0;i<10;i++)add.run('x'+seq+'-'+i,'b'+seq,'SETTLED',i<6?80:-100,100);
    }
    return {id:'b'+seq,state:'RUNNING'};
   },
@@ -52,6 +53,19 @@ test('10 rondas DEMO se autorizan una vez y se ejecutan estrictamente en secuenc
  assert.equal(row.purchasesExecuted,100);
  assert.equal(row.state,'COMPLETED');
  assert.equal(row.netCents,10*(6*80-4*100));
+ assert.equal(row.settled,100);
+ assert.equal(row.wins,60);
+ assert.equal(row.losses,40);
+ assert.equal(row.winRatePct,60);
+ assert.equal(row.roiPct,8);
+ assert.equal(row.stakedCents,10000);
+ assert.equal(row.batches.length,10);
+ assert.ok(row.batches.every(b=>b.winRatePct===60&&b.roiPct===8));
+ const csv=program.exportResultsCsv();
+ assert.match(csv,/winRatePct/);
+ assert.match(csv,/roiPct/);
+ assert.match(csv,/programId,round,batchId/);
+ assert.equal(csv.trim().split(/\r?\n/).length,11);
  assert.equal(program.canUpdate(),true);
  db.close();
 });
