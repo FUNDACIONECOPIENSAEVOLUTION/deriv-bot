@@ -233,3 +233,33 @@ test('CSV e intencion predictiva conservan tiempos de seleccion y transferencia 
  assert.match(trading.exportCsv('all'),/analyzer10ComputeMs/);
  trading.cancel(intent.id);db.close();
 });
+
+test('Tanda investigacion DEMO permite 10 ticks sin cota Wilson validada y conserva controles',async()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec("CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)");
+ const requests=[],account={accountId:'DEMO-TEST',currency:'USD',balance:10000};
+ const trading={canUpdate:()=>true,requestIntent:input=>{
+  requests.push(input);return {id:'research-'+requests.length};
+ },markBatch:()=>{},approve:async()=>({state:'SETTLED'})};
+ const runner=createDemoBurst({db,trading,
+  getSymbols:()=>['R_10','R_25','R_100'],
+  marketSnapshot:symbol=>({symbol,available:true,ready:true,candleCount:60,fresh:true,
+   epoch:Math.floor(Date.now()/1000),ageReceivedMs:20,
+   tickHorizonModels:[{durationTicks:10,direction:'CALL',selectedPolicy:'MOMENTUM_20',
+    trainingDecisions:41,validationDecisions:26,observedValidationHitRate:.577,
+    conservativeWinRateLower95:.36,readyForProposal:false}]}),
+  refreshAccount:async()=>account,getAccount:()=>account,audit:()=>{}
+ });
+ assert.throws(()=>runner.start({count:1,stakeCents:200,symbol:'AUTO',
+  concurrency:1,mode:'RESEARCH_DEMO',confirmation:'CONFIRMAR TANDA DEMO'}),/DEMO_EXPLORATORY_MAX_1USD/);
+ const started=runner.start({count:3,stakeCents:100,symbol:'AUTO',
+  concurrency:3,mode:'RESEARCH_DEMO',confirmation:'CONFIRMAR TANDA DEMO'});
+ assert.equal(started.mode,'RESEARCH_DEMO');
+ for(let i=0;i<100&&runner.status().running;i++)await pause(10);
+ assert.equal(runner.status().batches[0].state,'COMPLETED');
+ assert.equal(requests.length,3);
+ assert.ok(requests.every(x=>x.modelMode==='DEMO_EXPLORATORY_5_10'&&
+  x.durationTicks===10&&x.stakeCents===100));
+ assert.equal(runner.status().batches[0].signalMode,'RESEARCH_DEMO');
+ db.close();
+});
