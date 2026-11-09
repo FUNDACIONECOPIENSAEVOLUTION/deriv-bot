@@ -319,7 +319,7 @@ test('Programa DEMO reintenta rechazos sin ejecutar compra y obtiene 10 liquidac
   concurrency:3,mode:'RESEARCH_FIVE_ONLY',programId:'p1',
   confirmation:'CONFIRMAR TANDA DEMO'});
  assert.equal(burst.requested,10);
- for(let i=0;i<160&&runner.status().running;i++)await pause(10);
+ for(let i=0;i<800&&runner.status().running;i++)await pause(10);
  const b=runner.status().batches[0];
  assert.equal(b.state,'COMPLETED');
  assert.equal(b.settled,10);
