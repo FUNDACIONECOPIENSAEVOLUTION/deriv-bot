@@ -286,5 +286,5 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(x).code:x[h])).join(',')).join('\r\n')+'\r\n';
  }
  return {getSummary,requestIntent,cancel,approve,reconcile,markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
-  canUpdate:()=>active.get().n===0};
+  getStrategyVersion:()=>STRATEGY_VERSION,canUpdate:()=>active.get().n===0};
 }
