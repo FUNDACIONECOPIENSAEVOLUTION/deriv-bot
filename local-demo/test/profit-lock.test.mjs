@@ -203,3 +203,35 @@ test('10x10 puede seguir tras tanda 10/10 roja, con consentimiento y riesgo vige
   assert.equal(report.batches[1].netCents,88);
  }finally{db.close();}
 });
+
+test('Integracion verde progresivo DEMO: GG R cierra en verde con solo tres BUY',async()=>{
+ const {db,burst,orders}=setupBurst([88,88,-100,-100]);
+ try{
+  const b=burst.start({...args,exitPolicy:'TRAILING_GREEN'});
+  assert.equal(b.exitPolicy,'TRAILING_GREEN');
+  const row=await wait(burst);
+  assert.equal(row.state,'COMPLETED');
+  assert.equal(row.stopReason,'TRAILING_PROFIT_LOCKED');
+  assert.equal(row.settled,3);
+  assert.equal(row.netCents,76);
+  assert.equal(orders(),3);
+ }finally{db.close();}
+});
+test('Integracion G R G: recuperar en tercer BUY y terminar en verde',async()=>{
+ const {db,burst,orders}=setupBurst([88,-100,88,-100]);
+ try{
+  const row=await (burst.start({...args,exitPolicy:'TRAILING_GREEN'}),wait(burst));
+  assert.equal(row.state,'COMPLETED');
+  assert.equal(row.stopReason,'TRAILING_RECOVERY_GREEN');
+  assert.equal(row.settled,3);
+  assert.equal(row.netCents,76);
+  assert.equal(orders(),3);
+ }finally{db.close();}
+});
+test('Una configuracion antigua del cap US$2 no se acepta en tandas nuevas',()=>{
+ const {db,burst}=setupBurst([88]);
+ try{
+  assert.throws(()=>burst.start({...args,lossCapCents:200}),
+   /DEMO_PROFIT_LOCK_PARAMETERS_INVALID/);
+ }finally{db.close();}
+});
