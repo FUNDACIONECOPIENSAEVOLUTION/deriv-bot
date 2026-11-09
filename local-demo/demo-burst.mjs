@@ -137,8 +137,17 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   // despues de recibir la propuesta de compra y ANTES de BUY.
   eligible.sort((a,b)=>b.predictedLower95-a.predictedLower95||
    a.ageReceivedMs-b.ageReceivedMs);
-  batch.lastEligible=eligible;
-  return selectDistinctCandidates(eligible,limit,batch.usedCandleEpoch);
+  const selectedAtMs=Date.now();
+  const selected=eligible.map(x=>({...x,selectionTelemetry:{
+   selectedAtMs,analysisCompletedAtMs:x.analysisGeneratedAtMs??null,
+   feedReceivedAtMs:x.feedReceivedAtMs??null,
+   analysisComputeMs:x.analysisTelemetry?.computeTotalMs??null,
+   analyzer5Ms:x.analysisTelemetry?.analyzer5Ms??null,
+   analyzer10Ms:x.analysisTelemetry?.analyzer10Ms??null,
+   analyzerStudy5Ms:x.analysisTelemetry?.fiveTickStudyMs??null
+  }}));
+  batch.lastEligible=selected;
+  return selectDistinctCandidates(selected,limit,batch.usedCandleEpoch);
  }
  async function run(batch){
   let executed=0,settled=0,attempts=0,state='RUNNING',reason=null;
@@ -149,7 +158,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     if(batch.stopRequested)return {state:'STOPPED',brokerOrders:0};
     pending=trading.requestIntent({symbol:chosen.symbol,direction:chosen.direction,
      stakeCents:batch.stakeCents,source:'LOCAL_OWNER',
-     durationTicks:chosen.durationTicks,modelMode:chosen.modelMode});
+     durationTicks:chosen.durationTicks,modelMode:chosen.modelMode,
+     selectionTelemetry:chosen.selectionTelemetry});
     trading.markBatch(pending.id,batch.id);
     if(batch.stopRequested){
      trading.cancel(pending.id);return {state:'STOPPED',brokerOrders:0};
