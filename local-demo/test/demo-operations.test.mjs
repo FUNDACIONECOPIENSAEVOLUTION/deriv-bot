@@ -61,7 +61,9 @@ test('Burst of three supports parallel DEMO approvals without real broker BUY',a
   }};
  const runner=createDemoBurst({db,trading,
   marketSnapshot:symbol=>({symbol,direction:'CALL',fresh:true,available:true,ready:true,candleCount:60,
-   epoch:Math.floor(Date.now()/1000),ageReceivedMs:30,rsi14:60,signalStrength:60}),
+   epoch:Math.floor(Date.now()/1000),ageReceivedMs:30,rsi14:60,signalStrength:60,
+   tickHorizonModels:[{durationTicks:10,direction:'CALL',selectedPolicy:'MOMENTUM_20',
+    conservativeWinRateLower95:.7,readyForProposal:true}]}),
   refreshAccount:async()=>account,getAccount:()=>account,audit:()=>{}});
  const p=runner.start({count:3,stakeCents:50,symbol:'AUTO',concurrency:3,confirmation:'CONFIRMAR TANDA DEMO'});
  assert.equal(p.accountType,'demo');
@@ -70,6 +72,10 @@ test('Burst of three supports parallel DEMO approvals without real broker BUY',a
  assert.equal(runner.status().batches[0].completed,3);
  assert.equal(calls.filter(x=>x[0]==='approve').length,3);
  assert.ok(peak>=2,'at least two DEMO approvals must overlap');
+ assert.equal(calls.filter(x=>x[0]==='request').length,3);
+ assert.ok(calls.filter(x=>x[0]==='request').every(x=>
+  x[1].durationTicks===10&&x[1].modelMode==='PREDICTIVE_5_10'));
+
  assert.equal(p.concurrent,3);
  assert.equal(p.realEnabled,false);
  assert.throws(()=>runner.start({count:11,stakeCents:50,symbol:'AUTO',concurrency:3,confirmation:'CONFIRMAR TANDA DEMO'}),/DEMO_BURST_PARAMETERS/);
@@ -181,5 +187,26 @@ test('Autorización de 10 x US$10 = US$100 por tanda, sin ejecutar BUY',async()=
  runner.stop();
  for(let i=0;i<15&&runner.status().running;i++)await pause(20);
  assert.equal(calls,0);
+ db.close();
+});
+
+test('Intencion predictiva de 10 ticks exige muestra validada y conserva vencimiento por orden',()=>{
+ const {db,trading,m}=setup();
+ m.tickHorizonModels=[{durationTicks:10,direction:'PUT',selectedPolicy:'MOMENTUM_20',
+  conservativeWinRateLower95:.72,readyForProposal:true}];
+ const intent=trading.requestIntent({symbol:'R_100',direction:'PUT',stakeCents:50,
+  durationTicks:10,modelMode:'PREDICTIVE_5_10',source:'LOCAL_OWNER'});
+ assert.equal(intent.durationTicks,10);
+ const saved=db.prepare('SELECT duration_ticks,prediction_mode,prediction_policy,prediction_lower95 FROM demo_local_orders WHERE id=?').get(intent.id);
+ assert.equal(saved.duration_ticks,10);
+ assert.equal(saved.prediction_mode,'PREDICTIVE_5_10');
+ assert.equal(saved.prediction_policy,'MOMENTUM_20');
+ assert.equal(saved.prediction_lower95,.72);
+ trading.cancel(intent.id);
+ assert.throws(()=>trading.requestIntent({symbol:'R_100',direction:'PUT',stakeCents:50,
+  durationTicks:10,source:'LOCAL_OWNER'}),/DEMO_LEGACY_DURATION_INVALID/);
+ m.tickHorizonModels=[];
+ assert.throws(()=>trading.requestIntent({symbol:'R_100',direction:'PUT',stakeCents:50,
+  durationTicks:10,modelMode:'PREDICTIVE_5_10',source:'LOCAL_OWNER'}),/DEMO_SIGNAL_STALE/);
  db.close();
 });
