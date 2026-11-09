@@ -90,8 +90,9 @@ try{
  }else{
   # No depender de servidor.pid cuando /health no responde: buscar el proceso
   # exacto, sin interferir con los servidores Node de otros proyectos.
-  $scriptPath=[System.IO.Path]::GetFullPath((Join-Path $app 'server.mjs'))
-  $scriptPattern='(?:^|\s|")'+[regex]::Escape($scriptPath)+'(?=$|\s|")'
+  # Si /health no responde, no reemplazar codigo ante NINGUN node.exe
+  # ejecutando local-demo/server.mjs; es una verificacion conservadora.
+  $scriptPattern='(?i)(?:^|\s|")[A-Z]:\\[^"\r\n]*\\local-demo\\server\.mjs(?=$|\s|")'
   $nodeInstances=@(Get-CimInstance -ClassName Win32_Process -Filter "Name='node.exe'" -ErrorAction Stop |
    Where-Object {$_.CommandLine -and $_.CommandLine -match $scriptPattern})
   if($nodeInstances.Count -gt 0){
