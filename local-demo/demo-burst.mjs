@@ -6,7 +6,8 @@ import {isVolatilitySymbol} from './synthetic-catalog.mjs';
 
 const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500'];
-const STAKES=[35,50,75,90,100];
+const STAKES=[35,50,75,90,100,200,500,1000];
+const MAX_BATCH_COMMITTED_CENTS=10000;
 const MAX_PARALLEL=5;
 const epoch=()=>Math.floor(Date.now()/1000);
 /** Never place duplicate contracts on one index AND one closed candle. */
@@ -204,11 +205,11 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(active)throw Error('DEMO_BURST_ALREADY_RUNNING');
   if(!trading.canUpdate())throw Error('DEMO_ORDER_REQUIRES_RECONCILIATION');
   if(!getAccount())throw Error('DEMO_ACCOUNT_NOT_VERIFIED');
-  if(count*stakeCents>1000)throw Error('DEMO_BURST_MAX_10USD');
+  if(count*stakeCents>MAX_BATCH_COMMITTED_CENTS)throw Error('DEMO_BURST_MAX_100USD');
   // Si el día ya superó el máximo de pérdidas, no guardar una tanda ilusoria
   // ni intentar BUY. El usuario podrá iniciar otra cuando termine el bloqueo.
   const risk=trading.getRiskStatus?.();
-  if(risk?.dailyLossStopActive)throw Error('DEMO_DAILY_LOSS_STOP');
+  if(risk?.dailyLossStopActive)throw Error('DEMO_DAILY_NET_LOSS_STOP');
   if(risk?.accountFloorStopActive)throw Error('DEMO_LOSS_STOP_100USD');
   const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,inFlight:0,stopRequested:false,usedCandleEpoch:new Map()};
   insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,getVersion(),getStrategyVersion());
