@@ -55,7 +55,11 @@ function draw(){const m=markets.get(chosen),cv=$('chart'),ctx=cv.getContext('2d'
   ' · señal '+(m?.direction||'ESPERAR')+' ('+(m?.reason||'SIN_DATOS')+
   '). Intensidad descriptiva '+(m?.signalStrength??'—')+'/100; NO es probabilidad de ganar. '+
   'Próximo tick (proyección experimental): '+fmt(m?.projectedNextTick)+
-  ' · MAE modelo '+fmt(m?.modelMae)+' vs persistencia '+fmt(m?.naiveMae)+'.';
+  ' · MAE modelo '+fmt(m?.modelMae)+' vs persistencia '+fmt(m?.naiveMae)+
+  ' · momento 5 ticks '+fmt(m?.fiveTickMomentum)+' · RSI tick14 '+fmt(m?.tickRsi14)+
+  ' · prueba retrospectiva 5 ticks '+(Number.isFinite(m?.fiveTickStudy?.hitRate)?
+   (100*m.fiveTickStudy.hitRate).toFixed(1)+'%':'—')+
+  ' de '+(m?.fiveTickStudy?.holdoutCount??0)+' casos. NO validado para trading.';
 }
 function drawCandles(candles){
  const canvas=$('candles');if(!canvas)return;
@@ -74,7 +78,16 @@ function drawCandles(candles){
   ctx.fillRect(x-Math.min(10,space*.29),top,Math.min(20,space*.58),height);
  });
 }
-function market(m){markets.set(m.symbol,m);marketCard(m);if(m.symbol===chosen)draw();}
+function syncMarketOptions(m){
+ if(!m.available||!/^(R_[0-9]{2,3}|1HZ[0-9]{2,3}V)$/.test(m.symbol))return;
+ for(const id of ['burst-symbol','quote-symbol']){
+  const select=$(id);
+  if(!select||Array.from(select.options).some(x=>x.value===m.symbol))continue;
+  const item=document.createElement('option');item.value=m.symbol;
+  item.textContent=m.symbol+' · activo Deriv';select.appendChild(item);
+ }
+}
+function market(m){markets.set(m.symbol,m);syncMarketOptions(m);marketCard(m);if(m.symbol===chosen)draw();}
 function setMessage(text){$('auth-message').textContent=text;}
 function printableTime(ms){if(!Number.isFinite(ms))return '—';return new Date(ms).toLocaleTimeString('es-CO',{hour12:false});}
 let latestOrders=[],latestBatchId=null;
@@ -90,6 +103,31 @@ function drawEquity(rows){
  ctx.strokeStyle=points.at(-1)>=0?'#45e1ac':'#ff9a9a';ctx.lineWidth=2;ctx.beginPath();
  points.forEach((v,i)=>{if(i===0)ctx.moveTo(x(i),y(v));else ctx.lineTo(x(i),y(v));});ctx.stroke();
  ctx.fillStyle='#a8c7d4';ctx.font='13px Arial';ctx.fillText('P&L DEMO acumulado '+usd(points.at(-1)),12,17);
+}
+async function showAdaptiveLearning(){
+ try{
+  const d=await get('/api/learning');
+  $('learning-status').textContent='SQLite DEMO: '+d.sampleRaw+
+   ' liquidaciones · '+d.independent+' decisiones independientes · '+d.blocked+
+   ' combinaciones vetadas. Requiere al menos '+d.minIndependent+
+   ' decisiones y '+d.minHoldout+' en prueba posterior.';
+  const body=$('learning-table');body.replaceChildren();
+  for(const c of (d.groups||[]).slice(0,24)){
+   const tr=document.createElement('tr');
+   [c.symbol,c.direction,c.independent,
+    c.holdoutCount+' ('+c.holdoutWins+' ganadas / '+c.holdoutLosses+' perdidas)',
+    signedCents(c.holdoutNetCents),c.status].forEach((v,i)=>{
+    const td=document.createElement('td');td.textContent=v;
+    if(i===5&&c.blocked)td.className='down';
+    tr.appendChild(td);
+   });body.appendChild(tr);
+  }
+  if(!body.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=6;td.textContent='Aún no hay suficiente historial DEMO.';
+   tr.appendChild(td);body.appendChild(tr);
+  }
+ }catch(e){$('learning-status').textContent='Aprendizaje no disponible: '+e.message;}
 }
 async function updateBurstPanel(){
  try{
@@ -305,6 +343,7 @@ $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
  setInterval(poll,15000);setInterval(showDemoOrders,15000);setInterval(updateBurstPanel,4000);
+ await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
  async function diagnose(){
   try{
    const d=await get('/api/market/diagnostic');

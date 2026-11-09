@@ -32,9 +32,27 @@ function rsi(values,n=14){
  if(down===0)return up===0?50:100;
  return 100-100/(1+up/down);
 }
+export function fiveTickDirectionStudy(prices){
+ // Validación temporal de un indicador sencillo, no un modelo rentable certificado.
+ // Ventanas DISJUNTAS cada cinco ticks: no usamos ticks futuros para una decisión pasada.
+ const outcomes=[];
+ for(let i=20;i+5<prices.length;i+=5){
+  const recent=prices[i]-prices[i-5],future=prices[i+5]-prices[i];
+  if(recent===0||future===0)continue;
+  outcomes.push({predicted:Math.sign(recent),actual:Math.sign(future)});
+ }
+ const holdout=outcomes.slice(Math.floor(outcomes.length*.7));
+ const correct=holdout.filter(x=>x.predicted===x.actual).length;
+ return {horizonTicks:5,independentObservations:outcomes.length,
+  holdoutCount:holdout.length,hitRate:holdout.length?correct/holdout.length:null,
+  validatedForTrading:false};
+}
 export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}={}){
  const valid=ticks.filter(x=>Number.isFinite(x?.price)&&x.price>0&&Number.isInteger(x?.epoch));
  const prices=valid.map(x=>x.price);
+ const last5=prices.length>=6?prices.at(-1)-prices.at(-6):null;
+ const tickRsi14=rsi(prices,14);
+ const fiveTickStudy=fiveTickDirectionStudy(prices);
  // Proyección ingenua del siguiente tick para INVESTIGACIÓN; no interviene en BUY.
  const n=prices.length,lookback=10;
  const projectedNextTick=n>lookback?prices[n-1]+(prices[n-1]-prices[n-1-lookback])/lookback:null;
@@ -85,6 +103,7 @@ export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}
  return {candles,candleCount:candles.length,requiredCandles:CANDLES_VISIBLE,
   ticksAnalyzed:prices.length,ema20,ema50,rsi14,atr14,momentum5,slope10,
   projectedNextTick,modelMae,naiveMae,projectionIsResearchOnly:true,
+  fiveTickMomentum:last5,tickRsi14,fiveTickStudy,
   sma8:prices.length>=8?mean(prices.slice(-8)):null,
   sma21:prices.length>=21?mean(prices.slice(-21)):null,
   direction,reason,signalStrength:strength,ready,fresh,

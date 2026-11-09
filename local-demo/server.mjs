@@ -13,6 +13,8 @@ import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
 import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
+import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
+import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 
 const HOME=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ECOPIENSA_DATA_DIR||join(HOME,'data');
@@ -23,8 +25,9 @@ const API='https://api.derivws.com/trading/v1/options/accounts';
 const AUTH='https://auth.deriv.com/oauth2/';
 const PUBLIC_WS='wss://api.derivws.com/trading/v1/options/ws/public';
 // Candidatos, NO símbolos autorizados a operar hasta validarlos con active_symbols.
-const SYMBOLS=Object.freeze(['R_10','R_25','R_50','R_75','R_100',
- '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500']);
+// Lista inicial para UI; nuevos índices SOLO si Deriv los anuncia.
+const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
+ '1HZ10V','1HZ50V','1HZ75V','1HZ100V'];
 const EXTERNAL_NAMES=Object.freeze(['USD/COP','EUR/USD','USD/JPY','Oro (XAU/USD)','Bitcoin (BTC/USD)']);
 const STAKES=new Set([0.35,0.50,0.75,0.90,1]);
 const now=()=>Math.floor(Date.now()/1000);
@@ -141,15 +144,31 @@ function externalSnapshot(){
 }
 function configureSymbols(ws,records){
  const active=normalizeActiveSymbols(records); // Nueva API: underlying_symbol.
- const available=new Set(active.map(x=>x.symbol));
+ const candidates=discoverVolatilitySymbols(records);
+ const available=new Set(candidates);
+ const previous=new Map(market);
+ SYMBOLS.splice(0,SYMBOLS.length,...candidates);
+ market.clear();
+ for(const symbol of candidates)
+  market.set(symbol,previous.get(symbol)||{symbol,ticks:[],epoch:0,quote:0,receivedAtMs:0,available:false});
+ for(const [oldSymbol,oldMarket] of previous){
+  if(!available.has(oldSymbol)){oldMarket.available=false;pushMarket(oldMarket);}
+ }
  publicStats.symbolsReceived=active.length;
- publicStats.activeMarkets=SYMBOLS.filter(x=>available.has(x)).length;
+ publicStats.activeMarkets=candidates.length;
  publicStats.diagnosticCode=publicStats.activeMarkets?'SIMBOLOS_RECONOCIDOS':'NO_SE_RECONOCEN_INDICES';
  SYMBOLS.forEach((symbol,i)=>{
   const m=market.get(symbol);m.available=available.has(symbol);
-  if(!m.available){pushMarket(m);return;}
-  ws.send(JSON.stringify({ticks_history:symbol,count:HISTORY_TICKS,end:'latest',style:'ticks',req_id:400+i}));
-  ws.send(JSON.stringify({ticks:symbol,subscribe:1,req_id:500+i}));
+  if(!m)return;
+  m.available=true;
+  const timer=setTimeout(()=>{
+   if(ws.readyState!==1)return;
+   try{
+    ws.send(JSON.stringify({ticks_history:symbol,count:HISTORY_TICKS,end:'latest',style:'ticks',req_id:400+i}));
+    ws.send(JSON.stringify({ticks:symbol,subscribe:1,req_id:500+i}));
+   }catch{publicStats.diagnosticCode='SUSCRIPCION_NO_DISPONIBLE';}
+  },i*95);
+  timer.unref?.();
   pushMarket(m);
  });
  const groups=[
@@ -264,8 +283,21 @@ const mcpKey=readFileSync(mcpKeyPath,'utf8').trim();
 if(!/^[a-f0-9]{64}$/.test(mcpKey))throw Error('MCP_KEY_INVALID');
 const mcpAuthPath=join(DATA,'.mcp-local-authorization');
 if(!existsSync(mcpAuthPath)){writeFileSync(mcpAuthPath,'Bearer '+mcpKey,{mode:0o600,flag:'wx'});}
+// Aprendizaje conservador a partir de liquidaciones oficiales guardadas en SQLite.
+const outcomeRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
+ bought_at_ms,created_at,candle_epoch,signal_age_ms,signal_rsi,buy_latency_ms
+ FROM demo_local_orders WHERE state='SETTLED' ORDER BY created_at DESC LIMIT 1500`);
+let reportCache=null,reportCacheAt=0;
+const getAdaptiveReport=()=>{
+ if(!reportCache||Date.now()-reportCacheAt>10000){
+  reportCache=buildAdaptiveReport(outcomeRows.all());reportCacheAt=Date.now();
+ }
+ return reportCache;
+};
 const bursts=createDemoBurst({
  db,trading,marketSnapshot:symbol=>{const item=market.get(symbol);return item?snapshot(item):null;},
+ getSymbols:()=>SYMBOLS.slice(),
+ getAdaptiveVerdict:(symbol,direction)=>adaptiveVerdict(getAdaptiveReport(),symbol,direction),
  refreshAccount:async()=>{
   const c=await credentials();
   const a=selectAccount(await boundedFetch(API,{headers:brokerHeaders(c)}),c.accountId);
@@ -291,6 +323,7 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/app.js'){return html(res,readFileSync(join(publicPath,'app.js')),'text/javascript; charset=utf-8');}
   if(req.method==='GET'&&path==='/style.css'){return html(res,readFileSync(join(publicPath,'style.css')),'text/css; charset=utf-8');}
   if(req.method==='GET'&&path==='/api/training')return answer(res,200,readTraining(trainingFile));
+  if(req.method==='GET'&&path==='/api/learning')return answer(res,200,getAdaptiveReport());
    if(req.method==='GET'&&path==='/api/demo/orders')return answer(res,200,trading.getSummary());
    if(req.method==='GET'&&path==='/api/demo/burst/status')return answer(res,200,bursts.status());
    if(req.method==='GET'&&(path==='/api/demo/orders.csv'||path==='/api/demo/burst.csv')){
