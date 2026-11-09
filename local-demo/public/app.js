@@ -307,7 +307,7 @@ async function updateDemoProgram(){
    'tanda '+(p.round||1)+' de 10. '+
    'Siguiente tanda solo tras liquidación y revisión del riesgo. '+
    (current?.profitTargetCents>0?
-    'Meta '+signedCents(current.profitTargetCents)+' por tanda · stop −US$2; no garantizada.':''):
+    'Meta '+signedCents(current.profitTargetCents)+' o diez compras · sin garantía de verde; límite diario vigente.':''):
    current?'Último programa: '+current.state+' · tandas completadas '+
     current.roundsCompleted+'/10 · '+(current.stopReason||'sin errores registrados')+
     (current.continueOnNegativeRound?
@@ -393,7 +393,8 @@ $('program-start').onclick=async()=>{
    ' autorizado para investigación DEMO · hasta 100 compras de US$1; '+ 
    (r.profitTargetCents>0?
     'cierre anticipado en '+signedCents(r.profitTargetCents)+
-    ', stop pérdida tanda −US$2, una compra simultánea. ':
+    ', hasta 10 compras por tanda, una a la vez; SIN corte −US$2 por tanda. '+
+    (r.continueAfterNegativeRound?'Continúa después de la décima compra en rojo. ':'Pausa si la tanda acaba en rojo. '):
     (r.continueAfterNegativeRound?'continuará tras rondas negativas. ':'parará ante ronda negativa. '))+
    'Se detendrá si hay riesgo, datos insuficientes o contrato incierto. REAL bloqueada.';
  }catch(e){$('program-status').textContent='Programa no iniciado: '+e.message;}

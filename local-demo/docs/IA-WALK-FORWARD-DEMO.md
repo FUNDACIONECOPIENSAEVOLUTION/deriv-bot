@@ -264,3 +264,19 @@ contratos paralelos: requiere validacion DEMO prospectiva con
 concurrencia 1. El stop por tanda puede superar ligeramente
 -USD2 por el salto de una ultima compra; el riesgo maximo global
 y las ordenes inciertas siguen protegidos.
+
+
+// v17: Modalidad "meta positiva O diez compras" (sin forzar verde).
+// El programa DEMO conserva 10 tandas secuenciales, una sola
+// compra en vuelo cuando profitTargetCents > 0, con tope 10
+// liquidaciones en cada tanda y cierre anticipado con neto >= meta.
+// Si termina la decima sin meta, estado COMPLETED y motivo
+// TEN_BUYS_REACHED_WITHOUT_TARGET, que registra perdidas reales.
+// Con continueAfterNegativeRound=true (autorizacion local) se puede
+// pasar a la siguiente tanda pese a ese neto negativo.
+// Solo se elimina el antiguo cap de perdida USD2 por ronda
+// (lossCapCents=0 en programas nuevos). Se mantienen el corte
+// de perdida diario, riesgo de saldo, cuota vigente, UNKNOWN/OPEN,
+// stop del usuario y prohibicion absoluta de cuenta REAL.
+// No es una estrategia de rentabilidad garantizada ni se permite
+// seguir indefinidamente una tanda hasta que quede positiva.
