@@ -177,3 +177,16 @@ test('Programa extendido aun se detiene cuando el limite diario se activa',async
  assert.ok(counts().seq<=1);
  db.close();
 });
+
+test('Programa 10x10 propaga el piloto de 5 ticks y respeta la pausa por perdidas',async()=>{
+ const {db,program,bursts,counts}=setup({wins:5});
+ const orig=bursts.start,horizons=[];
+ bursts.start=x=>{horizons.push(x.mode);return orig(x);};
+ const started=program.start({...request(),mode:'RESEARCH_FIVE_ONLY'});
+ assert.equal(started.mode,'RESEARCH_FIVE_ONLY');
+ await done(program);
+ assert.equal(counts().seq,1);
+ assert.deepEqual(horizons,['RESEARCH_FIVE_ONLY']);
+ assert.equal(program.status().programs[0].stopReason,'DEMO_PERFORMANCE_STOP_NEGATIVE_ROUND');
+ db.close();
+});

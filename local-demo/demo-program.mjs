@@ -148,11 +148,11 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   confirmation}={}){
   if(confirmation!=='CONFIRMAR PROGRAMA DEMO 10X10')
    throw Error('DEMO_PROGRAM_LOCAL_APPROVAL_REQUIRED');
-  if(!['VALIDATED_ONLY','RESEARCH_DEMO'].includes(mode))
+  if(!['VALIDATED_ONLY','RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
    throw Error('DEMO_PROGRAM_SIGNAL_MODE_INVALID');
   if(typeof continueAfterNegativeRound!=='boolean')
    throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_BOOLEAN_REQUIRED');
-  if(continueAfterNegativeRound&&mode!=='RESEARCH_DEMO')
+  if(continueAfterNegativeRound&&!['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
    throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_RESEARCH_ONLY');
   // Cap estricto de esta función. Nunca expandir a órdenes ilimitadas o REAL.
   if(rounds!==10||perRound!==10||stakeCents!==100||symbol!=='AUTO'||

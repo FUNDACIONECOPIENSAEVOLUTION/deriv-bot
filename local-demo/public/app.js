@@ -381,7 +381,7 @@ $('program-start').onclick=async()=>{
  try{
   const r=await post('/api/demo/program/start',{
    rounds:10,perRound:10,stakeCents:100,symbol:'AUTO',concurrency:5,
-   mode:'RESEARCH_DEMO',
+   mode:$('program-mode').value,
    continueAfterNegativeRound:$('program-continue-negative').checked===true,
    confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'
   });
@@ -512,7 +512,7 @@ $('burst-start').onclick=async()=>{
  const concurrency=Math.min(count,Number($('burst-concurrency').value));
  const cost=count*stakeCents/100;
  if(!Number.isSafeInteger(count)||count<1||count>10||cost>100){$('burst-message').textContent='La tanda permite de 1 a 10 compras y hasta US$100 en apuestas DEMO.';return;}
- if(mode==='RESEARCH_DEMO'&&stakeCents>100){$('burst-message').textContent='Investigación DEMO: máximo US$1 por compra. Elige una apuesta menor o modo conservador.';return;}
+ if(['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode)&&stakeCents>100){$('burst-message').textContent='Investigación DEMO: máximo US$1 por compra. Elige una apuesta menor o modo conservador.';return;}
  // El clic en el botón local es la autorización explícita para esta tanda DEMO.
  const confirmation='CONFIRMAR TANDA DEMO';
  $('burst-start').disabled=true;$('burst-message').textContent='Autorizando tanda DEMO. No vuelvas a pulsar.';

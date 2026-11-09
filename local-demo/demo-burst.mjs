@@ -46,9 +46,10 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
     reason='TICK_OR_PRICE_STALE';
   else if(predictive){
    const options=m.tickHorizonModels?.filter(x=>
-    (mode==='RESEARCH_DEMO'?isExploratoryCandidate(x):x.readyForProposal)&&
+    ((mode==='RESEARCH_DEMO'||mode==='RESEARCH_FIVE_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
+    (mode!=='RESEARCH_FIVE_ONLY'||x.durationTicks===5)&&
     !getAdaptiveVerdict(m.symbol,x.direction).blocked)||[];
-   if(!options.length)reason=mode==='RESEARCH_DEMO'?
+   if(!options.length)reason=['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode)?
     'NO_RESEARCH_TICK_EVIDENCE':'NO_VALIDATED_TICK_MODEL';
    else{
     const candleEpoch=m.candles?.at(-1)?.epoch??m.epoch;
@@ -132,7 +133,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     !m.fresh||!Number.isFinite(m.ageReceivedMs)||m.ageReceivedMs>1500||
     !Number.isInteger(m.epoch)||Math.abs(Date.now()-m.epoch*1000)>2500)continue;
    const options=(m.tickHorizonModels||[]).filter(x=>
-    (batch.mode==='RESEARCH_DEMO'?isExploratoryCandidate(x):x.readyForProposal)&&
+    ((batch.mode==='RESEARCH_DEMO'||batch.mode==='RESEARCH_FIVE_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
+    (batch.mode!=='RESEARCH_FIVE_ONLY'||x.durationTicks===5)&&
     !getAdaptiveVerdict(m.symbol,x.direction).blocked)
     .sort((a,b)=>Number(b.readyForProposal)-Number(a.readyForProposal)||
      (b.readyForProposal?b.conservativeWinRateLower95:b.observedValidationHitRate)-
@@ -254,9 +256,9 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
  function start({count,stakeCents,symbol,confirmation,concurrency=1,programId=null,
   usedCandleEpoch=null,mode='VALIDATED_ONLY'}){
   if(confirmation!=='CONFIRMAR TANDA DEMO')throw Error('DEMO_BURST_APPROVAL_REQUIRED');
-  if(!['VALIDATED_ONLY','RESEARCH_DEMO'].includes(mode))
+  if(!['VALIDATED_ONLY','RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
    throw Error('DEMO_SIGNAL_MODE_INVALID');
-  if(mode==='RESEARCH_DEMO'&&stakeCents>100)
+  if(['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode)&&stakeCents>100)
    throw Error('DEMO_EXPLORATORY_MAX_1USD');
   if(!Number.isSafeInteger(count)||count<1||count>10||
    !Number.isSafeInteger(concurrency)||concurrency<1||concurrency>Math.min(count,MAX_PARALLEL)||
@@ -276,7 +278,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    inFlight:0,stopRequested:false,
    usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
   insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,
-   getVersion(),mode==='RESEARCH_DEMO'?'TICK_5_10_RESEARCH_DEMO_V1':
+   getVersion(),mode==='RESEARCH_FIVE_ONLY'?'TICK_5_ONLY_PILOT_DEMO_V1':
+   mode==='RESEARCH_DEMO'?'TICK_5_10_RESEARCH_DEMO_V1':
     'TICK_5_10_VALIDATED_V1',programId,mode);
   active=batch;
   audit('DEMO_BURST_AUTHORIZED','Count '+count+' stake '+stakeCents+' DEMO only');

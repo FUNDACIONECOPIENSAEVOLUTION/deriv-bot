@@ -68,6 +68,10 @@
  </section>
  <section id="program-panel"><h2>Programa DEMO de investigación · 10 × 10</h2>
  <p>Una autorización local permite hasta <b>10 tandas consecutivas</b> de 10 compras DEMO de US$1, con máximo 5 contratos simultáneos. Total máximo de apuestas: US$100, <b>no una promesa de ganar</b>. Cada tanda debe terminar y liquidarse antes de iniciar la siguiente. INVESTIGACIÓN DEMO: el programa puede comprar con señales preliminares sin ventaja demostrada, pero exige muestra y cotización suficientes. Por defecto, tras 5/5 con neto negativo (o peor) se detiene. Si marcas expresamente la investigación extendida, solo se omite esa parada por rendimiento de una tanda; el resto de protecciones sigue activo y nunca se garantizan las 100 compras.</p>
+ <p><label>Perfil del nuevo programa <select id="program-mode">
+  <option value="RESEARCH_DEMO">AUTO · analizar y comprar 5 o 10 ticks</option>
+  <option value="RESEARCH_FIVE_ONLY">Piloto 5 ticks · comprobar señal solo a 5 ticks</option>
+ </select></label></p>
  <p><label><input id="program-continue-negative" type="checkbox"> <b>Investigación extendida:</b> continuar a la siguiente tanda incluso si esta termina 5/5 o peor y con pérdida neta. Esta opción incrementa la exposición experimental; nunca anula el límite diario de US$100, los controles de riesgo, las cotizaciones, ni los bloqueos por órdenes inciertas.</label></p>
  <div class="actions">
   <button id="program-start">Autorizar 10 tandas DEMO · 10 compras de US$1</button>
@@ -97,6 +101,7 @@
   <label>Modo de señal <select id="burst-mode">
    <option value="RESEARCH_DEMO" selected>Investigación DEMO · muestras preliminares (máx. US$1)</option>
    <option value="VALIDATED_ONLY">Conservador · solo evidencia estadística estricta</option>
+   <option value="RESEARCH_FIVE_ONLY">Piloto de investigación DEMO · únicamente 5 ticks</option>
   </select></label>
   <label>Máximo simultáneas <select id="burst-concurrency"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5" selected>5</option></select></label>
  </div>

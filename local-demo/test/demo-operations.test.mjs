@@ -263,3 +263,30 @@ test('Tanda investigacion DEMO permite 10 ticks sin cota Wilson validada y conse
  assert.equal(runner.status().batches[0].signalMode,'RESEARCH_DEMO');
  db.close();
 });
+
+test('Piloto FIVE_ONLY prioriza 5 ticks aunque un modelo de 10 ticks tenga 80%',async()=>{
+ const db=new DatabaseSync(':memory:');
+ db.exec("CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)");
+ const calls=[],account={accountId:'DEMO',currency:'USD',balance:10000};
+ const trading={canUpdate:()=>true,requestIntent:x=>(calls.push(x),{id:'call'+calls.length}),
+  markBatch:()=>{},approve:async()=>({state:'SETTLED'})};
+ const mk=(durationTicks,rate)=>({durationTicks,direction:'CALL',
+  selectedPolicy:'MOMENTUM_5',trainingDecisions:40,validationDecisions:24,
+  observedValidationHitRate:rate,conservativeWinRateLower95:.4,readyForProposal:false});
+ const runner=createDemoBurst({db,trading,
+  getSymbols:()=>['R_10','R_25','R_100'],
+  marketSnapshot:symbol=>({symbol,available:true,ready:true,candleCount:60,
+   fresh:true,ageReceivedMs:30,epoch:Math.floor(Date.now()/1000),
+   tickHorizonModels:[mk(10,.80),mk(5,.57)]}),
+  refreshAccount:async()=>account,getAccount:()=>account,audit:()=>{}});
+ const started=runner.start({count:3,stakeCents:100,symbol:'AUTO',concurrency:3,
+  mode:'RESEARCH_FIVE_ONLY',confirmation:'CONFIRMAR TANDA DEMO'});
+ assert.equal(started.mode,'RESEARCH_FIVE_ONLY');
+ for(let i=0;i<100&&runner.status().running;i++)await pause(10);
+ assert.equal(calls.length,3);
+ assert.ok(calls.every(x=>x.durationTicks===5&&x.direction==='CALL'));
+ assert.equal(runner.status().batches[0].signalMode,'RESEARCH_FIVE_ONLY');
+ assert.throws(()=>runner.start({count:1,stakeCents:200,symbol:'AUTO',concurrency:1,
+  mode:'RESEARCH_FIVE_ONLY',confirmation:'CONFIRMAR TANDA DEMO'}),/DEMO_EXPLORATORY_MAX_1USD/);
+ db.close();
+});

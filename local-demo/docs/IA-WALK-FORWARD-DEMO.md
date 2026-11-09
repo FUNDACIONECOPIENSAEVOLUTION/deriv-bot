@@ -134,3 +134,18 @@ siempre son opcionales y preservan controles de riesgo y exposicion.
 La ganancia esperada nunca se deduce del porcentaje de acierto solo:
 en cada propuesta se evalua `P(win)*payout-ask_price` y se registra
 la calidad estadistica sin inventar un supuesto 90% de aciertos.
+
+## Piloto prospectivo opcional de cinco ticks
+
+El modo `RESEARCH_FIVE_ONLY` restringe los candidatos, ANTES de crear
+la intencion o cotizacion, a vencimiento de exactamente cinco ticks.
+Se puede seleccionar en tandas individuales y programas DEMO 10x10.
+Si no hay señal util del horizonte seleccionado se abstiene/pausa, no
+se sustituye por un contrato de diez ticks. Se conserva el control de
+perdida, los rechazos, la autorizacion local y el bloqueo total de REAL.
+El perfil queda registrado en `signal_mode` y `strategy_version`.
+
+Motivacion observada (NO promesa): CSV v15.9 mostro 44/69 compras ganadoras
+en cinco ticks, +USD13.84; 47/96 en diez ticks, -USD7.34. La comparacion
+es retrospectiva, por indices y politicas seleccionados de forma
+distinta; para evaluar causalidad se requieren pruebas prospectivas.
