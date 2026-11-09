@@ -143,6 +143,17 @@ async function showQualityAudit(){
    ' casos; error Brier '+(q.shadow.brier??'—')+
    ' frente a base '+(q.shadow.baselineBrier??'—')+
    '. No se usa para comprar.';
+  const risk=q.operationalWarnings||{};
+  const pctBreak=Number.isFinite(risk.estimatedBreakEvenWinRate)?
+   (100*risk.estimatedBreakEvenWinRate).toFixed(1)+'%':'—';
+  $('quality-risk').textContent='Riesgo DEMO (última versión): últimas 10 '+
+   (risk.latest10?.wins||0)+' ganadoras de '+(risk.latest10?.n||0)+
+   ', resultado '+signedCents(risk.latest10?.netCents||0)+
+   '. Tandas negativas consecutivas '+(risk.latestNegativeBatchStreak||0)+
+   '. Aciertos de equilibrio aproximados '+pctBreak+
+   '. '+(risk.latest10Loss?'ADVERTENCIA: considerar revisar la estrategia antes de iniciar otra tanda.':
+   'Seguir evaluando sin inferir garantías.')+
+   ' Este aviso no cambia ni detiene automáticamente las órdenes.';
   const research=q.research||{};
   const groups=research.strengthBands||[];
   const byVersion=q.shadow.byVersion||[];
