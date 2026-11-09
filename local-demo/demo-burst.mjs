@@ -187,7 +187,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   // No existe derecho a forzar 100 operaciones ni a reintentar BUY incierto.
   const maxAttempts=batch.count*3;
   const noSignalMaxPolls=160; // solo tandas individuales: 40 s
-  const scanPauseMs=researchProgram?Math.max(250,signalPollMs*4):signalPollMs;
+  const scanPauseMs=researchProgram?Math.max(1,Math.min(1000,signalPollMs*4)):signalPollMs;
   const hardRiskStop=()=>{
    const risk=trading.getRiskStatus?.();
    if(risk?.dailyLossStopActive)return 'DEMO_DAILY_NET_LOSS_STOP';
