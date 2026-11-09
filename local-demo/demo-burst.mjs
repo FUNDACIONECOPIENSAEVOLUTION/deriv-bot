@@ -29,7 +29,7 @@ export function selectDistinctCandidates(candidates,limit,usedCandleEpoch=new Ma
  * For an empty/paused burst the returned counters are evidence, not guesses.
  */
 export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch=new Map(),
- getAdaptiveVerdict=()=>({blocked:false}),nowMs=Date.now()){
+ getAdaptiveVerdict=()=>({blocked:false}),nowMs=Date.now(),predictive=false){
  const counts={};
  const details=[];
  const count=reason=>{counts[reason]=(counts[reason]||0)+1;return reason;};
@@ -42,6 +42,12 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
   else if(!m.fresh||!Number.isFinite(m.ageReceivedMs)||m.ageReceivedMs>1500||
    !Number.isInteger(m.epoch)||Math.abs(nowMs-m.epoch*1000)>2500)
     reason='TICK_OR_PRICE_STALE';
+  else if(predictive){
+   const options=m.tickHorizonModels?.filter(x=>x.readyForProposal&&
+    ['CALL','PUT'].includes(x.direction)&&
+    !getAdaptiveVerdict(m.symbol,x.direction).blocked)||[];
+   if(!options.length)reason='NO_VALIDATED_TICK_MODEL';
+  }
   else if(!['CALL','PUT'].includes(m.direction))reason='NO_CONFIRMED_DIRECTION';
   else if(getAdaptiveVerdict(m.symbol,m.direction).blocked)reason='ADAPTIVE_RISK_VETO';
   else{
@@ -108,14 +114,28 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   maxConcurrent:MAX_PARALLEL,risk:trading.getRiskStatus?.()??null,realEnabled:false,demoOnly:true};}
  function select(symbol,limit,batch){
   const allowed=symbol==='AUTO'?getSymbols():[symbol];
-  const eligible=allowed.map(s=>marketSnapshot(s)).filter(x=>
-   x&&x.available!==false&&x.ready===true&&x.candleCount>=60&&x.fresh&&
-   ['CALL','PUT'].includes(x.direction)&&Number.isFinite(x.ageReceivedMs)&&
-   x.ageReceivedMs<=1500&&Number.isInteger(x.epoch)&&
-   Math.abs(Date.now()-x.epoch*1000)<=2500&&
-   !getAdaptiveVerdict(x.symbol,x.direction).blocked);
-  // Señal de mayor intensidad descriptiva, no probabilidad de acierto.
-  eligible.sort((a,b)=>(b.signalStrength||0)-(a.signalStrength||0)||
+  const eligible=[];
+  for(const key of allowed){
+   const m=marketSnapshot(key);
+   if(!m||m.available===false||m.ready!==true||m.candleCount<60||
+    !m.fresh||!Number.isFinite(m.ageReceivedMs)||m.ageReceivedMs>1500||
+    !Number.isInteger(m.epoch)||Math.abs(Date.now()-m.epoch*1000)>2500)continue;
+   const options=(m.tickHorizonModels||[]).filter(x=>
+    x.readyForProposal&&['CALL','PUT'].includes(x.direction)&&
+    !getAdaptiveVerdict(m.symbol,x.direction).blocked)
+    .sort((a,b)=>b.conservativeWinRateLower95-a.conservativeWinRateLower95||
+     a.durationTicks-b.durationTicks);
+   if(options.length){
+    const best=options[0];
+    eligible.push({...m,direction:best.direction,
+     durationTicks:best.durationTicks,modelMode:'PREDICTIVE_5_10',
+     predictedLower95:best.conservativeWinRateLower95,
+     predictorPolicy:best.selectedPolicy});
+   }
+  }
+  // Comparacion de horizontes por indice. El payout oficial se verifica
+  // despues de recibir la propuesta de compra y ANTES de BUY.
+  eligible.sort((a,b)=>b.predictedLower95-a.predictedLower95||
    a.ageReceivedMs-b.ageReceivedMs);
   batch.lastEligible=eligible;
   return selectDistinctCandidates(eligible,limit,batch.usedCandleEpoch);
@@ -128,7 +148,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    try{
     if(batch.stopRequested)return {state:'STOPPED',brokerOrders:0};
     pending=trading.requestIntent({symbol:chosen.symbol,direction:chosen.direction,
-     stakeCents:batch.stakeCents,source:'LOCAL_OWNER'});
+     stakeCents:batch.stakeCents,source:'LOCAL_OWNER',
+     durationTicks:chosen.durationTicks,modelMode:chosen.modelMode});
     trading.markBatch(pending.id,batch.id);
     if(batch.stopRequested){
      trading.cancel(pending.id);return {state:'STOPPED',brokerOrders:0};
@@ -155,7 +176,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
      state='PAUSED';reason='NO_DISTINCT_FRESH_SIGNAL_WITHIN_40_SECONDS';
      const allowed=batch.symbol==='AUTO'?getSymbols():[batch.symbol];
      saveInspection.run(JSON.stringify(inspectSignalAvailability(allowed,marketSnapshot,
-      batch.usedCandleEpoch,getAdaptiveVerdict)),batch.id);
+      batch.usedCandleEpoch,getAdaptiveVerdict,Date.now(),true)),batch.id);
      break;
     }
     await refreshAccount();
