@@ -3,7 +3,7 @@
 import {randomUUID} from 'node:crypto';
 import {setTimeout as pause} from 'node:timers/promises';
 
-export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250}){
+export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betweenRoundsMs=200}){
  db.exec(`CREATE TABLE IF NOT EXISTS demo_programs(
   id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,
   state TEXT NOT NULL,rounds_requested INTEGER NOT NULL,rounds_completed INTEGER NOT NULL DEFAULT 0,
@@ -73,7 +73,7 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250}){
     audit('DEMO_PROGRAM_PROGRESS',session.id+' rounds='+session.roundsCompleted+'/10');
     // Cada siguiente tanda requiere análisis nuevo; evita un bucle de 100
     // órdenes sin dar al motor la oportunidad de refrescar datos.
-    if(i<9)await pause(200);
+    if(i<9)await pause(betweenRoundsMs);
    }
    if(state==='RUNNING')state=session.roundsCompleted===10?'COMPLETED':'PAUSED';
   }catch(error){
