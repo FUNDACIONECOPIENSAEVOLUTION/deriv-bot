@@ -22,10 +22,42 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
  (SELECT COALESCE(SUM(CASE WHEN o.state='SETTLED' THEN o.pnl_cents ELSE 0 END),0)
  FROM demo_bursts b JOIN demo_local_orders o ON o.batch_id=b.id WHERE b.program_id=p.id) AS netCents
  FROM demo_programs p ORDER BY p.created_at DESC,p.id DESC LIMIT 5`);
+ const results=db.prepare(`SELECT b.id AS batchId,b.program_id AS programId,
+  b.created_at AS createdAt,b.state AS state,
+  b.count_requested AS requested,b.stop_reason AS stopReason,
+  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
+  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
+  COUNT(CASE WHEN o.state='SETTLED' AND o.pnl_cents>0 THEN 1 END) AS wins,
+  COUNT(CASE WHEN o.state='SETTLED' AND o.pnl_cents<0 THEN 1 END) AS losses,
+  COUNT(CASE WHEN o.state='REJECTED' THEN 1 END) AS rejected,
+  COALESCE(SUM(CASE WHEN o.state='SETTLED' THEN o.stake_cents ELSE 0 END),0) AS stakedCents,
+  COALESCE(SUM(CASE WHEN o.state='SETTLED' AND o.pnl_cents>0 THEN o.pnl_cents ELSE 0 END),0) AS grossWinCents,
+  COALESCE(SUM(CASE WHEN o.state='SETTLED' AND o.pnl_cents<0 THEN -o.pnl_cents ELSE 0 END),0) AS grossLossCents,
+  COALESCE(SUM(CASE WHEN o.state='SETTLED' THEN o.pnl_cents ELSE 0 END),0) AS netCents
+  FROM demo_bursts b LEFT JOIN demo_local_orders o ON o.batch_id=b.id
+  WHERE b.program_id IS NOT NULL GROUP BY b.id ORDER BY b.created_at,b.id`);
+ const percent=(num,den)=>den>0?Number((100*num/den).toFixed(2)):null;
+ function getReport(){
+  const all=results.all(),byId=new Map();
+  for(const b of all){
+   const a=byId.get(b.programId)||[];
+   a.push({...b,round:a.length+1,winRatePct:percent(b.wins,b.settled),
+    roiPct:percent(b.netCents,b.stakedCents)});
+   byId.set(b.programId,a);
+  }
+  return recent.all().map(p=>{
+   const batches=byId.get(p.id)||[],totals=batches.reduce((v,b)=>{
+    for(const k of ['executed','settled','wins','losses','rejected','stakedCents','grossWinCents','grossLossCents','netCents'])v[k]+=b[k]||0;
+    return v;
+   },{executed:0,settled:0,wins:0,losses:0,rejected:0,stakedCents:0,grossWinCents:0,grossLossCents:0,netCents:0});
+   return {...p,...totals,winRatePct:percent(totals.wins,totals.settled),
+    roiPct:percent(totals.netCents,totals.stakedCents),batches};
+  });
+ }
  let current=null;
  const status=()=>({running:!!current,id:current?.id||null,
   stopRequested:current?.stopRequested||false,round:current?.round||0,
-  programs:recent.all(),realEnabled:false,demoOnly:true,
+  programs:getReport(),realEnabled:false,demoOnly:true,
   authorization:'LOCAL_OWNER_ONLY'});
  const riskStop=()=>{
   const risk=trading.getRiskStatus?.();
@@ -111,5 +143,15 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   bursts.stop();
   return {stopped:true,reason:'STOP_AFTER_ACTIVE_BURST',id:current.id};
  }
- return {start,stop,status,isRunning:()=>!!current,canUpdate:()=>!current};
+ function exportResultsCsv(){
+  const keys=['programId','round','batchId','state','requested','executed','settled','wins',
+   'losses','rejected','winRatePct','stakedCents','grossWinCents','grossLossCents',
+   'netCents','roiPct','stopReason'];
+  const rows=getReport().flatMap(p=>p.batches);
+  const safe=v=>typeof v==='number'&&Number.isFinite(v)?String(v):
+   '"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,m=>'_'+m)+'"';
+  return '\uFEFF'+keys.join(',')+'\r\n'+rows.map(r=>
+   keys.map(k=>safe(r[k])).join(',')).join('\r\n')+'\r\n';
+ }
+ return {start,stop,status,exportResultsCsv,isRunning:()=>!!current,canUpdate:()=>!current};
 }

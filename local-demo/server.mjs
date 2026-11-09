@@ -347,6 +347,12 @@ server=http.createServer(async(req,res)=>{
    if(req.method==='GET'&&path==='/api/demo/risk')return answer(res,200,trading.getRiskStatus());
    if(req.method==='GET'&&path==='/api/demo/burst/status')return answer(res,200,bursts.status());
    if(req.method==='GET'&&path==='/api/demo/program/status')return answer(res,200,program.status());
+   if(req.method==='GET'&&path==='/api/demo/program/results.csv'){
+    res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
+     'X-Content-Type-Options':'nosniff',
+     'Content-Disposition':'attachment; filename="ecopiensa-programa-10x10-resultados.csv"'});
+    res.end(program.exportResultsCsv());return;
+   }
    if(req.method==='GET'&&path==='/api/demo/burst-history.csv'){
     res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
      'X-Content-Type-Options':'nosniff',

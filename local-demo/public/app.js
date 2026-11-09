@@ -244,20 +244,39 @@ async function updateDemoProgram(){
    current?'Último programa: '+current.state+' · tandas completadas '+
     current.roundsCompleted+'/10 · '+(current.stopReason||'sin errores registrados'):
     'Sin programa DEMO. Autoriza localmente una secuencia de hasta 100 contratos.';
+  const pct=x=>Number.isFinite(x)?x.toFixed(2)+' %':'—';
   const tbody=$('program-history');tbody.replaceChildren();
   for(const x of p.programs||[]){
    const tr=document.createElement('tr');
    [x.id.slice(0,8),x.state,x.roundsCompleted+' / '+x.roundsRequested,
-    x.purchasesExecuted,signedCents(x.netCents),x.stopReason||'—'].forEach((value,i)=>{
+    x.purchasesExecuted,pct(x.winRatePct),pct(x.roiPct),
+    signedCents(x.netCents),x.stopReason||'—'].forEach((value,i)=>{
      const td=document.createElement('td');td.textContent=value;
-     if(i===4)td.className=x.netCents<0?'down':x.netCents>0?'up':'';
+     if(i===6)td.className=x.netCents<0?'down':x.netCents>0?'up':'';
      tr.appendChild(td);
    });tbody.appendChild(tr);
   }
   if(!tbody.children.length){
    const tr=document.createElement('tr'),td=document.createElement('td');
-   td.colSpan=6;td.textContent='Aún no se ha autorizado ningún programa.';
+   td.colSpan=8;td.textContent='Aún no se ha autorizado ningún programa.';
    tr.appendChild(td);tbody.appendChild(tr);
+  }
+  const rounds=$('program-round-results');rounds.replaceChildren();
+  for(const round of current?.batches||[]){
+   const tr=document.createElement('tr');
+   [round.round,round.state,round.settled+' / '+round.requested,
+    round.wins+' / '+round.losses,pct(round.winRatePct),
+    signedCents(round.grossWinCents),signedCents(-round.grossLossCents),
+    signedCents(round.netCents),pct(round.roiPct)].forEach((value,i)=>{
+     const td=document.createElement('td');td.textContent=value;
+     if(i===7)td.className=round.netCents<0?'down':round.netCents>0?'up':'';
+     tr.appendChild(td);
+   });rounds.appendChild(tr);
+  }
+  if(!rounds.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=9;td.textContent='No hay tandas liquidadas o iniciadas en el programa más reciente.';
+   tr.appendChild(td);rounds.appendChild(tr);
   }
  }catch(e){$('program-status').textContent='Programa DEMO no disponible: '+e.message;}
 }
