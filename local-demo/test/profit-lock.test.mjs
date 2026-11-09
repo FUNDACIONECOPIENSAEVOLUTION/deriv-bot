@@ -8,7 +8,7 @@ import {createDemoProgram} from '../demo-program.mjs';
 function setupBurst(pnls){
  const db=new DatabaseSync(':memory:');
  db.exec('CREATE TABLE demo_local_orders(id TEXT PRIMARY KEY,batch_id TEXT,state TEXT,pnl_cents INTEGER)');
- let count=0,snapshotReads=0;
+ let count=0,snapshotReads=0;const stakes=[];
  const account={accountId:'DEMO-TEST',balance:10000,currency:'USD'};
  const model={durationTicks:5,direction:'CALL',selectedPolicy:'MOMENTUM_5',
   trainingDecisions:50,validationDecisions:30,observedValidationHitRate:.62,
@@ -17,6 +17,7 @@ function setupBurst(pnls){
   pendingOrders:0,unresolvedOrders:0,dailyRemainingRiskCents:10000});
  const trading={canUpdate:()=>true,getRiskStatus:risk,
   requestIntent:x=>{
+   stakes.push(x.stakeCents);
    const id='a'+(++count);
    db.prepare("INSERT INTO demo_local_orders(id,state) VALUES(?,'PENDING_APPROVAL')").run(id);
    return {id};
@@ -36,7 +37,7 @@ function setupBurst(pnls){
    candles:[{epoch:Math.floor(Date.now()/1000)-1000+Math.floor(snapshotReads++/4)}],
    tickHorizonModels:[model]}),
   refreshAccount:async()=>account,getAccount:()=>account,signalPollMs:1});
- return {db,burst,orders:()=>count};
+ return {db,burst,orders:()=>count,stakes:()=>stakes};
 }
 async function wait(runner){
  for(let i=0;i<450&&runner.status().running;i++)await pause(20);
@@ -233,5 +234,26 @@ test('Una configuracion antigua del cap US$2 no se acepta en tandas nuevas',()=>
  try{
   assert.throws(()=>burst.start({...args,lossCapCents:200}),
    /DEMO_PROFIT_LOCK_PARAMETERS_INVALID/);
+ }finally{db.close();}
+});
+
+test('US$1 al inicio, dos pérdidas cambian a US$0.50 hasta cerrar la tanda',async()=>{
+ const {db,burst,orders,stakes}=setupBurst([-100,-100,44,44,44,44,44,44,44,44]);
+ try{
+  const row=await (burst.start({...args,downshiftAfterTwoLosses:true}),wait(burst));
+  assert.equal(row.state,'COMPLETED');
+  assert.equal(row.stopReason,'TAKE_PROFIT_REACHED');
+  assert.equal(row.settled,8);
+  assert.equal(row.netCents,64);
+  assert.equal(orders(),8);
+  assert.deepEqual(stakes(),[100,100,50,50,50,50,50,50]);
+ }finally{db.close();}
+});
+test('Sin downshift la modalidad histórica conserva apuestas de US$1',async()=>{
+ const {db,burst,stakes}=setupBurst([88,88]);
+ try{
+  const row=await (burst.start(args),wait(burst));
+  assert.equal(row.settled,1);
+  assert.deepEqual(stakes(),[100]);
  }finally{db.close();}
 });
