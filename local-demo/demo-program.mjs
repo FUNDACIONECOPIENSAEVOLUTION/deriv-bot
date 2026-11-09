@@ -2,6 +2,7 @@
 // Una sola autorización local explícita. JAMÁS ejecuta REAL ni retoma tras reiniciar.
 import {randomUUID} from 'node:crypto';
 import {setTimeout as pause} from 'node:timers/promises';
+import {evaluateGlobalRisk,replaySettlements} from './program-equity-guard.mjs';
 
 export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betweenRoundsMs=200}){
  db.exec(`CREATE TABLE IF NOT EXISTS demo_programs(
@@ -16,16 +17,19 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
  if(!fields.has('profit_target_cents'))db.exec('ALTER TABLE demo_programs ADD COLUMN profit_target_cents INTEGER NOT NULL DEFAULT 0');
  if(!fields.has('loss_cap_cents'))db.exec('ALTER TABLE demo_programs ADD COLUMN loss_cap_cents INTEGER NOT NULL DEFAULT 0');
  if(!fields.has('exit_policy'))db.exec("ALTER TABLE demo_programs ADD COLUMN exit_policy TEXT NOT NULL DEFAULT 'FIXED_TARGET'");
+ if(!fields.has('global_protection'))db.exec('ALTER TABLE demo_programs ADD COLUMN global_protection INTEGER NOT NULL DEFAULT 0');
+ if(!fields.has('downshift_after_two_losses'))db.exec('ALTER TABLE demo_programs ADD COLUMN downshift_after_two_losses INTEGER NOT NULL DEFAULT 0');
  const now=()=>Math.floor(Date.now()/1000);
  db.prepare("UPDATE demo_programs SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART_NO_AUTO_RESUME' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(now());
- const add=db.prepare('INSERT INTO demo_programs(id,created_at,updated_at,state,rounds_requested,count_per_round,stake_cents,concurrency,symbol,signal_mode,continue_on_negative_round,profit_target_cents,loss_cap_cents,exit_policy) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+ const add=db.prepare('INSERT INTO demo_programs(id,created_at,updated_at,state,rounds_requested,count_per_round,stake_cents,concurrency,symbol,signal_mode,continue_on_negative_round,profit_target_cents,loss_cap_cents,exit_policy,global_protection,downshift_after_two_losses) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
  const save=db.prepare('UPDATE demo_programs SET state=?,updated_at=?,rounds_completed=?,stop_reason=? WHERE id=?');
  const recent=db.prepare(`SELECT p.id,p.created_at AS createdAt,p.updated_at AS updatedAt,p.state,
  p.rounds_requested AS roundsRequested,p.rounds_completed AS roundsCompleted,
  p.count_per_round AS countPerRound,p.stake_cents AS stakeCents,p.concurrency,p.symbol,
  p.signal_mode AS signalMode,p.continue_on_negative_round AS continueOnNegativeRound,
  p.profit_target_cents AS profitTargetCents,p.loss_cap_cents AS lossCapCents,
- p.exit_policy AS exitPolicy,
+ p.exit_policy AS exitPolicy,p.global_protection AS globalProtection,
+ p.downshift_after_two_losses AS downshiftAfterTwoLosses,
  p.stop_reason AS stopReason,
  (SELECT COUNT(*) FROM demo_bursts b WHERE b.program_id=p.id) AS burstsStarted,
  (SELECT COALESCE(SUM(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 ELSE 0 END),0)
@@ -47,6 +51,7 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   COALESCE(SUM(CASE WHEN o.state='SETTLED' THEN o.pnl_cents ELSE 0 END),0) AS netCents
   FROM demo_bursts b LEFT JOIN demo_local_orders o ON o.batch_id=b.id
   WHERE b.program_id IS NOT NULL GROUP BY b.id ORDER BY b.created_at,b.id`);
+ const equityRows=db.prepare("SELECT o.pnl_cents AS pnlCents FROM demo_local_orders o JOIN demo_bursts b ON b.id=o.batch_id WHERE b.program_id=? AND o.state='SETTLED' ORDER BY o.rowid");
  const percent=(num,den)=>den>0?Number((100*num/den).toFixed(2)):null;
  function getReport(){
   const all=results.all(),byId=new Map();
@@ -62,7 +67,9 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
     return v;
    },{executed:0,settled:0,wins:0,losses:0,rejected:0,stakedCents:0,grossWinCents:0,grossLossCents:0,netCents:0});
    return {...p,...totals,winRatePct:percent(totals.wins,totals.settled),
-    roiPct:percent(totals.netCents,totals.stakedCents),batches};
+    roiPct:percent(totals.netCents,totals.stakedCents),batches,
+     globalRisk:p.globalProtection?evaluateGlobalRisk({...replaySettlements(equityRows.all(p.id)),
+      stakeCents:p.stakeCents}):null};
   });
  }
  let current=null;
@@ -70,13 +77,13 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   stopRequested:current?.stopRequested||false,round:current?.round||0,
   programs:getReport(),realEnabled:false,demoOnly:true,
   authorization:'LOCAL_OWNER_ONLY'});
- const riskStop=()=>{
+ const riskStop=(stakeCents=100)=>{
   const risk=trading.getRiskStatus?.();
   if(!risk) return 'DEMO_RISK_UNAVAILABLE';
   if(risk.dailyLossStopActive)return 'DEMO_DAILY_NET_LOSS_STOP';
   if(risk.accountFloorStopActive)return 'DEMO_ACCOUNT_FLOOR_STOP';
   if(risk.pendingOrders||risk.unresolvedOrders)return 'DEMO_OPEN_OR_UNKNOWN_ORDERS';
-  if(risk.dailyRemainingRiskCents<100)return 'DEMO_DAILY_NET_LOSS_EXPOSURE';
+  if(risk.dailyRemainingRiskCents<stakeCents)return 'DEMO_DAILY_NET_LOSS_EXPOSURE';
   if(!trading.canUpdate())return 'DEMO_ORDER_REQUIRES_RECONCILIATION';
   return null;
  };
@@ -85,14 +92,24 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   try{
    for(let i=0;i<10;i++){
     if(session.stopRequested){state='STOPPED';reason='OWNER_STOP_REQUESTED';break;}
-    const blocked=riskStop();
+    const blocked=riskStop(session.stakeCents);
     if(blocked){state='PAUSED';reason=blocked;break;}
+    if(session.globalProtection){
+     const e=evaluateGlobalRisk({...replaySettlements(equityRows.all(session.id)),
+      stakeCents:session.stakeCents});
+     if(e.blocked){
+      state='PAUSED';reason=e.reason;
+      audit('DEMO_PROGRAM_GLOBAL_PROTECTION',session.id+' '+reason);break;
+     }
+    }
     // El programa no abre otra tanda mientras la anterior no esté liquidada.
-    const burst=bursts.start({count:10,stakeCents:100,symbol:'AUTO',
+    const burst=bursts.start({count:10,stakeCents:session.stakeCents,symbol:'AUTO',
      concurrency:session.concurrency,confirmation:'CONFIRMAR TANDA DEMO',
      programId:session.id,usedCandleEpoch:session.usedCandleEpoch,
      mode:session.mode,profitTargetCents:session.profitTargetCents,
-     lossCapCents:session.lossCapCents,exitPolicy:session.exitPolicy});
+     lossCapCents:session.lossCapCents,exitPolicy:session.exitPolicy,
+     globalProtection:session.globalProtection,
+     downshiftAfterTwoLosses:session.downshiftAfterTwoLosses});
     session.round=i+1;
     let terminal=null;
     // Un piloto puede mantenerse en ESPERAR mientras no haya una buena
@@ -176,7 +193,8 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
  }
  function start({rounds=10,perRound=10,stakeCents=100,concurrency=5,
   symbol='AUTO',mode='VALIDATED_ONLY',continueAfterNegativeRound=false,
-  profitTargetCents=0,exitPolicy='FIXED_TARGET',confirmation}={}){
+  profitTargetCents=0,exitPolicy='FIXED_TARGET',
+  globalProtection=false,downshiftAfterTwoLosses=false,confirmation}={}){
   if(confirmation!=='CONFIRMAR PROGRAMA DEMO 10X10')
    throw Error('DEMO_PROGRAM_LOCAL_APPROVAL_REQUIRED');
   if(!['VALIDATED_ONLY','RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
@@ -185,6 +203,9 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
    throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_BOOLEAN_REQUIRED');
   if(continueAfterNegativeRound&&!['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
    throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_RESEARCH_ONLY');
+  if(typeof globalProtection!=='boolean'||typeof downshiftAfterTwoLosses!=='boolean'||
+   ((globalProtection||downshiftAfterTwoLosses)&&profitTargetCents===0))
+   throw Error('DEMO_PROGRAM_PROTECTION_PARAMETERS_INVALID');
   if(!['FIXED_TARGET','TRAILING_GREEN'].includes(exitPolicy)||
    (profitTargetCents===0&&exitPolicy!=='FIXED_TARGET'))
    throw Error('DEMO_PROGRAM_EXIT_POLICY_INVALID');
@@ -196,7 +217,7 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
    !Number.isSafeInteger(concurrency)||concurrency<1||concurrency>5)
    throw Error('DEMO_PROGRAM_PARAMETERS_INVALID');
   if(current||bursts.status().running)throw Error('DEMO_PROGRAM_OR_BURST_ALREADY_RUNNING');
-  const blocked=riskStop();
+  const blocked=riskStop(stakeCents);
   if(blocked)throw Error(blocked);
   const id=randomUUID();
   const actualConcurrency=profitTargetCents>0?1:concurrency;
@@ -204,14 +225,50 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   // No utiliza el limite opcional -US$2 por tanda; el limite de perdida
   // diaria y demas cortacircuitos NO se desactivan.
   const lossCapCents=0;
-  add.run(id,now(),now(),'RUNNING',10,10,100,actualConcurrency,'AUTO',mode,
-   continueAfterNegativeRound?1:0,profitTargetCents,lossCapCents,exitPolicy);
+  add.run(id,now(),now(),'RUNNING',10,10,stakeCents,actualConcurrency,'AUTO',mode,
+   continueAfterNegativeRound?1:0,profitTargetCents,lossCapCents,exitPolicy,
+   globalProtection?1:0,downshiftAfterTwoLosses?1:0);
   const session={id,concurrency:actualConcurrency,mode,continueAfterNegativeRound,
-   profitTargetCents,lossCapCents,exitPolicy,
+   profitTargetCents,lossCapCents,exitPolicy,globalProtection,
+   downshiftAfterTwoLosses,stakeCents,
    round:0,roundsCompleted:0,stopRequested:false,
    usedCandleEpoch:new Map()};
   current=session;
-  audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS$1, '+mode+
+  audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS
+   ' continueNegative='+continueAfterNegativeRound+
+   ' profitTargetCents='+profitTargetCents+' lossCapCents='+lossCapCents+
+   ' roundPolicy='+exitPolicy+'_OR_TEN'+
+   ' effectiveConcurrency='+actualConcurrency+
+   ' globalProtection='+globalProtection+' downshift='+downshiftAfterTwoLosses+' DEMO ONLY');
+  void run(session);
+  return {id,state:'RUNNING',mode,continueAfterNegativeRound,
+   profitTargetCents,lossCapCents,exitPolicy,globalProtection,downshiftAfterTwoLosses,
+   roundsRequested:10,perRound:10,stakeCents,
+   maxCommittedCents:stakeCents*100,maxConcurrent:actualConcurrency,realEnabled:false};
+ }
+ function stop(){
+  if(!current)return {stopped:false,reason:'NO_RUNNING_PROGRAM'};
+  current.stopRequested=true;
+  bursts.stop();
+  return {stopped:true,reason:'STOP_AFTER_ACTIVE_BURST',id:current.id};
+ }
+ function exportResultsCsv(){
+  const keys=['programId','round','batchId','state','requested','executed','settled','wins',
+   'losses','rejected','winRatePct','stakedCents','grossWinCents','grossLossCents',
+   'netCents','roiPct','continueOnNegativeRound',
+   'profitTargetCents','lossCapCents','exitPolicy','globalProtection','downshiftAfterTwoLosses','stopReason'];
+  const rows=getReport().flatMap(p=>p.batches.map(b=>({
+   ...b,continueOnNegativeRound:p.continueOnNegativeRound,
+   profitTargetCents:p.profitTargetCents,lossCapCents:p.lossCapCents,
+   exitPolicy:p.exitPolicy,globalProtection:p.globalProtection,downshiftAfterTwoLosses:p.downshiftAfterTwoLosses})));
+  const safe=v=>typeof v==='number'&&Number.isFinite(v)?String(v):
+   '"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,m=>'_'+m)+'"';
+  return '\uFEFF'+keys.join(',')+'\r\n'+rows.map(r=>
+   keys.map(k=>safe(r[k])).join(',')).join('\r\n')+'\r\n';
+ }
+ return {start,stop,status,exportResultsCsv,isRunning:()=>!!current,canUpdate:()=>!current};
+}
++(stakeCents/100)+', '+mode+
    ' continueNegative='+continueAfterNegativeRound+
    ' profitTargetCents='+profitTargetCents+' lossCapCents='+lossCapCents+
    ' roundPolicy='+exitPolicy+'_OR_TEN'+
