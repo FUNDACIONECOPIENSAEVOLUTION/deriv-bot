@@ -30,7 +30,17 @@ $env:TEMP=$tempRoot;$env:TMP=$tempRoot
 $work=Join-Path $tempRoot ('EcopiensaPC-Reparar-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work -Force | Out-Null
 $stopped=$false;$installed=$false;$backup=''
+$maintenance=Join-Path $data 'actualizacion-en-curso.flag'
+$runningFlag=Join-Path $data 'ejecucion-habilitada.flag'
+$wasRunningEnabled=Test-Path -LiteralPath $runningFlag
+$maintenanceSet=$false
+$taskState=@{}
+$updateMutex=New-Object System.Threading.Mutex($false,'Local\EcopiensaActualizacionPC')
+$mutexAcquired=$false
 try{
+ # No competir con el actualizador automatico ni con otro reparador.
+ $mutexAcquired=$updateMutex.WaitOne(0)
+ if(-not $mutexAcquired){throw 'OTRA_ACTUALIZACION_EN_CURSO'}
  $chunks=New-Object System.Text.StringBuilder
  for($i=0;$i -lt [int]$manifest.parts;$i++){
   $part='{0:00}' -f $i
@@ -97,10 +107,27 @@ try{
   Copy-Item -LiteralPath $file.FullName -Destination $target -Force
  }
  Write-Host 'Copia privada del código anterior creada. Se conservan OAuth y CSV.' -ForegroundColor Green
+ # Crear el bloqueo de mantenimiento ANTES de desactivar las tareas o cerrar Node.
+ # La vigilancia nueva respeta este flag y la anterior respeta ejecucion-habilitada.flag.
+ Set-Content -LiteralPath $maintenance -Value $remote -Encoding Ascii
+ $maintenanceSet=$true
  foreach($taskName in @('Ecopiensa_Deriv_PC_AutoActualizar','Ecopiensa_Deriv_PC_VigilarServidor')){
-  try{Disable-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Out-Null}catch{}
+  try{
+   $task=Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+   $taskState[$taskName]=[string]$task.State
+   if($task.State -ne 'Disabled'){
+    Disable-ScheduledTask -TaskName $taskName -ErrorAction Stop | Out-Null
+   }
+  }catch{
+   Write-Warning ('No se pudo pausar '+$taskName+'; proteccion por flag de mantenimiento activa.')
+  }
  }
  if($health){
+  # Las pruebas pueden durar varios segundos: una compra nueva invalida el cierre.
+  $currentHealth=Invoke-RestMethod -Uri 'http://127.0.0.1:8765/api/health' -TimeoutSec 3
+  if($currentHealth.safeToUpdate -ne $true){
+   throw 'COMPRAS_ACTIVAS_AL_INTENTAR_CERRAR'
+  }
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Cerrar-Ecopiensa.ps1') -Ruta $Ruta
   if($LASTEXITCODE -ne 0){throw 'NO_PUDO_CERRAR_ECOPIENSA'}
   for($i=0;$i -lt 30;$i++){
@@ -153,6 +180,24 @@ try{
  }
  throw
 }finally{
+ # El watchdog nunca debe reabrir Node mientras se sustituyen archivos.
+ if($maintenanceSet){
+  Remove-Item -LiteralPath $maintenance -Force -ErrorAction SilentlyContinue
+ }
+ # Recuperar únicamente tareas que ya estaban listas antes de este instalador.
+ foreach($taskName in $taskState.Keys){
+  if($taskState[$taskName] -ne 'Disabled'){
+   try{Enable-ScheduledTask -TaskName $taskName -ErrorAction Stop | Out-Null}
+   catch{Write-Warning ('No se pudo rehabilitar '+$taskName+'; ejecutar Reparar-Tareas-PC.ps1 como administrador.')}
+  }
+ }
+ # Si falló tras cerrar el programa, recuperar el servidor anterior sin compras.
+ if(-not $installed -and $stopped -and $wasRunningEnabled){
+  Set-Content -LiteralPath $runningFlag -Value 'ACTIVO' -Encoding Ascii
+  try{& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $app 'Vigilar-Ecopiensa.ps1') -Ruta $Ruta | Out-Null}catch{}
+ }
+ if($mutexAcquired){$updateMutex.ReleaseMutex()}
+ $updateMutex.Dispose()
  Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
  $env:TEMP=$oldTemp;$env:TMP=$oldTmp
 }
