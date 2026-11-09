@@ -323,6 +323,8 @@ const mcpHandlers={
  signals:()=>[...market.values()].map(snapshot),
  training:()=>readTraining(trainingFile),
  orders:()=>trading.getSummary(),
+ risk:()=>trading.getRiskStatus(),
+ program:()=>program.status(),
  walkForward:()=>evaluateWalkForward(qualityRows.all()),
  request:args=>{if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');if(program.isRunning())throw Error('DEMO_PROGRAM_IN_PROGRESS');return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});}
 };
