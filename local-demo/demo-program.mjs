@@ -148,7 +148,8 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
    'losses','rejected','winRatePct','stakedCents','grossWinCents','grossLossCents',
    'netCents','roiPct','stopReason'];
   const rows=getReport().flatMap(p=>p.batches);
-  const safe=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,m=>'_'+m)+'"';
+  const safe=v=>typeof v==='number'&&Number.isFinite(v)?String(v):
+   '"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,m=>'_'+m)+'"';
   return '\uFEFF'+keys.join(',')+'\r\n'+rows.map(r=>
    keys.map(k=>safe(r[k])).join(',')).join('\r\n')+'\r\n';
  }
