@@ -16,7 +16,9 @@ test('Modelo no usa precios posteriores para predecir el mismo corte temporal',(
  const a=evaluateTickHorizons(rising.slice(0,600));
  const changed=rising.slice(0,600).concat(Array.from({length:60},(_,i)=>300+i));
  const b=evaluateTickHorizons(changed.slice(0,600));
- assert.deepEqual(a,b);
+ const statisticalFields=x=>x.map(({computeMs,computedAtMs,...decision})=>decision);
+ assert.deepEqual(statisticalFields(a),statisticalFields(b));
+ assert.ok(a.every(x=>Number.isFinite(x.computeMs)&&Number.isFinite(x.computedAtMs)));
 });
 test('Pago insuficiente cancela BUY incluso con una prediccion aparente perfecta',()=>{
  const candidate={durationTicks:5,readyForProposal:true,conservativeWinRateLower95:.65};
