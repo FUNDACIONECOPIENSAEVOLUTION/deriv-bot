@@ -2,6 +2,7 @@
 // Nunca usa /ws/real; jamás retoma una tanda tras reinicio, ni reenvía un BUY incierto.
 import {randomUUID} from 'node:crypto';
 import {setTimeout as pause} from 'node:timers/promises';
+import {isVolatilitySymbol} from './synthetic-catalog.mjs';
 
 const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500'];
@@ -23,7 +24,8 @@ export function selectDistinctCandidates(candidates,limit,usedCandleEpoch=new Ma
  return picks;
 }
 
-export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAccount,audit}){
+export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAccount,audit,
+ getSymbols=()=>SYMBOLS,getAdaptiveVerdict=()=>({blocked:false})}){
  db.exec("CREATE TABLE IF NOT EXISTS demo_bursts(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,state TEXT NOT NULL,count_requested INTEGER NOT NULL,stake_cents INTEGER NOT NULL,symbol TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,stop_reason TEXT)");
  db.prepare("UPDATE demo_bursts SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(epoch());
  const fields=new Set(db.prepare('PRAGMA table_info(demo_bursts)').all().map(x=>x.name));
@@ -50,12 +52,13 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   inFlight:active?.inFlight||0,liveId:active?.id||null,batches:latest.all(),
   maxConcurrent:MAX_PARALLEL,realEnabled:false,demoOnly:true};}
  function select(symbol,limit,batch){
-  const allowed=symbol==='AUTO'?SYMBOLS:[symbol];
+  const allowed=symbol==='AUTO'?getSymbols():[symbol];
   const eligible=allowed.map(s=>marketSnapshot(s)).filter(x=>
    x&&x.available!==false&&x.ready===true&&x.candleCount>=60&&x.fresh&&
    ['CALL','PUT'].includes(x.direction)&&Number.isFinite(x.ageReceivedMs)&&
    x.ageReceivedMs<=1500&&Number.isInteger(x.epoch)&&
-   Math.abs(Date.now()-x.epoch*1000)<=2500);
+   Math.abs(Date.now()-x.epoch*1000)<=2500&&
+   !getAdaptiveVerdict(x.symbol,x.direction).blocked);
   // Señal de mayor intensidad descriptiva, no probabilidad de acierto.
   eligible.sort((a,b)=>(b.signalStrength||0)-(a.signalStrength||0)||
    a.ageReceivedMs-b.ageReceivedMs);
@@ -137,7 +140,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(confirmation!=='CONFIRMAR TANDA DEMO')throw Error('DEMO_BURST_APPROVAL_REQUIRED');
   if(!Number.isSafeInteger(count)||count<1||count>10||
    !Number.isSafeInteger(concurrency)||concurrency<1||concurrency>Math.min(count,MAX_PARALLEL)||
-   !STAKES.includes(stakeCents)||!(symbol==='AUTO'||SYMBOLS.includes(symbol)))
+   !STAKES.includes(stakeCents)||!(symbol==='AUTO'||(isVolatilitySymbol(symbol)&&getSymbols().includes(symbol))))
    throw Error('DEMO_BURST_PARAMETERS_INVALID');
   if(active)throw Error('DEMO_BURST_ALREADY_RUNNING');
   if(!trading.canUpdate())throw Error('DEMO_ORDER_REQUIRES_RECONCILIATION');
