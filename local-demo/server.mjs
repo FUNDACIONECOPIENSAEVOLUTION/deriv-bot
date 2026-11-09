@@ -286,7 +286,7 @@ if(!existsSync(mcpAuthPath)){writeFileSync(mcpAuthPath,'Bearer '+mcpKey,{mode:0o
 // Aprendizaje conservador a partir de liquidaciones oficiales guardadas en SQLite.
 const outcomeRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
  bought_at_ms,created_at,candle_epoch,signal_age_ms,signal_rsi,buy_latency_ms
- FROM demo_local_orders WHERE state='SETTLED' ORDER BY created_at DESC LIMIT 1500`);
+ FROM demo_local_orders WHERE state='SETTLED' ORDER BY created_at DESC`);
 let reportCache=null,reportCacheAt=0;
 const getAdaptiveReport=()=>{
  if(!reportCache||Date.now()-reportCacheAt>10000){
