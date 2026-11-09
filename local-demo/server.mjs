@@ -11,7 +11,7 @@ import {spawn} from 'node:child_process';
 import {dispatchMcp} from './mcp-local.mjs';
 import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
-import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS} from './market-analysis.mjs';
+import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
 import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
 
 const HOME=dirname(fileURLToPath(import.meta.url));
@@ -213,7 +213,7 @@ function publicSocket(){
    publicStats.diagnosticCode='HISTORIAL_RECIBIDO';
    // Conservar cualquier tick posterior recibido mientras llegaba el historial.
    const future=m.ticks.filter(x=>rows.length&&x.epoch>rows.at(-1).epoch);
-   m.ticks=[...rows,...future].slice(-MAX_TICKS);
+   m.ticks=trimTickHistory([...rows,...future]);
    if(m.ticks.length){m.epoch=m.ticks.at(-1).epoch;m.quote=m.ticks.at(-1).price;
     m.receivedAtMs=performance.now();}
    pushMarket(m);
@@ -229,7 +229,7 @@ function publicSocket(){
    const m=market.get(symbol);
    if(!m||!m.available||(m.epoch&&epoch<m.epoch))return;
    m.epoch=epoch;m.quote=price;m.receivedAtMs=performance.now();
-   m.ticks.push({price,epoch});if(m.ticks.length>MAX_TICKS)m.ticks.shift();
+   m.ticks.push({price,epoch});trimTickHistory(m.ticks);
    pushMarket(m);
   }
  }catch{publicLastError='MENSAJE_MERCADO_INVALIDO';publicStats.diagnosticCode=publicLastError;}});
