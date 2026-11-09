@@ -279,7 +279,7 @@ test('Protector de beneficio global impide nuevo BUY después de perder margen d
   db.exec('CREATE TABLE demo_programs(id TEXT PRIMARY KEY,global_protection INTEGER NOT NULL)');
   db.prepare('INSERT INTO demo_programs(id,global_protection) VALUES(?,?)').run('p1',1);
   db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol) VALUES(?,?,?,?,?,?,?)')
-   .run('previous',1794300000,1794300000,'COMPLETED',10,100,'AUTO');
+   .run('previous',1,1,'COMPLETED',10,100,'AUTO');
   db.prepare('UPDATE demo_bursts SET program_id=? WHERE id=?').run('p1','previous');
   const insert=db.prepare('INSERT INTO demo_local_orders(id,batch_id,state,pnl_cents) VALUES(?,?,?,?)');
   [88,88,88,88,88,-100,-100].forEach((p,i)=>
