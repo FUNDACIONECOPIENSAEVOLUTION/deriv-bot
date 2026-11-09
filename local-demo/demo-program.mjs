@@ -15,15 +15,17 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   db.exec("ALTER TABLE demo_programs ADD COLUMN continue_on_negative_round INTEGER NOT NULL DEFAULT 0");
  if(!fields.has('profit_target_cents'))db.exec('ALTER TABLE demo_programs ADD COLUMN profit_target_cents INTEGER NOT NULL DEFAULT 0');
  if(!fields.has('loss_cap_cents'))db.exec('ALTER TABLE demo_programs ADD COLUMN loss_cap_cents INTEGER NOT NULL DEFAULT 0');
+ if(!fields.has('exit_policy'))db.exec("ALTER TABLE demo_programs ADD COLUMN exit_policy TEXT NOT NULL DEFAULT 'FIXED_TARGET'");
  const now=()=>Math.floor(Date.now()/1000);
  db.prepare("UPDATE demo_programs SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART_NO_AUTO_RESUME' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(now());
- const add=db.prepare('INSERT INTO demo_programs(id,created_at,updated_at,state,rounds_requested,count_per_round,stake_cents,concurrency,symbol,signal_mode,continue_on_negative_round,profit_target_cents,loss_cap_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)');
+ const add=db.prepare('INSERT INTO demo_programs(id,created_at,updated_at,state,rounds_requested,count_per_round,stake_cents,concurrency,symbol,signal_mode,continue_on_negative_round,profit_target_cents,loss_cap_cents,exit_policy) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
  const save=db.prepare('UPDATE demo_programs SET state=?,updated_at=?,rounds_completed=?,stop_reason=? WHERE id=?');
  const recent=db.prepare(`SELECT p.id,p.created_at AS createdAt,p.updated_at AS updatedAt,p.state,
  p.rounds_requested AS roundsRequested,p.rounds_completed AS roundsCompleted,
  p.count_per_round AS countPerRound,p.stake_cents AS stakeCents,p.concurrency,p.symbol,
  p.signal_mode AS signalMode,p.continue_on_negative_round AS continueOnNegativeRound,
  p.profit_target_cents AS profitTargetCents,p.loss_cap_cents AS lossCapCents,
+ p.exit_policy AS exitPolicy,
  p.stop_reason AS stopReason,
  (SELECT COUNT(*) FROM demo_bursts b WHERE b.program_id=p.id) AS burstsStarted,
  (SELECT COALESCE(SUM(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 ELSE 0 END),0)
@@ -90,7 +92,7 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
      concurrency:session.concurrency,confirmation:'CONFIRMAR TANDA DEMO',
      programId:session.id,usedCandleEpoch:session.usedCandleEpoch,
      mode:session.mode,profitTargetCents:session.profitTargetCents,
-     lossCapCents:session.lossCapCents});
+     lossCapCents:session.lossCapCents,exitPolicy:session.exitPolicy});
     session.round=i+1;
     let terminal=null;
     // Un piloto puede mantenerse en ESPERAR mientras no haya una buena
@@ -110,7 +112,9 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
      state='HALTED';reason='BURST_STATUS_NOT_CONFIRMED';break;
     }
     const earlyGreen=session.profitTargetCents>0&&
-     terminal.state==='COMPLETED'&&terminal.stopReason==='TAKE_PROFIT_REACHED'&&
+     terminal.state==='COMPLETED'&&
+     ['TAKE_PROFIT_REACHED','TRAILING_RECOVERY_GREEN',
+      'TRAILING_PROFIT_LOCKED','TRAILING_FLOOR_PROTECTED'].includes(terminal.stopReason)&&
      terminal.settled>=1&&terminal.settled<=10&&terminal.executed===terminal.settled;
     const maxTen=session.profitTargetCents>0&&
      terminal.state==='COMPLETED'&&
@@ -172,7 +176,7 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
  }
  function start({rounds=10,perRound=10,stakeCents=100,concurrency=5,
   symbol='AUTO',mode='VALIDATED_ONLY',continueAfterNegativeRound=false,
-  profitTargetCents=0,confirmation}={}){
+  profitTargetCents=0,exitPolicy='FIXED_TARGET',confirmation}={}){
   if(confirmation!=='CONFIRMAR PROGRAMA DEMO 10X10')
    throw Error('DEMO_PROGRAM_LOCAL_APPROVAL_REQUIRED');
   if(!['VALIDATED_ONLY','RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
@@ -181,6 +185,9 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
    throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_BOOLEAN_REQUIRED');
   if(continueAfterNegativeRound&&!['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
    throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_RESEARCH_ONLY');
+  if(!['FIXED_TARGET','TRAILING_GREEN'].includes(exitPolicy)||
+   (profitTargetCents===0&&exitPolicy!=='FIXED_TARGET'))
+   throw Error('DEMO_PROGRAM_EXIT_POLICY_INVALID');
   if(![0,50,100,150].includes(profitTargetCents)||
    (profitTargetCents>0&&!['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode)))
    throw Error('DEMO_PROGRAM_PROFIT_LOCK_INVALID');
@@ -198,20 +205,21 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   // diaria y demas cortacircuitos NO se desactivan.
   const lossCapCents=0;
   add.run(id,now(),now(),'RUNNING',10,10,100,actualConcurrency,'AUTO',mode,
-   continueAfterNegativeRound?1:0,profitTargetCents,lossCapCents);
+   continueAfterNegativeRound?1:0,profitTargetCents,lossCapCents,exitPolicy);
   const session={id,concurrency:actualConcurrency,mode,continueAfterNegativeRound,
-   profitTargetCents,lossCapCents,
+   profitTargetCents,lossCapCents,exitPolicy,
    round:0,roundsCompleted:0,stopRequested:false,
    usedCandleEpoch:new Map()};
   current=session;
   audit('DEMO_PROGRAM_AUTHORIZED',id+' 10x10xUS$1, '+mode+
    ' continueNegative='+continueAfterNegativeRound+
    ' profitTargetCents='+profitTargetCents+' lossCapCents='+lossCapCents+
-   ' roundPolicy=TAKE_PROFIT_OR_TEN'+
+   ' roundPolicy='+exitPolicy+'_OR_TEN'+
    ' effectiveConcurrency='+actualConcurrency+' DEMO ONLY');
   void run(session);
   return {id,state:'RUNNING',mode,continueAfterNegativeRound,
-   profitTargetCents,lossCapCents,roundsRequested:10,perRound:10,stakeCents:100,
+   profitTargetCents,lossCapCents,exitPolicy,
+   roundsRequested:10,perRound:10,stakeCents:100,
    maxCommittedCents:10000,maxConcurrent:actualConcurrency,realEnabled:false};
  }
  function stop(){
@@ -224,10 +232,11 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
   const keys=['programId','round','batchId','state','requested','executed','settled','wins',
    'losses','rejected','winRatePct','stakedCents','grossWinCents','grossLossCents',
    'netCents','roiPct','continueOnNegativeRound',
-   'profitTargetCents','lossCapCents','stopReason'];
+   'profitTargetCents','lossCapCents','exitPolicy','stopReason'];
   const rows=getReport().flatMap(p=>p.batches.map(b=>({
    ...b,continueOnNegativeRound:p.continueOnNegativeRound,
-   profitTargetCents:p.profitTargetCents,lossCapCents:p.lossCapCents})));
+   profitTargetCents:p.profitTargetCents,lossCapCents:p.lossCapCents,
+   exitPolicy:p.exitPolicy})));
   const safe=v=>typeof v==='number'&&Number.isFinite(v)?String(v):
    '"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,m=>'_'+m)+'"';
   return '\uFEFF'+keys.join(',')+'\r\n'+rows.map(r=>
