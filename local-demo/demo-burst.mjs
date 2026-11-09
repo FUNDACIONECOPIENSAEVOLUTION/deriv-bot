@@ -56,7 +56,7 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
 
 export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAccount,audit,
  getSymbols=()=>SYMBOLS,getAdaptiveVerdict=()=>({blocked:false}),
- getVersion=()=>null,getStrategyVersion=()=>null}){
+ getVersion=()=>null,getStrategyVersion=()=>null,onSignalSelection=()=>null}){
  db.exec("CREATE TABLE IF NOT EXISTS demo_bursts(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,state TEXT NOT NULL,count_requested INTEGER NOT NULL,stake_cents INTEGER NOT NULL,symbol TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,stop_reason TEXT)");
  db.prepare("UPDATE demo_bursts SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(epoch());
  const fields=new Set(db.prepare('PRAGMA table_info(demo_bursts)').all().map(x=>x.name));
@@ -117,6 +117,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   // Señal de mayor intensidad descriptiva, no probabilidad de acierto.
   eligible.sort((a,b)=>(b.signalStrength||0)-(a.signalStrength||0)||
    a.ageReceivedMs-b.ageReceivedMs);
+  batch.lastEligible=eligible;
   return selectDistinctCandidates(eligible,limit,batch.usedCandleEpoch);
  }
  async function run(batch){
@@ -159,6 +160,10 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     }
     await refreshAccount();
     if(!getAccount()){state='HALTED';reason='DEMO_ACCOUNT_UNAVAILABLE';break;}
+    // Medición en sombra de alternativas conocidas ANTES del BUY;
+    // no cambia la selección ni permite al modelo ejecutar órdenes.
+    try{onSignalSelection({batchId:batch.id,eligible:batch.lastEligible||[],selected:picks});}
+    catch(error){audit('DEMO_SHADOW_TELEMETRY_ERROR',String(error?.message||'SHADOW_ERROR').slice(0,80));}
     // Reservar esta señal/vela antes de solicitar BUY (también si luego es rechazada).
     for(const pick of picks)batch.usedCandleEpoch.set(pick.symbol,pick.selectedCandleEpoch);
     batch.inFlight=picks.length;
