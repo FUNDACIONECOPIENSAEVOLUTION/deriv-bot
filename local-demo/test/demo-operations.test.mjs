@@ -60,7 +60,7 @@ test('Burst of three supports parallel DEMO approvals without real broker BUY',a
    return {state:'SETTLED'};
   }};
  const runner=createDemoBurst({db,trading,
-  marketSnapshot:()=>({symbol:'R_100',direction:'CALL',fresh:true,available:true,ready:true,candleCount:60,
+  marketSnapshot:symbol=>({symbol,direction:'CALL',fresh:true,available:true,ready:true,candleCount:60,
    epoch:Math.floor(Date.now()/1000),ageReceivedMs:30,rsi14:60,signalStrength:60}),
   refreshAccount:async()=>account,getAccount:()=>account,audit:()=>{}});
  const p=runner.start({count:3,stakeCents:50,symbol:'AUTO',concurrency:3,confirmation:'CONFIRMAR TANDA DEMO'});
