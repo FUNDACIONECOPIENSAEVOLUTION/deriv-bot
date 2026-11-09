@@ -6,7 +6,8 @@ const read=name=>readFileSync(fileURLToPath(new URL('../'+name,import.meta.url))
 test('Cerrar PC no confunde PID ausente con servidor apagado',()=>{
  const src=read('Cerrar-Ecopiensa.ps1');
  assert.match(src,/Get-CimInstance -ClassName Win32_Process/);
- assert.match(src,/\[regex\]::Escape\(\$scriptPath\)/);
+ assert.match(src,/GetLongPathNameW/);
+ assert.match(src,/EcopiensaCanonicalPath/);
  assert.match(src,/Stop-Process -Id/);
  assert.match(src,/ejecucion-habilitada\.flag/);
  assert.match(src,/No se encontro un proceso Node/);
@@ -16,6 +17,7 @@ test('Reparador crea mantenimiento y bloquea concurrente antes de cerrar Node',(
  assert.match(src,/actualizacion-en-curso\.flag/);
  assert.match(src,/EcopiensaActualizacionPC/);
  assert.match(src,/COMPRAS_ACTIVAS_AL_INTENTAR_CERRAR/);
+ assert.match(src,/Join-Path \$source 'Cerrar-Ecopiensa\.ps1'/);
  assert.ok(src.indexOf('Set-Content -LiteralPath $maintenance')<
   src.indexOf("Join-Path $app 'Cerrar-Ecopiensa.ps1'"));
  assert.match(src,/SERVIDOR_SIGUE_ACTIVO/);
