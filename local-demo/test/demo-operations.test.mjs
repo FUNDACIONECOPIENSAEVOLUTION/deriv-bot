@@ -153,7 +153,7 @@ test('Tandas DEMO registran versiones y el historial previo se preserva',async()
  const row=db.prepare('SELECT app_version AS appVersion,strategy_version AS strategyVersion,count_requested AS requested FROM demo_bursts WHERE id=?').get(next.id);
  assert.equal(row.appVersion,'13.6');
  assert.equal(row.requested,10);
- assert.equal(row.strategyVersion,'EMA20_EMA50_RSI14_ATR14_OHLC10_V1');
+ assert.equal(row.strategyVersion,'TICK_5_10_VALIDATED_V1');
  burst.stop();
  for(let i=0;i<20&&burst.status().running;i++)await pause(30);
  assert.equal(burst.status().running,false);
