@@ -41,6 +41,17 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    signal_snapshot_epoch:'INTEGER',signal_reason:'TEXT',
    duration_ticks:'INTEGER',prediction_mode:'TEXT',prediction_policy:'TEXT',
    prediction_lower95:'REAL',prediction_quote_edge:'REAL',
+   telemetry_selected_at_ms:'INTEGER',telemetry_analysis_completed_at_ms:'INTEGER',
+   telemetry_feed_received_at_ms:'INTEGER',telemetry_analysis_compute_ms:'REAL',
+   telemetry_analyzer5_ms:'REAL',telemetry_analyzer10_ms:'REAL',
+   telemetry_study5_ms:'REAL',telemetry_select_to_intent_ms:'INTEGER',
+   telemetry_analysis_to_selection_ms:'INTEGER',telemetry_intent_received_at_ms:'INTEGER',
+   telemetry_account_lookup_ms:'REAL',telemetry_otp_lookup_ms:'REAL',
+   telemetry_ws_connect_ms:'REAL',telemetry_proposal_sent_at_ms:'INTEGER',
+   telemetry_proposal_received_at_ms:'INTEGER',
+   telemetry_prebuy_validation_ms:'REAL',telemetry_buy_attempt_at_ms:'INTEGER',
+   telemetry_buy_ack_at_ms:'INTEGER',telemetry_buy_attempt_rtt_ms:'REAL',
+   telemetry_buy_feed_received_at_ms:'INTEGER',telemetry_buy_feed_age_ms:'REAL',
    candle_context_json:'TEXT',candle_context_captured_ms:'INTEGER',candle_pattern_version:'TEXT'})){
   if(!columns.has(name))db.exec('ALTER TABLE demo_local_orders ADD COLUMN '+name+' '+sqlType);
  }
@@ -75,7 +86,28 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    signal_snapshot_epoch AS snapshotEpoch,signal_reason AS signalReason,
    duration_ticks AS durationTicks,prediction_mode AS predictionMode,
    prediction_policy AS predictionPolicy,prediction_lower95 AS predictionLower95,
-   prediction_quote_edge AS predictionQuoteEdge FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
+   prediction_quote_edge AS predictionQuoteEdge,
+   telemetry_selected_at_ms AS selectedAtMs,
+   telemetry_analysis_completed_at_ms AS analysisCompletedAtMs,
+   telemetry_feed_received_at_ms AS feedReceivedAtMs,
+   telemetry_analysis_compute_ms AS analysisComputeMs,
+   telemetry_analyzer5_ms AS analyzer5ComputeMs,
+   telemetry_analyzer10_ms AS analyzer10ComputeMs,
+   telemetry_study5_ms AS analyzerStudy5ComputeMs,
+   telemetry_select_to_intent_ms AS selectToIntentMs,
+   telemetry_analysis_to_selection_ms AS analysisToSelectionMs,
+   telemetry_intent_received_at_ms AS intentReceivedAtMs,
+   telemetry_account_lookup_ms AS accountLookupMs,
+   telemetry_otp_lookup_ms AS otpLookupMs,
+   telemetry_ws_connect_ms AS wsConnectMs,
+   telemetry_proposal_sent_at_ms AS proposalSentAtMs,
+   telemetry_proposal_received_at_ms AS proposalReceivedAtMs,
+   telemetry_prebuy_validation_ms AS preBuyValidationMs,
+   telemetry_buy_attempt_at_ms AS buyAttemptAtMs,
+   telemetry_buy_ack_at_ms AS buyAckAtMs,
+   telemetry_buy_attempt_rtt_ms AS buyAttemptRttMs,
+   telemetry_buy_feed_received_at_ms AS buyFeedReceivedAtMs,
+   telemetry_buy_feed_age_ms AS buyFeedAgeMs FROM demo_local_orders ORDER BY created_at DESC,id DESC`;
  const list=db.prepare(listSql+' LIMIT 60');
  const csvList=db.prepare(listSql);
  const insert=db.prepare('INSERT INTO demo_local_orders(id,created_at,updated_at,state,source,symbol,direction,stake_cents,app_version,strategy_version,duration_ticks,prediction_mode,prediction_policy,prediction_lower95) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
@@ -84,6 +116,23 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    signal_five_tick_momentum=?,signal_tick_rsi14=?,five_tick_study_hit_rate=?,
    five_tick_study_n=?,signal_snapshot_epoch=?,signal_reason=? WHERE id=?`);
  const recordPredictionQuote=db.prepare('UPDATE demo_local_orders SET prediction_quote_edge=? WHERE id=?');
+ const recordSelectionTelemetry=db.prepare(`UPDATE demo_local_orders SET
+  telemetry_selected_at_ms=?,telemetry_analysis_completed_at_ms=?,
+  telemetry_feed_received_at_ms=?,telemetry_analysis_compute_ms=?,
+  telemetry_analyzer5_ms=?,telemetry_analyzer10_ms=?,
+  telemetry_study5_ms=?,telemetry_select_to_intent_ms=?,
+  telemetry_analysis_to_selection_ms=?,telemetry_intent_received_at_ms=? WHERE id=?`);
+ const recordAccountTiming=db.prepare('UPDATE demo_local_orders SET telemetry_account_lookup_ms=? WHERE id=?');
+ const recordConnectionTiming=db.prepare(`UPDATE demo_local_orders SET
+  telemetry_otp_lookup_ms=?,telemetry_ws_connect_ms=? WHERE id=?`);
+ const recordProposalTiming=db.prepare(`UPDATE demo_local_orders SET
+  proposal_latency_ms=?,telemetry_proposal_sent_at_ms=?,
+  telemetry_proposal_received_at_ms=? WHERE id=?`);
+ const recordBeforeBuyTiming=db.prepare(`UPDATE demo_local_orders SET
+  telemetry_prebuy_validation_ms=?,telemetry_buy_attempt_at_ms=?,
+  telemetry_buy_feed_received_at_ms=?,telemetry_buy_feed_age_ms=? WHERE id=?`);
+ const recordBuyResponseTiming=db.prepare(`UPDATE demo_local_orders SET
+  telemetry_buy_ack_at_ms=?,telemetry_buy_attempt_rtt_ms=? WHERE id=?`);
  const recordCandleContext=db.prepare(`UPDATE demo_local_orders
  SET candle_context_json=?,candle_context_captured_ms=?,candle_pattern_version=?
  WHERE id=?`);
@@ -173,7 +222,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   // Sin tope histórico; conservar protecciones de saldo, pérdidas y señal.
   if(!signalValid(symbol,direction,durationTicks,modelMode))throw Error('DEMO_SIGNAL_STALE_OR_CONTRARY');
  }
- function requestIntent({symbol,direction,stakeCents,source='LOCAL_OWNER',durationTicks=5,modelMode='LEGACY_60_CANDLES'}){
+ function requestIntent({symbol,direction,stakeCents,source='LOCAL_OWNER',durationTicks=5,modelMode='LEGACY_60_CANDLES',selectionTelemetry=null}){
   if(!['LOCAL_OWNER','MCP_OWNER_REVIEW'].includes(source))throw Error('DEMO_SOURCE_INVALID');
   if(modelMode==='PREDICTIVE_5_10'){
    if(![5,10].includes(durationTicks)||source!=='LOCAL_OWNER')
@@ -195,7 +244,24 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    getVersion(),prediction?'TICK_HORIZON_5_10_WALK_FORWARD_V1':STRATEGY_VERSION,
    durationTicks,modelMode,prediction?.selectedPolicy||null,
    prediction?.conservativeWinRateLower95??null);
-  purchasedAt.run(Date.now(),id);
+  const receivedAtMs=Date.now();
+  purchasedAt.run(receivedAtMs,id);
+  // La entrega entre analizador y ejecutor es LOCAL (no red).
+  const selection=modelMode==='PREDICTIVE_5_10'&&source==='LOCAL_OWNER'?
+   selectionTelemetry:null;
+  const metric=x=>Number.isFinite(x)&&x>=0?x:null;
+  const elapsed=(end,start)=>Number.isFinite(end)&&Number.isFinite(start)&&
+   end>=start?end-start:null;
+  const snapshot=selection?null:marketSnapshot(symbol);
+  const selectedAt=metric(selection?.selectedAtMs);
+  const completedAt=metric(selection?.analysisCompletedAtMs)??metric(snapshot?.analysisGeneratedAtMs);
+  const feedAt=metric(selection?.feedReceivedAtMs)??metric(snapshot?.feedReceivedAtMs);
+  recordSelectionTelemetry.run(selectedAt,completedAt,feedAt,
+   metric(selection?.analysisComputeMs)??metric(snapshot?.analysisTelemetry?.computeTotalMs),
+   metric(selection?.analyzer5Ms)??metric(snapshot?.analysisTelemetry?.analyzer5Ms),
+   metric(selection?.analyzer10Ms)??metric(snapshot?.analysisTelemetry?.analyzer10Ms),
+   metric(selection?.analyzerStudy5Ms)??metric(snapshot?.analysisTelemetry?.fiveTickStudyMs),
+   elapsed(receivedAtMs,selectedAt),elapsed(selectedAt,completedAt),receivedAtMs,id);
   audit('DEMO_REVIEW_REQUEST','Solicitud pendiente. No se envió ningún BUY.');
   return {id,state:'PENDING_APPROVAL',accountType:'demo',symbol,direction,stakeCents,
    durationTicks,modelMode,expiresAt:epoch()+45,
@@ -271,7 +337,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   if(unknown.get().n>0)throw Error('DEMO_UNKNOWN_BUY_REQUIRES_RECONCILIATION');
   if(active.get().n>MAX_CONCURRENT)throw Error('DEMO_CONCURRENCY_LIMIT');
   // Must verify the official DEMO USD balance again immediately before purchase.
+  const accountLookupStart=performance.now();
   const fresh=await accountLookup(creds,a.accountId);
+  recordAccountTiming.run(Number((performance.now()-accountLookupStart).toFixed(3)),id);
   if(fresh.accountId!==a.accountId)throw Error('DEMO_ACCOUNT_MISMATCH');
   try{
    riskCheck(row.symbol,row.direction,row.stake_cents,cents(fresh.balance),id,
@@ -284,14 +352,22 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   change.run('PREPARING',epoch(),null,id);
   let socket=null,dispatched=false,acknowledged=false;
   try{
+   const otpStart=performance.now();
    const url=await otpLookup(creds);
+   const otpLookupMs=Number((performance.now()-otpStart).toFixed(3));
    if(new URL(url).pathname!=='/trading/v1/options/ws/demo')throw Error('DEMO_ONLY_REQUIRED');
+   const wsStart=performance.now();
    socket=await socketConnect(url);
+   recordConnectionTiming.run(otpLookupMs,Number((performance.now()-wsStart).toFixed(3)),id);
    const request={proposal:1,amount:row.stake_cents/100,basis:'stake',
     contract_type:row.direction,currency:'USD',duration:row.duration_ticks||5,duration_unit:'t',
     underlying_symbol:row.symbol,req_id:804};
-   const t=performance.now(),quote=await sendAndWait(socket,request,'proposal');
+   const proposalSentAtMs=Date.now(),t=performance.now();
+   const quote=await sendAndWait(socket,request,'proposal');
+   const proposalReceivedAtMs=Date.now();
    const proposalLatency=Math.round(performance.now()-t);
+   recordProposalTiming.run(proposalLatency,proposalSentAtMs,proposalReceivedAtMs,id);
+   const prebuyStart=performance.now();
    const proposal=quote.proposal||{};
    const price=Number(proposal.ask_price);
    if(typeof proposal.id!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(proposal.id)
@@ -316,12 +392,16 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
     throw Error('DEMO_PREDICTIVE_CONTEXT_MISSING');
    if(candleContext)recordCandleContext.run(JSON.stringify(candleContext),
     candleContext.capturedAtMs,'CANDLE_CONTEXT_V1',id);
+   const buyAttemptAtMs=Date.now();
+   recordBeforeBuyTiming.run(Number((performance.now()-prebuyStart).toFixed(3)),
+    buyAttemptAtMs,observed?.feedReceivedAtMs??null,observed?.ageReceivedMs??null,id);
    change.run('SENDING',epoch(),null,id);
    const lastClosed=observed?.candles?.at(-1)||null;
    const buyStart=performance.now();
    // No automatic retries if the buy acknowledgement is lost.
    dispatched=true;
    const buy=await sendAndWait(socket,{buy:proposal.id,price,req_id:805},'buy',8000);
+   recordBuyResponseTiming.run(Date.now(),Number((performance.now()-buyStart).toFixed(3)),id);
    if(!Number.isSafeInteger(Number(buy.buy?.contract_id))||Number(buy.buy.contract_id)<=0)
      throw Error('DEMO_BUY_ACK_INVALID');
    acknowledged=true;
@@ -347,6 +427,12 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    return {state:result.settled?'SETTLED':'OPEN',id,contractId,
     pnlCents:result.settled?result.pnlCents:null,accountType:'demo',brokerOrders:1};
   }catch(error){
+   // Ante un BUY ambiguo no se inventa ACK ni una hora de recepcion del broker.
+   if(dispatched&&!acknowledged){
+    const sent=one.get(id)?.telemetry_buy_attempt_at_ms;
+    if(sent!==null&&Number.isFinite(sent))
+     recordBuyResponseTiming.run(null,Math.max(0,Date.now()-sent),id);
+   }
    // Explicit broker rejection after BUY means no purchase; network/timeout is UNKNOWN.
    const code=cleanError(error);
    const outcome=dispatched&&!acknowledged?(code==='DEMO_BROKER_REJECTED'?'REJECTED':'UNKNOWN')
@@ -382,9 +468,31 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
   const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','fiveTickMomentum','tickRsi14','fiveTickStudyHitRate','fiveTickStudyN','snapshotEpoch','signalReason',
    'durationTicks','predictionMode','predictionPolicy','predictionLower95','predictionQuoteEdge',
-   'errorCode','diagnosisCode'];
+   'selectedAtMs','feedReceivedAtMs','analysisCompletedAtMs','analysisComputeMs',
+   'analyzer5ComputeMs','analyzer10ComputeMs','analyzerStudy5ComputeMs',
+   'analysisToSelectionMs','selectToIntentMs','intentReceivedAtMs','accountLookupMs',
+   'otpLookupMs','wsConnectMs','proposalSentAtMs','proposalReceivedAtMs',
+   'preBuyValidationMs','buyAttemptAtMs','buyAckAtMs','buyAttemptRttMs',
+   'buyFeedReceivedAtMs','buyFeedAgeMs','intentToQuoteMs','quoteToBuyMs',
+   'intentToBuyMs','buyFeedToBuyMs','buyAttemptToSettlementMs','buyAckToSettlementMs',
+   'timingSchemaVersion','errorCode','diagnosisCode'];
    const escape=v=>'"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,match=>'_'+match)+'"';
-  return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(x=>headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(x).code:x[h])).join(',')).join('\r\n')+'\r\n';
+  const delta=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&a>=b?a-b:null;
+  const fields=row=>({
+   ...row,timingSchemaVersion:1,
+   intentToQuoteMs:delta(row.proposalSentAtMs,row.intentReceivedAtMs),
+   quoteToBuyMs:delta(row.buyAttemptAtMs,row.proposalReceivedAtMs),
+   intentToBuyMs:delta(row.buyAttemptAtMs,row.intentReceivedAtMs),
+   buyFeedToBuyMs:delta(row.buyAttemptAtMs,row.buyFeedReceivedAtMs),
+   buyAttemptToSettlementMs:row.state==='SETTLED'?
+    delta(row.settledAtMs,row.buyAttemptAtMs):null,
+   buyAckToSettlementMs:row.state==='SETTLED'?
+    delta(row.settledAtMs,row.buyAckAtMs):null
+  });
+  return '\uFEFF'+headers.join(',')+'\r\n'+selected.map(raw=>{
+   const row=fields(raw);
+   return headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(row).code:row[h])).join(',');
+  }).join('\r\n')+'\r\n';
  }
  return {getSummary,requestIntent,cancel,approve,reconcile,markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
   getStrategyVersion:()=>STRATEGY_VERSION,getRiskStatus,canUpdate:()=>active.get().n===0};
