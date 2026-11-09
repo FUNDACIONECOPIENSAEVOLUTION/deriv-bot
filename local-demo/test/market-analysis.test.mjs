@@ -41,3 +41,14 @@ test('Projection has a comparable out-of-sample MAE and never drives an automati
  assert.ok(Number.isFinite(result.naiveMae));
  assert.equal(result.projectionIsResearchOnly,true);
 });
+
+test('Telemetria tiene tiempos independientes para analisis 5 y 10 ticks',()=>{
+ const s=computeMarketAnalysis(ticks,{connected:true,ageReceivedMs:100});
+ assert.equal(s.analysisTelemetry.schemaVersion,1);
+ for(const field of ['computeTotalMs','horizonModelsTotalMs',
+  'analyzer5Ms','analyzer10Ms','fiveTickStudyMs']){
+  assert.ok(Number.isFinite(s.analysisTelemetry[field]),field);
+  assert.ok(s.analysisTelemetry[field]>=0);
+ }
+ assert.ok(s.analysisTelemetry.computeTotalMs>=s.analysisTelemetry.horizonModelsTotalMs);
+});

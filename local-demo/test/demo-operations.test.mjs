@@ -210,3 +210,26 @@ test('Intencion predictiva de 10 ticks exige muestra validada y conserva vencimi
   durationTicks:10,modelMode:'PREDICTIVE_5_10',source:'LOCAL_OWNER'}),/DEMO_SIGNAL_STALE/);
  db.close();
 });
+
+test('CSV e intencion predictiva conservan tiempos de seleccion y transferencia local',()=>{
+ const {db,trading,m}=setup();
+ m.tickHorizonModels=[{durationTicks:10,direction:'PUT',selectedPolicy:'MOMENTUM_20',
+  conservativeWinRateLower95:.72,readyForProposal:true}];
+ const selectedAtMs=Date.now()-3;
+ const intent=trading.requestIntent({symbol:'R_100',direction:'PUT',stakeCents:50,
+  durationTicks:10,modelMode:'PREDICTIVE_5_10',source:'LOCAL_OWNER',
+  selectionTelemetry:{selectedAtMs,analysisCompletedAtMs:selectedAtMs-2,
+   feedReceivedAtMs:selectedAtMs-10,analysisComputeMs:1.12,
+   analyzer5Ms:0.32,analyzer10Ms:0.47,analyzerStudy5Ms:0.12}});
+ const row=db.prepare(`SELECT telemetry_selected_at_ms AS selectedAt,
+  telemetry_select_to_intent_ms AS toIntent,telemetry_analysis_to_selection_ms AS toSelect,
+  telemetry_analyzer5_ms AS model5,telemetry_analyzer10_ms AS model10
+  FROM demo_local_orders WHERE id=?`).get(intent.id);
+ assert.equal(row.selectedAt,selectedAtMs);
+ assert.ok(row.toIntent>=0);
+ assert.equal(row.toSelect,2);
+ assert.equal(row.model5,.32);
+ assert.equal(row.model10,.47);
+ assert.match(trading.exportCsv('all'),/analyzer10ComputeMs/);
+ trading.cancel(intent.id);db.close();
+});

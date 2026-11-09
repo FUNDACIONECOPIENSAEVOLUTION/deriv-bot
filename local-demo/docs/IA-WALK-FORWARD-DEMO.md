@@ -63,3 +63,37 @@ Estos evaluadores son pequenos calculos estadisticos en el proceso
 local, no procesos con tokens independientes ni ejecutores paralelos.
 Separar el envio de ordenes evita duplicados y la evaluacion se hace
 en memoria sin consultas extra al broker durante cada tick.
+
+## Cronologia en el CSV (v1)
+
+Los CSV `/api/demo/orders.csv` y `/api/demo/burst.csv`
+guardan por contrato DEMO tiempos medidos en la maquina local.
+Las fechas `*AtMs` estan en milisegundos UTC Unix; los intervalos
+`*Ms` que miden operaciones internas usan el reloj monotono de Node.
+
+- Feed y calculos: `feedReceivedAtMs`, `analysisCompletedAtMs`,
+  `analysisComputeMs`, `analyzer5ComputeMs`, `analyzer10ComputeMs`,
+  `analyzerStudy5ComputeMs`.
+- Seleccion y entrega local: `selectedAtMs`,
+  `analysisToSelectionMs`, `selectToIntentMs`, `intentReceivedAtMs`,
+  `intentToQuoteMs`.
+- Cuenta, acceso y propuesta: `accountLookupMs`, `otpLookupMs`,
+  `wsConnectMs`, `proposalSentAtMs`, `proposalReceivedAtMs`,
+  `proposalLatencyMs`.
+- Validacion y compra: `preBuyValidationMs`, `buyAttemptAtMs`,
+  `buyAckAtMs`, `buyAttemptRttMs`, `buyLatencyMs`,
+  `buyFeedReceivedAtMs`, `buyFeedAgeMs`,
+  `quoteToBuyMs`, `intentToBuyMs`, `buyFeedToBuyMs`,
+  `buyAttemptToSettlementMs`, `buyAckToSettlementMs`.
+
+Los analizadores y el ejecutor DEMO son modulos del mismo proceso,
+por tanto su entrega es local y NO una latencia de red. El intento
+de enviar BUY NO es confirmacion de recepcion en Deriv; si la
+respuesta se pierde, permanece UNKNOWN sin reintentos automáticos.
+La hora `boughtAtMs` sigue siendo una marca local de ACK y no
+una hora de apertura oficial del contrato.
+
+Los historicos anteriores conservan los campos nuevos vacios.
+No se inventan valores ni se exportan credenciales. Analizar las
+latencias por indice, vencimiento, payout y resultado con una
+muestra prospectiva suficiente; correlacion no demuestra causalidad.
