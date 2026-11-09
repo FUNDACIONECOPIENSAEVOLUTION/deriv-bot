@@ -104,6 +104,36 @@ function drawEquity(rows){
  points.forEach((v,i)=>{if(i===0)ctx.moveTo(x(i),y(v));else ctx.lineTo(x(i),y(v));});ctx.stroke();
  ctx.fillStyle='#a8c7d4';ctx.font='13px Arial';ctx.fillText('P&L DEMO acumulado '+usd(points.at(-1)),12,17);
 }
+async function showWalkForwardAudit(){
+ try{
+  const d=await get('/api/learning/walk-forward');
+  const v=x=>Number.isFinite(x)?x.toFixed(4):'—';
+  $('walk-forward-status').textContent=
+   'Modelo logístico DEMO en sombra · '+d.independentDecisions+
+   ' decisiones independientes, '+d.scored.n+
+   ' predicciones posteriores evaluadas, '+d.fullFolds+
+   ' bloques completos · Brier modelo '+v(d.scored.brierModel)+
+   ' vs neutral '+v(d.scored.brierNeutral)+
+   ' vs histórico '+v(d.scored.brierHistorical)+
+   ' · '+d.conclusion+
+   '. No modifica CALL/PUT ni permite REAL.';
+  const body=$('walk-forward-folds');body.replaceChildren();
+  for(const fold of d.folds){
+   const tr=document.createElement('tr');
+   [fold.fold+(fold.complete?'':' (parcial)'),fold.n,
+    v(fold.brierModel),v(fold.brierNeutral),v(fold.brierHistorical)]
+    .forEach(value=>{
+     const td=document.createElement('td');td.textContent=value;tr.appendChild(td);
+    });
+   body.appendChild(tr);
+  }
+  if(!body.children.length){
+   const tr=document.createElement('tr'),td=document.createElement('td');
+   td.colSpan=5;td.textContent='Faltan liquidaciones con indicadores previos completos.';
+   tr.appendChild(td);body.appendChild(tr);
+  }
+ }catch(e){$('walk-forward-status').textContent='Validación no disponible: '+e.message;}
+}
 async function showQualityAudit(){
  try{
   const q=await get('/api/learning/quality');
@@ -507,6 +537,7 @@ $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando
  setInterval(poll,15000);setInterval(showDemoOrders,15000);setInterval(updateBurstPanel,4000);setInterval(updateDemoProgram,4000);
  await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
  await showQualityAudit();setInterval(showQualityAudit,20000);
+ await showWalkForwardAudit();setInterval(showWalkForwardAudit,20000);
  async function diagnose(){
   try{
    const d=await get('/api/market/diagnostic');
