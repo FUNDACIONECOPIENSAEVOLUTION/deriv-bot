@@ -30,7 +30,7 @@ jobs:
       - name: Validar sintaxis de ambos actualizadores PowerShell
         shell: pwsh
         run: |
-          $scripts = @('local-demo/Reparar-Actualizador-PC.ps1', 'local-demo/Actualizar-Desde-GitHub.ps1')
+          $scripts = @('local-demo/Reparar-Actualizador-PC.ps1', 'local-demo/Actualizar-Desde-GitHub.ps1', 'local-demo/Cerrar-Ecopiensa.ps1', 'local-demo/Vigilar-Ecopiensa.ps1', 'local-demo/test/safe-shutdown.win.ps1')
           foreach ($script in $scripts) {
             $tokens = $null; $issues = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $script), [ref]$tokens, [ref]$issues)
@@ -43,6 +43,9 @@ jobs:
           node --check local-demo/market-analysis.mjs
           node --check local-demo/public/app.js
           node --test local-demo/test/*.test.mjs
+      - name: Reproducir servidor vivo sin PID y confirmar cierre seguro
+        shell: pwsh
+        run: ./local-demo/test/safe-shutdown.win.ps1
   verify-and-publish:
     needs: verify-windows
     # Evita reversionar el propio commit automático.
