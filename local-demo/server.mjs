@@ -473,12 +473,13 @@ server=http.createServer(async(req,res)=>{
    if(path==='/api/demo/cancel')return answer(res,200,trading.cancel(String(b.id||'')));
    if(path==='/api/demo/reconcile')return answer(res,200,await trading.reconcile(String(b.id||'')));
    if(path==='/api/demo/burst/start')return answer(res,200,bursts.start({
-    count:b.count,stakeCents:b.stakeCents,symbol:b.symbol,concurrency:b.concurrency,confirmation:b.confirmation
+    count:b.count,stakeCents:b.stakeCents,symbol:b.symbol,concurrency:b.concurrency,
+     mode:b.mode,confirmation:b.confirmation
    }));
    if(path==='/api/demo/burst/stop')return answer(res,200,program.isRunning()?program.stop():bursts.stop());
    if(path==='/api/demo/program/start')return answer(res,200,program.start({
     rounds:b.rounds,perRound:b.perRound,stakeCents:b.stakeCents,
-    concurrency:b.concurrency,symbol:b.symbol,confirmation:b.confirmation
+    concurrency:b.concurrency,symbol:b.symbol,mode:b.mode,confirmation:b.confirmation
    }));
    if(path==='/api/demo/program/stop')return answer(res,200,program.stop());
    if(path==='/api/system/update-now'){
