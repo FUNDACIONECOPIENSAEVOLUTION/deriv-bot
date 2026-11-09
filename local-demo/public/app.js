@@ -305,7 +305,9 @@ async function updateDemoProgram(){
   $('program-status').textContent=p.running?
    (b.waitingForSignal?'Bot en ESPERAR: analizando índices, sin señal apta · ':'Programa DEMO autorizado en curso · ')+
    'tanda '+(p.round||1)+' de 10. '+
-   'Siguiente tanda solo tras liquidación y revisión del riesgo.':
+   'Siguiente tanda solo tras liquidación y revisión del riesgo. '+
+   (current?.profitTargetCents>0?
+    'Meta '+signedCents(current.profitTargetCents)+' por tanda · stop −US$2; no garantizada.':''):
    current?'Último programa: '+current.state+' · tandas completadas '+
     current.roundsCompleted+'/10 · '+(current.stopReason||'sin errores registrados')+
     (current.continueOnNegativeRound?
@@ -383,12 +385,16 @@ $('program-start').onclick=async()=>{
   const r=await post('/api/demo/program/start',{
    rounds:10,perRound:10,stakeCents:100,symbol:'AUTO',concurrency:5,
    mode:$('program-mode').value,
+   profitTargetCents:Number($('program-profit-target').value),
    continueAfterNegativeRound:$('program-continue-negative').checked===true,
    confirmation:'CONFIRMAR PROGRAMA DEMO 10X10'
   });
   $('program-status').textContent='Programa '+r.id.slice(0,8)+
    ' autorizado para investigación DEMO · hasta 100 compras de US$1; '+ 
-   (r.continueAfterNegativeRound?'continuará tras rondas negativas. ':'parará ante ronda negativa. ')+
+   (r.profitTargetCents>0?
+    'cierre anticipado en '+signedCents(r.profitTargetCents)+
+    ', stop pérdida tanda −US$2, una compra simultánea. ':
+    (r.continueAfterNegativeRound?'continuará tras rondas negativas. ':'parará ante ronda negativa. '))+
    'Se detendrá si hay riesgo, datos insuficientes o contrato incierto. REAL bloqueada.';
  }catch(e){$('program-status').textContent='Programa no iniciado: '+e.message;}
  await updateDemoProgram();

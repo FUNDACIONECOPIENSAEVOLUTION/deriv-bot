@@ -542,6 +542,7 @@ server=http.createServer(async(req,res)=>{
     rounds:b.rounds,perRound:b.perRound,stakeCents:b.stakeCents,
     concurrency:b.concurrency,symbol:b.symbol,mode:b.mode,
      continueAfterNegativeRound:b.continueAfterNegativeRound,
+     profitTargetCents:b.profitTargetCents,
      confirmation:b.confirmation
    }));
    if(path==='/api/demo/program/stop')return answer(res,200,program.stop());

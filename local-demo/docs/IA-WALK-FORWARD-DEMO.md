@@ -237,3 +237,30 @@ en el panel para consultar los contratos abiertos inmediatamente,
 `POST /api/demo/reconcile-open` limitado a cinco contratos.
 Los errores de red NO liberan la exposición. La actualización
 de Windows sigue prohibida con operaciones abiertas o UNKNOWN.
+
+## Modalidad opcional de cierre en verde por tanda — con riesgo limitado
+
+El programa local 10x10 incorpora `profitTargetCents`: 0 (modo
+normal), 50, 100, 150. La interfaz selecciona 50 por defecto, pero
+ningun programa inicia sin consentimiento local. Si el objetivo es >0,
+el programa fuerza **maximo un contrato DEMO simultaneo** aunque el
+usuario hubiera seleccionado 5. Reevalua la señal, saldo y payout
+oficial antes de cada BUY. Tras cada liquidacion confirmada en SQLite
+computa el neto de la tanda (no cuenta rechazos/OPEN) y:
+- Si P&L neto >= meta, marca `COMPLETED` con
+  `TAKE_PROFIT_REACHED`; puede tener menos de 10 compras.
+- Si P&L neto <= -200 cents, marca `PAUSED` y detiene el
+  programa; no persigue perdidas.
+- Si se ejecutan las 10 compras sin verde, marca PAUSED.
+- Las 10 tandas siguen secuenciales. No se usa martingala ni
+  incremento de apuesta y REAL queda bloqueado.
+
+**Esta politica puede capturar beneficios ya realizados pero no
+cambia el valor esperado por operacion ni garantiza 10 tandas verdes.**
+Backtest exploratorio sobre v16.4: 7/10 tandas llegaron al menos a
++US$0.50 en una trayectoria de liquidaciones, 3/10 nunca.
+No es un backtest ejecutable exacto porque los historicos tienen
+contratos paralelos: requiere validacion DEMO prospectiva con
+concurrencia 1. El stop por tanda puede superar ligeramente
+-USD2 por el salto de una ultima compra; el riesgo maximo global
+y las ordenes inciertas siguen protegidos.
