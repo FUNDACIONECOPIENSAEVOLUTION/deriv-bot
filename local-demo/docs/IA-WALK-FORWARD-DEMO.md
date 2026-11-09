@@ -197,3 +197,22 @@ El objetivo 100 compras es un **techo y una intencion**. Si un limite
 de riesgo, datos desconectados persistentes, orden UNKNOWN, o
 problema de broker impiden continuar, el programa debe detenerse o
 esperar segun el caso, nunca fingir 100 compras.
+
+## Monitor de riesgos de liquidaciones oficiales DEMO
+
+El modulo `empirical-market-veto.mjs` verifica hasta 30 ultimas
+liquidaciones independientes por indice (una por vela, 5/10 ticks).
+Con 25 o mas resultados independientes, si el limite superior de
+Wilson con z=2.66 (aproximacion conservadora para 13 indices)
+esta por debajo de la probabilidad de equilibrio de referencia
+53.19%, se veta temporalmente ese indice del selector AUTO
+para evitar seguir operando en un subgrupo de desempeno muy pobre.
+Se recalcula con datos ya liquidados cada 10 segundos y el veto
+es reversible a medida que se renueva la muestra.
+
+No entrena un predictor nuevo ni garantiza ganancias. Esta
+heuristica NO controla todos los sesgos de seleccion ni las pruebas
+repetidas en el tiempo: mide riesgo observado, no causalidad.
+La cotizacion exacta y los controles del broker permanecen vigentes.
+Cuenta REAL bloqueada. Endpoint solo lectura:
+`GET /api/learning/market-risk`. No borrar el historial anterior.

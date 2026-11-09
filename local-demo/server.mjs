@@ -18,6 +18,7 @@ import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './m
 import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
 import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
 import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
+import {recentMarketRiskVerdict} from './empirical-market-veto.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
 import {evaluateWalkForward} from './shadow-walk-forward.mjs';
 import {evaluateCandlePatterns,exportCandlesCsv,exportTickContextCsv} from './candle-patterns.mjs';
@@ -323,10 +324,30 @@ const getAdaptiveReport=()=>{
  }
  return reportCache;
 };
+// Solo resultados ya liquidados; nunca datos posteriores a la decision.
+// Cache evita consultas en cada tick; modulo unico, sin proceso paralelo.
+const marketVetoRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
+ duration_ticks,bought_at_ms,candle_epoch FROM demo_local_orders
+ WHERE state='SETTLED' AND symbol=? AND duration_ticks IN (5,10)
+ AND bought_at_ms IS NOT NULL ORDER BY bought_at_ms DESC LIMIT 100`);
+const marketVetoCache=new Map();
+const getMarketVeto=symbol=>{
+ const cached=marketVetoCache.get(symbol);
+ if(cached&&Date.now()-cached.at<10000)return cached.value;
+ const value=recentMarketRiskVerdict(marketVetoRows.all(symbol),{symbol});
+ marketVetoCache.set(symbol,{at:Date.now(),value});return value;
+};
 const bursts=createDemoBurst({
  db,trading,marketSnapshot:symbol=>{const item=market.get(symbol);return item?snapshot(item):null;},
  getSymbols:()=>SYMBOLS.slice(),getVersion:localVersion,getStrategyVersion:()=>trading.getStrategyVersion(),
- getAdaptiveVerdict:(symbol,direction)=>adaptiveVerdict(getAdaptiveReport(),symbol,direction),
+ getAdaptiveVerdict:(symbol,direction)=>{
+  const prior=adaptiveVerdict(getAdaptiveReport(),symbol,direction);
+  if(prior.blocked)return prior;
+  const market=getMarketVeto(symbol);
+  return market.blocked?{blocked:true,reason:market.status,
+   samples:market.samples,upperWinRate:market.upperWinRate,
+   source:market.policy}:prior;
+ },
  onSignalSelection:({batchId,eligible,selected})=>opportunityShadow.capture(batchId,eligible,selected),
  refreshAccount:async()=>{
   const c=await credentials();
@@ -388,6 +409,10 @@ server=http.createServer(async(req,res)=>{
     'Content-Disposition':'attachment; filename="ecopiensa-ticks-individuales-precompra.csv"'});
    res.end(exportTickContextCsv(candleRows.all()));return;
   }
+  if(req.method==='GET'&&path==='/api/learning/market-risk')
+   return answer(res,200,{readOnly:true,realEnabled:false,
+    policy:'recent-symbol-verified-loss-v1',
+    symbols:SYMBOLS.map(getMarketVeto)});
   if(req.method==='GET'&&path==='/api/learning/opportunities')
    return answer(res,200,opportunityShadow.status());
   if(req.method==='GET'&&path==='/api/learning/opportunities.csv'){
