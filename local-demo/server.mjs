@@ -337,6 +337,12 @@ server=http.createServer(async(req,res)=>{
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
    if(req.method==='GET'&&path==='/api/demo/orders')return answer(res,200,trading.getSummary());
    if(req.method==='GET'&&path==='/api/demo/burst/status')return answer(res,200,bursts.status());
+   if(req.method==='GET'&&path==='/api/demo/burst-history.csv'){
+    res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
+     'X-Content-Type-Options':'nosniff',
+     'Content-Disposition':'attachment; filename="ecopiensa-tandas-demo-y-pausas.csv"'});
+    res.end(bursts.exportBatchesCsv());return;
+   }
    if(req.method==='GET'&&(path==='/api/demo/orders.csv'||path==='/api/demo/burst.csv')){
     const csv=trading.exportCsv(path.endsWith('/burst.csv')?'last-burst':'all');
     const filename=path.endsWith('burst.csv')?'ecopiensa-ultima-tanda-demo.csv':'ecopiensa-historial-demo.csv';
