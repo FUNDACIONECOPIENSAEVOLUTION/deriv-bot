@@ -42,7 +42,11 @@ const base64=x=>Buffer.from(x).toString('base64url');
 const sha256=x=>createHash('sha256').update(x).digest();
 const publicPath=join(HOME,'public');
 const trainingFile=join(DATA,'historico-demo.csv');
-const localVersion=()=>{try{return JSON.parse(readFileSync(join(HOME,'local-release.json'),'utf8')).version;}catch{return '11.7-preview';}};
+const readVersionFromDisk=()=>{try{return JSON.parse(readFileSync(join(HOME,'local-release.json'),'utf8')).version;}catch{return 'VERSION_FILE_MISSING';}};
+// Congelar version al arranque: no reportar archivos nuevos con un Node antiguo.
+const STARTUP_VERSION=readVersionFromDisk();
+const localVersion=()=>STARTUP_VERSION;
+const codeVersionMismatch=()=>readVersionFromDisk()!==STARTUP_VERSION;
 function githubReleaseStatus(){
  try{const r=JSON.parse(readFileSync(join(DATA,'github-release-status.json'),'utf8'));
   return {githubVersion:/^\d+\.\d$/.test(r.version)?r.version:null,githubStatus:r.status==='offline'?'offline':'checked'};
@@ -87,6 +91,8 @@ function status(){
   authorizationMethod:connected?(auth.mode==='PAT'?'PAT':'OAuth 2.0'):null,
   authorizationCorrupt:authCorrupt,
   updatePending:existsSync(join(DATA,'actualizacion-pendiente.txt')),
+  runtimeVersionMismatch:codeVersionMismatch(),
+  installedDiskVersion:readVersionFromDisk(),
   ...githubReleaseStatus(),
   appId:get('app_id')||'',
   account:account?{label:'DEMO · …'+account.accountId.slice(-4),balance:account.balance,checkedAt:account.checkedAt,currency:'USD'}:null,
@@ -472,7 +478,10 @@ server=http.createServer(async(req,res)=>{
     if(rpc===null){res.writeHead(202,{'Cache-Control':'no-store'});res.end();return;}
     return answer(res,200,rpc);
    }
-  if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate()&&program.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
+  if(req.method==='POST'&&codeVersionMismatch()&&
+   ['/api/demo/program/start','/api/demo/burst/start'].includes(path))
+   return answer(res,409,{error:'DEMO_RUNTIME_VERSION_MISMATCH_RESTART_REQUIRED'});
+  if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),runtimeVersionMismatch:codeVersionMismatch(),installedDiskVersion:readVersionFromDisk(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate()&&program.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
   if(req.method==='GET'&&path==='/api/status')return answer(res,200,{...status(),marketConnected:publicConnected,marketError:publicLastError});
    if(req.method==='GET'&&path==='/api/market/diagnostic')return answer(res,200,marketDiagnosis());
   if(req.method==='GET'&&path==='/api/markets')return answer(res,200,{connected:publicConnected,error:publicLastError,
@@ -542,7 +551,7 @@ server=http.createServer(async(req,res)=>{
     rounds:b.rounds,perRound:b.perRound,stakeCents:b.stakeCents,
     concurrency:b.concurrency,symbol:b.symbol,mode:b.mode,
      continueAfterNegativeRound:b.continueAfterNegativeRound,
-     profitTargetCents:b.profitTargetCents,
+     profitTargetCents:b.profitTargetCents,exitPolicy:b.exitPolicy,
      confirmation:b.confirmation
    }));
    if(path==='/api/demo/program/stop')return answer(res,200,program.stop());
