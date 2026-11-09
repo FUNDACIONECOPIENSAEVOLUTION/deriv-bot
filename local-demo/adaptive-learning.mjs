@@ -3,7 +3,7 @@
 // NO aprende a "ganar siempre": veto exclusivo ante bajo rendimiento reproducible.
 // Nunca invierte señales, multiplica la apuesta ni permite compras REALES.
 const MIN_INDEPENDENT=45,MIN_HOLDOUT=15;
-const n=v=>Number.isFinite(Number(v))?Number(v):null;
+const n=v=>v===null||v===undefined||v===''?null:Number.isFinite(Number(v))?Number(v):null;
 const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
 function upperMeanBound(a){
  if(a.length<2)return Infinity;
