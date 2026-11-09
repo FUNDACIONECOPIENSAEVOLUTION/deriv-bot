@@ -19,7 +19,7 @@ import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
 import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
 import {evaluateWalkForward} from './shadow-walk-forward.mjs';
-import {evaluateCandlePatterns,exportCandlesCsv} from './candle-patterns.mjs';
+import {evaluateCandlePatterns,exportCandlesCsv,exportTickContextCsv} from './candle-patterns.mjs';
 
 const HOME=dirname(fileURLToPath(import.meta.url));
 const DATA=process.env.ECOPIENSA_DATA_DIR||join(HOME,'data');
@@ -308,7 +308,8 @@ const qualityRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cent
  ORDER BY created_at ASC`);
 const candleRows=db.prepare(`SELECT id,batch_id,app_version,strategy_version,
  state,symbol,direction,stake_cents,pnl_cents,bought_at_ms,settled_at_ms,
- candle_context_json FROM demo_local_orders
+ duration_ticks AS durationTicks,prediction_mode AS predictionMode,
+ prediction_policy AS predictionPolicy,candle_context_json FROM demo_local_orders
  WHERE state IN ('SETTLED','REJECTED','OPEN','UNKNOWN')
  ORDER BY created_at ASC,id ASC`);
 const outcomeRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
@@ -368,6 +369,12 @@ server=http.createServer(async(req,res)=>{
     'X-Content-Type-Options':'nosniff',
     'Content-Disposition':'attachment; filename="ecopiensa-20-velas-precompra.csv"'});
    res.end(exportCandlesCsv(candleRows.all()));return;
+  }
+  if(req.method==='GET'&&path==='/api/learning/tick-context.csv'){
+   res.writeHead(200,{'Content-Type':'text/csv; charset=utf-8','Cache-Control':'no-store',
+    'X-Content-Type-Options':'nosniff',
+    'Content-Disposition':'attachment; filename="ecopiensa-ticks-individuales-precompra.csv"'});
+   res.end(exportTickContextCsv(candleRows.all()));return;
   }
   if(req.method==='GET'&&path==='/api/learning/opportunities')
    return answer(res,200,opportunityShadow.status());

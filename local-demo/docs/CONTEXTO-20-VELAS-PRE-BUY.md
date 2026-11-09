@@ -38,3 +38,14 @@ una prediccion conocida del futuro: sirven para entrenar/validar
 causalmente modelos de 5 y 10 ticks con las liquidaciones posteriores.
 Los registros anteriores de 30 ticks se mantienen sin modificar;
 los epoch ausentes no se fabrican.
+
+## Descargar ticks individuales en CSV
+
+`GET http://127.0.0.1:8765/api/learning/tick-context.csv`
+produce una fila por precio/tick archivado antes del BUY. Incluye
+simbolo, direccion, vencimiento 5/10 ticks, politica, resultado
+oficial si el contrato esta liquidado, tick position relativo,
+`tickEpoch` si se recibio, precio, cambio respecto al anterior y
+`lastLiveTickSeq` de la captura. No inventa epochs para registros
+antiguos que solo tenian precios. Complementa al CSV de 20 velas
+y al de latencias, sin conectar ninguna funcion nueva a BUY.

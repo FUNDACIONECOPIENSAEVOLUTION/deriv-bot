@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {captureCandleContext,parseCandleContext,evaluateCandlePatterns,exportCandlesCsv} from '../candle-patterns.mjs';
+import {captureCandleContext,parseCandleContext,evaluateCandlePatterns,exportCandlesCsv,exportTickContextCsv} from '../candle-patterns.mjs';
 
 const base=1794186000000;
 function observation(i,{buyAt=base+i*60000,pattern='UP'}={}){
@@ -114,4 +114,29 @@ test('El CSV produce 20 filas por compra con contexto y resultado solo si liquid
  assert.match(lines[0],/candlePosition,candleEpoch,open,high,low,close/);
  assert.match(csv,/CONTINUATION|PULLBACK|DOJI|MIXED/);
  assert.match(csv,/-100/);
+});
+
+test('CSV PRE-BUY de ticks contiene cada precio en una fila y carece de futuros inventados',()=>{
+ const t=trade(1,{pnl:88});
+ const csv=exportTickContextCsv([t]);
+ const lines=csv.trim().split(/\r?\n/);
+ assert.equal(lines.length,41); // el fixture dispone de 40 ticks
+ assert.match(lines[0],/tickPosition,ticksBeforeBuy,tickEpoch,tickPrice/);
+ assert.match(lines[1],/R_10|R_50/);
+ assert.match(csv,/"SETTLED"/);
+ assert.match(csv,/,88\s*$/m);
+ assert.equal(exportTickContextCsv([]).trim().split(/\r?\n/).length,1);
+});
+test('CSV exporta epoch y vencimiento cuando se conocen sin calcularlos del resultado',()=>{
+ const old=trade(2);
+ const x=JSON.parse(old.candle_context_json);
+ x.lastTickEpochs=Array.from({length:40},(_,i)=>Math.floor(x.capturedAtMs/1000)-40+i);
+ old.candle_context_json=JSON.stringify(x);
+ old.durationTicks=10;old.predictionMode='DEMO_EXPLORATORY_5_10';
+ old.predictionPolicy='MOMENTUM_5';
+ const csv=exportTickContextCsv([old]);
+ assert.ok(csv.includes('durationTicks'));
+ assert.ok(csv.includes('DEMO_EXPLORATORY_5_10'));
+ assert.ok(csv.includes('MOMENTUM_5'));
+ assert.match(csv,/\b10\b/);
 });

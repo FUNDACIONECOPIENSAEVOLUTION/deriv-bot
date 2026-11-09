@@ -181,3 +181,37 @@ export function exportCandlesCsv(rows){
  }
  return out.join('\r\n')+'\r\n';
 }
+
+/**
+ * CSV causal de ticks individuales PRE-BUY, sin inferir resultados de mercado
+ * que no fueron registrados por el cliente. Un tick = una fila.
+ */
+export function exportTickContextCsv(rows){
+ if(!Array.isArray(rows)||rows.length>100000)throw Error('INVALID_TICK_ROWS');
+ const keys=['orderId','batchId','version','symbol','direction','durationTicks',
+  'predictionMode','predictionPolicy','state','capturedAtMs','boughtAtMs',
+  'settledAtMs','lastLiveTickSeq','tickPosition','ticksBeforeBuy',
+  'tickEpoch','tickPrice','previousTickDelta','stakeCents','pnlCents'];
+ const esc=v=>typeof v==='number'&&Number.isFinite(v)?String(v):
+  '"'+String(v??'').replace(/"/g,'""').replace(/^[=+@-]/,x=>'_'+x)+'"';
+ const output=['\uFEFF'+keys.join(',')];
+ for(const row of rows){
+  const context=parseCandleContext(row.candle_context_json);
+  if(!context||!Array.isArray(context.lastTickPrices))continue;
+  const prices=context.lastTickPrices;
+  const epochs=Array.isArray(context.lastTickEpochs)&&
+   context.lastTickEpochs.length===prices.length?context.lastTickEpochs:[];
+  for(let i=0;i<prices.length;i++){
+   const base=[row.id,row.batch_id,row.app_version,row.symbol,row.direction,
+    row.durationTicks??row.duration_ticks??null,
+    row.predictionMode??row.prediction_mode??null,
+    row.predictionPolicy??row.prediction_policy??null,
+    row.state,context.capturedAtMs,row.bought_at_ms,row.settled_at_ms,
+    context.lastLiveTickSeq??null,i+1,prices.length-i-1,
+    epochs[i]??null,prices[i],i?prices[i]-prices[i-1]:null,
+    row.stake_cents,row.state==='SETTLED'?row.pnl_cents:null];
+   output.push(base.map(esc).join(','));
+  }
+ }
+ return output.join('\r\n')+'\r\n';
+}
