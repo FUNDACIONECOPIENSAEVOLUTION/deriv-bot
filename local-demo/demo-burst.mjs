@@ -25,16 +25,20 @@ export function selectDistinctCandidates(candidates,limit,usedCandleEpoch=new Ma
 }
 
 export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAccount,audit,
- getSymbols=()=>SYMBOLS,getAdaptiveVerdict=()=>({blocked:false})}){
+ getSymbols=()=>SYMBOLS,getAdaptiveVerdict=()=>({blocked:false}),
+ getVersion=()=>null,getStrategyVersion=()=>null}){
  db.exec("CREATE TABLE IF NOT EXISTS demo_bursts(id TEXT PRIMARY KEY,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL,state TEXT NOT NULL,count_requested INTEGER NOT NULL,stake_cents INTEGER NOT NULL,symbol TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,stop_reason TEXT)");
  db.prepare("UPDATE demo_bursts SET state='INTERRUPTED',updated_at=?,stop_reason='PROCESS_RESTART' WHERE state IN ('RUNNING','STOP_REQUESTED')").run(epoch());
  const fields=new Set(db.prepare('PRAGMA table_info(demo_bursts)').all().map(x=>x.name));
  if(!fields.has('concurrent'))db.exec('ALTER TABLE demo_bursts ADD COLUMN concurrent INTEGER NOT NULL DEFAULT 1');
- const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent) VALUES(?,?,?,?,?,?,?,?)');
+ if(!fields.has('app_version'))db.exec('ALTER TABLE demo_bursts ADD COLUMN app_version TEXT');
+ if(!fields.has('strategy_version'))db.exec('ALTER TABLE demo_bursts ADD COLUMN strategy_version TEXT');
+ const insert=db.prepare('INSERT INTO demo_bursts(id,created_at,updated_at,state,count_requested,stake_cents,symbol,concurrent,app_version,strategy_version) VALUES(?,?,?,?,?,?,?,?,?,?)');
  const update=db.prepare('UPDATE demo_bursts SET state=?,updated_at=?,completed=?,stop_reason=? WHERE id=?');
  // Totales durables desde TODAS las órdenes SQLite de cada tanda (sin límite de 60 filas UI).
  const latest=db.prepare(`SELECT b.id,b.created_at AS createdAt,b.state,
  b.count_requested AS requested,b.stake_cents AS stakeCents,b.symbol,b.concurrent,
+ b.app_version AS appVersion,b.strategy_version AS strategyVersion,
  b.completed,b.stop_reason AS stopReason,
  COUNT(CASE WHEN o.state IN ('OPEN','SETTLED') THEN 1 END) AS executed,
  COUNT(CASE WHEN o.state='SETTLED' THEN 1 END) AS settled,
@@ -147,7 +151,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(!getAccount())throw Error('DEMO_ACCOUNT_NOT_VERIFIED');
   if(count*stakeCents>1000)throw Error('DEMO_BURST_MAX_10USD');
   const id=randomUUID(),batch={id,count,stakeCents,symbol,concurrency,inFlight:0,stopRequested:false,usedCandleEpoch:new Map()};
-  insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency);
+  insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,getVersion(),getStrategyVersion());
   active=batch;
   audit('DEMO_BURST_AUTHORIZED','Count '+count+' stake '+stakeCents+' DEMO only');
   void run(batch);
