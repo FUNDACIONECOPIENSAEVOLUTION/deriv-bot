@@ -1,6 +1,6 @@
 {
   "name": "ecopiensa-deriv-demo-local",
-  "version": "17.8.0",
+  "version": "17.9.0",
   "description": "Ecopiensa Deriv DEMO PC: fuente GitHub pc-local, actualización ligera y OAuth separado; solo lectura",
   "private": true,
   "type": "module",
