@@ -790,6 +790,34 @@ $('multibot-stop').onclick=async()=>{
  }catch(e){$('multibot-program-note').textContent='No se pudo detener: '+e.message;}
  finally{await showMultiBotProgram();}
 };
+// Comparador de resultados reales 5/10 ticks desde SQLite local, solo lectura.
+async function showHorizonDesk(){
+ const body=$('horizon-desk-table'),msg=$('horizon-desk-status');
+ if(!body||!msg)return;
+ try{
+  const data=await get('/api/lab/horizons');
+  if(!data.readOnly||!Array.isArray(data.groups))
+   throw Error('HORIZON_REPORT_INVALID');
+  const names={TICK_5:'Bot 5 ticks',TICK_10:'Bot 10 ticks',
+   UNLABELED:'Anterior sin etiqueta',OTHER:'Otros'};
+  body.innerHTML=data.groups.map(g=>'<tr><td>'+escapeText(names[g.key]||g.key)+'</td>'+
+   '<td>'+fmt(g.settled)+'</td><td>'+fmt(g.wins)+'</td><td>'+fmt(g.losses)+'</td>'+
+   '<td>'+(g.winRatePct===null?'N/D':fmt(g.winRatePct)+' %')+'</td>'+
+   '<td>'+signedCents(g.netCents)+'</td><td>'+fmt(g.rejected)+'</td>'+
+   '<td>'+fmt(g.open)+' / '+fmt(g.unknown)+'</td></tr>').join('');
+  const date=data.lastBrokerBuyMs?
+   new Date(data.lastBrokerBuyMs).toLocaleString('es-CO'):'Sin BUY registrado';
+  const running=data.programRunning||data.burstRunning;
+  msg.textContent='Ultima compra registrada en SQLite: '+date+
+   ' · programa/tanda: '+(running?'ACTIVA LOCALMENTE':'SIN TANDA ACTIVA')+
+   ' · cuenta DEMO: '+(data.connectedDemoAccount?'conectada':'sin confirmar')+
+   ' · modo ultima tanda: '+(data.latestBurstMode||'N/D')+
+   '. La presencia de datos historicos no confirma compras ejecutandose ahora.';
+ }catch(error){
+  msg.textContent='No se pudo verificar el servidor local: '+String(error.message||error);
+  body.textContent='Datos no disponibles';
+ }
+}
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
@@ -800,6 +828,7 @@ $('multibot-stop').onclick=async()=>{
  await showCandlePatternAudit();setInterval(showCandlePatternAudit,20000);
  await showOpportunityShadow();setInterval(showOpportunityShadow,20000);
  await showFourBotLab();setInterval(showFourBotLab,15000);
+ await showHorizonDesk();setInterval(showHorizonDesk,12000);
  await showMultiBotProgram();setInterval(showMultiBotProgram,5000);
  async function diagnose(){
   try{
