@@ -30,7 +30,10 @@ export function decodePublicTick(response){
  const price=Number(value.quote),epoch=Number(value.epoch);
  if(typeof symbol!=='string'||!Number.isFinite(price)||price<=0||
     !Number.isSafeInteger(epoch)||epoch<=0)return null;
- return {symbol,price,epoch};
+ const pip=Number(value.pip_size);
+ // Los digitos solo son verificables con la precision oficial del broker.
+ return value.pip_size!==undefined&&Number.isInteger(pip)&&pip>=0&&pip<=10?
+  {symbol,price,epoch,pipSize:pip}:{symbol,price,epoch};
 }
 export function findWatchSymbol(available,pattern){
  return available.find(x=>pattern.test(x.symbol)||pattern.test(x.name))||null;
