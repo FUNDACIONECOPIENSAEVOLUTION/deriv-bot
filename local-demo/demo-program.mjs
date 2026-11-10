@@ -201,7 +201,7 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
    throw Error('DEMO_PROGRAM_SIGNAL_MODE_INVALID');
   if(typeof continueAfterNegativeRound!=='boolean')
    throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_BOOLEAN_REQUIRED');
-  if(continueAfterNegativeRound&&!['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
+  if(continueAfterNegativeRound&&!['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode))
    throw Error('DEMO_CONTINUE_AFTER_NEGATIVE_RESEARCH_ONLY');
   if(typeof globalProtection!=='boolean'||typeof downshiftAfterTwoLosses!=='boolean'||
    ((globalProtection||downshiftAfterTwoLosses)&&profitTargetCents===0))
@@ -210,7 +210,7 @@ export function createDemoProgram({db,bursts,trading,audit,settlePollMs=250,betw
    (profitTargetCents===0&&exitPolicy!=='FIXED_TARGET'))
    throw Error('DEMO_PROGRAM_EXIT_POLICY_INVALID');
   if(![0,50,100,150].includes(profitTargetCents)||
-   (profitTargetCents>0&&!['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode)))
+   (profitTargetCents>0&&!['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode)))
    throw Error('DEMO_PROGRAM_PROFIT_LOCK_INVALID');
   // Cap estricto de esta función. Nunca expandir a órdenes ilimitadas o REAL.
   if(rounds!==10||perRound!==10||stakeCents!==100||symbol!=='AUTO'||

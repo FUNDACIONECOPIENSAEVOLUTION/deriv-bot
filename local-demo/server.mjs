@@ -24,6 +24,7 @@ import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {recentMarketRiskVerdict} from './empirical-market-veto.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
 import {buildProfitabilityResearch} from './learning-profitability.mjs';
+import {buildHorizonDeskReport} from './horizon-desk.mjs';
 import {evaluateWalkForward} from './shadow-walk-forward.mjs';
 import {evaluateCandlePatterns,exportCandlesCsv,exportTickContextCsv} from './candle-patterns.mjs';
 
@@ -39,7 +40,7 @@ const PUBLIC_WS='wss://api.derivws.com/trading/v1/options/ws/public';
 // Lista inicial para UI; nuevos índices SOLO si Deriv los anuncia.
 const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V'];
-const EXTERNAL_NAMES=Object.freeze(['USD/COP','EUR/USD','USD/JPY','Oro (XAU/USD)','Bitcoin (BTC/USD)']);
+const EXTERNAL_NAMES=Object.freeze(['USD/COP','EUR/USD','USD/JPY','Oro (XAU/USD)','Plata (XAG/USD)','Bitcoin (BTC/USD)']);
 const STAKES=new Set([0.35,0.50,0.75,0.90,1]);
 const now=()=>Math.floor(Date.now()/1000);
 const base64=x=>Buffer.from(x).toString('base64url');
@@ -199,6 +200,7 @@ function configureSymbols(ws,records){
   [/^(EUR\/USD|Euro\/US Dollar)$/i,'EUR/USD'],
   [/^(USD\/JPY|US Dollar\/Japanese Yen)$/i,'USD/JPY'],
   [/Gold|XAU\/USD|XAUUSD/i,'Oro (XAU/USD)'],
+   [/Silver|XAG\/USD|XAGUSD/i,'Plata (XAG/USD)'],
   [/Bitcoin|BTC\/USD|BTCUSD/i,'Bitcoin (BTC/USD)']
  ];
  let idx=0;
@@ -325,6 +327,10 @@ const qualityRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cent
  entry_tick,exit_tick,signal_quote,projection_model_mae,projection_naive_mae,error_code
  FROM demo_local_orders WHERE state IN ('SETTLED','REJECTED')
  ORDER BY created_at ASC`);
+// Incluye todos los estados; no fingir BUY si solo hubo intentos REJECTED.
+const horizonOrderRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
+ duration_ticks,prediction_policy,bought_at_ms,settled_at_ms
+ FROM demo_local_orders ORDER BY created_at ASC`);
 const candleRows=db.prepare(`SELECT id,batch_id,app_version,strategy_version,
  state,symbol,direction,stake_cents,pnl_cents,bought_at_ms,settled_at_ms,
  duration_ticks AS durationTicks,prediction_mode AS predictionMode,
@@ -421,7 +427,12 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/style.css'){return html(res,readFileSync(join(publicPath,'style.css')),'text/css; charset=utf-8');}
   if(req.method==='GET'&&path==='/api/training')return answer(res,200,readTraining(trainingFile));
   if(req.method==='GET'&&path==='/api/learning')return answer(res,200,getAdaptiveReport());
-  if(req.method==='GET'&&path==='/api/lab/multibot-program')
+  if(req.method==='GET'&&path==='/api/lab/horizons')
+     return answer(res,200,buildHorizonDeskReport(horizonOrderRows.all(),{
+      connected:status().connected,programRunning:program.isRunning(),
+      burstRunning:bursts.status().running,
+      latestBurstMode:bursts.status().batches?.[0]?.signalMode??null}));
+   if(req.method==='GET'&&path==='/api/lab/multibot-program')
     return answer(res,200,multiProgram.status());
    if(req.method==='GET'&&path==='/api/lab/bots')
     return answer(res,200,buildFourBotLabStatus({

@@ -15,7 +15,14 @@
   <p id="auth-message" class="msg"></p><div id="trades"></div>
  </section>
  <section><h2>2. Cotizaciones en vivo y señales</h2><p>Se consultan hasta 660 ticks históricos por índice disponible para 60 velas completas de 10 ticks. El bot calcula EMA20, EMA50, RSI14, ATR14, pendiente y momento. Estas métricas no constituyen una predicción garantizada.</p><p id="market-diagnostic" class="msg">Comprobando símbolos e historial público de Deriv...</p><div id="markets" class="markets"></div><div class="charts"><div><h3>Precios en vivo</h3><canvas id="chart" width="940" height="210" aria-label="Precios tick a tick"></canvas></div><div><h3>Velas OHLC agrupadas por 10 ticks</h3><canvas id="candles" width="940" height="220" aria-label="Velas OHLC por 10 ticks"></canvas></div></div><small>Las 60 velas se agrupan por 10 ticks, no por minutos. Son datos históricos, no una garantía de aciertos.</small><p id="market-analysis" class="msg">Cargando análisis de mercado...</p></section>
- <section><h2>2B. Precios externos — solo cotizaciones</h2><p>Observatorio separado: USD/COP, EUR/USD, USD/JPY, oro y Bitcoin si Deriv los ofrece. No se utilizan para pronosticar los índices sintéticos ni activan compras.</p><div id="watchlist" class="training">Consultando mercados externos...</div></section>
+ <section><h2>2B. Precios externos — solo cotizaciones</h2><p>Observatorio separado: USD/COP, EUR/USD, USD/JPY, oro, plata y Bitcoin si Deriv los ofrece. No se utilizan para pronosticar los índices sintéticos ni activan compras.</p><div id="watchlist" class="training">Consultando mercados externos...</div></section>
+ <section id="horizon-desk">
+ <h2>Comparador de bots independientes: 5 ticks frente a 10 ticks</h2>
+ <p>Cada horizonte tiene sus propias señales, estadísticas y duración de contrato. Usa <b>Bot 5 ticks</b> o <b>Bot 10 ticks</b> en el programa o tanda DEMO para impedir mezclar duraciones. El saldo, las órdenes abiertas y los límites de pérdida de Deriv siguen siendo compartidos.</p>
+ <div class="table-wrap"><table><thead><tr><th>Modelo</th><th>Liquidadas</th><th>Ganadas</th><th>Perdidas</th><th>Acierto</th><th>Neto oficial</th><th>Rechazos</th><th>Abiertas / inciertas</th></tr></thead><tbody id="horizon-desk-table"><tr><td colspan="8">Consultando SQLite de la cuenta DEMO...</td></tr></tbody></table></div>
+ <p id="horizon-desk-status" class="msg">Última compra DEMO: sin comprobar. No se puede confirmar actividad desde GitHub.</p>
+ <small>«Sin horizonte» corresponde a compras anteriores que no tienen etiqueta de duración: no se reasignan artificialmente. Solo el servidor local conectado a Deriv puede verificar las compras actuales.</small>
+ </section>
  <section id="multibot-panel"><h2>Laboratorio de 4 bots · modalidades Deriv</h2>
  <p>Supervisión local de cuatro estrategias con <strong>US$100 por bot como presupuesto PLANIFICADO de estudio</strong>. No son saldos independientes ni límites ya aplicados en Deriv. Rise/Fall conserva sus compras DEMO aprobadas manualmente; Dígitos observa ticks sin comprar; Multipliers y CFD están pendientes de conexión y validación. Ningún bot adicional ejecuta órdenes en esta fase.</p>
  <div id="multibot-grid" class="bot-lab-grid" aria-live="polite"><article>Consultando el supervisor de cuatro modalidades...</article></div>
@@ -82,7 +89,8 @@
  <p>Una autorización local permite hasta <b>10 tandas consecutivas</b> de 10 compras DEMO de US$1, con máximo 5 contratos simultáneos. Total máximo de apuestas: US$100, <b>no una promesa de ganar</b>. Cada tanda debe terminar y liquidarse antes de iniciar la siguiente. INVESTIGACIÓN DEMO: el programa puede comprar con señales preliminares sin ventaja demostrada, pero exige muestra y cotización suficientes. El programa de evaluación se prepara con investigación extendida activada: tras una tanda perdedora continuará con las siguientes, siempre que se respeten los controles de riesgo, el saldo y las señales. El bot puede permanecer en ESPERAR tanto tiempo como sea necesario mientras el servidor del PC siga encendido; no acelera compras ni las fuerza por un plazo de espera. Puedes desactivar esa opción si deseas detenerte tras 5/5 (o peor) con resultado negativo. Incluso con la opción activa, las 100 compras son un objetivo, no una garantía.</p>
  <p><label>Perfil del nuevo programa <select id="program-mode">
   <option value="RESEARCH_DEMO">AUTO · analizar y comprar 5 o 10 ticks</option>
-  <option value="RESEARCH_FIVE_ONLY">Piloto 5 ticks · comprobar señal solo a 5 ticks</option>
+  <option value="RESEARCH_FIVE_ONLY">Bot 5 ticks · comprar SOLO a 5 ticks</option>
+   <option value="RESEARCH_TEN_ONLY">Bot 10 ticks · comprar SOLO a 10 ticks</option>
  </select></label></p>
  <p><label><input type="checkbox" id="program-global-guard" checked>
   <strong>Proteger beneficio global:</strong> antes de ganar US$3, limitar la pérdida del programa a US$3. Después de llegar a +US$3, conservar al menos +US$1 o el pico menos US$2. Puede pausar el programa antes de completar diez tandas.</label></p>
@@ -130,7 +138,8 @@
   <label>Modo de señal <select id="burst-mode">
    <option value="RESEARCH_DEMO" selected>Investigación DEMO · muestras preliminares (máx. US$1)</option>
    <option value="VALIDATED_ONLY">Conservador · solo evidencia estadística estricta</option>
-   <option value="RESEARCH_FIVE_ONLY">Piloto de investigación DEMO · únicamente 5 ticks</option>
+   <option value="RESEARCH_FIVE_ONLY">Bot 5 ticks · únicamente contratos a 5 ticks</option>
+    <option value="RESEARCH_TEN_ONLY">Bot 10 ticks · únicamente contratos a 10 ticks</option>
   </select></label>
   <label>Máximo simultáneas <select id="burst-concurrency"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5" selected>5</option></select></label>
  </div>
