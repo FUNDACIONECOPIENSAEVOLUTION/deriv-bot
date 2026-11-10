@@ -33,4 +33,6 @@ test('Deriv tick parses quote and fallback echo symbol',()=>{
  assert.deepEqual(decodePublicTick({msg_type:'tick',tick:{symbol:'R_100',quote:200.5,epoch:1762637000}}),
   {symbol:'R_100',price:200.5,epoch:1762637000});
  assert.equal(decodePublicTick({tick:{quote:null,epoch:1762637000}}),null);
+ assert.deepEqual(decodePublicTick({tick:{symbol:'R_100',quote:200.5,epoch:1762637000,pip_size:3}}),
+  {symbol:'R_100',price:200.5,epoch:1762637000,pipSize:3});
 });
