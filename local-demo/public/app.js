@@ -728,6 +728,68 @@ async function showFourBotLab(){
   msg.textContent=String(e?.message||'ERROR_LAB');
  }
 }
+// El programa maestro solo se inicia por una accion real del operador, nunca al cargar.
+async function showMultiBotProgram(){
+ const msg=$('multibot-program-note'),body=$('multibot-program-table');
+ if(!msg||!body)return;
+ try{
+  const p=await get('/api/lab/multibot-program');
+  if(!Array.isArray(p.bots)||p.bots.length!==4)throw Error('MULTIBOT_STATUS_INVALID');
+  const labels={
+   RUNNING:'DEM0 ACTIVO',STOPPED:'DETENIDO',COMPLETED:'COMPLETADO',
+   PAUSED:'PAUSADO',NOT_STARTED:'SIN INICIAR',
+   WAITING_VALID_PUBLIC_DIGITS:'ESPERANDO TICKS VALIDOS',
+   OBSERVING_NO_BUY:'INVESTIGACION SIN COMPRAS',
+   OBSERVATION_COMPLETE:'100 OBSERVACIONES COMPLETADAS',
+   BLOCKED_NO_VERIFIED_EXECUTOR:'SIN EJECUTOR VERIFICADO',
+   BLOCKED_NO_MT5_DEMO:'SIN CONEXION MT5 DEMO'
+  };
+  body.innerHTML=p.bots.map(b=>'<tr><td>'+escapeText(b.id)+'</td>'+
+   '<td>'+escapeText(b.name)+'</td>'+
+   '<td>'+escapeText(labels[b.state]||b.state)+'</td>'+
+   '<td>'+fmt(b.roundsCompleted||0)+' / 10</td>'+
+   '<td>'+fmt(b.id==='B'?b.observed:b.id==='A'?b.settled:0)+' / 100'+
+   (b.id==='B'?' predicciones':' contratos')+'</td>'+
+   '<td>'+(Number.isFinite(b.netCents)?signedCents(b.netCents):'N/D')+'</td></tr>').join('');
+  msg.textContent=p.coordinatorStarted?
+   'Programa autorizado en PC. A: '+escapeText(p.bots[0].state)+
+   ' · B: '+escapeText(p.bots[1].state)+
+   '. C y D bloqueados sin ejecutor. Limites de riesgo y verde progresivo aplican solo a A.':
+   'Preparado: una autorizacion local para A (DEMO 10x10) y B (100 predicciones sin comprar). C y D no se ejecutan.';
+  const active=p.coordinatorStarted&&!p.stopRequested&&
+   (p.bots[0].state==='RUNNING'||['OBSERVING_NO_BUY','WAITING_VALID_PUBLIC_DIGITS'].includes(p.bots[1].state));
+  $('multibot-stop').disabled=!active;
+  $('multibot-start').disabled=active||!$('multibot-consent').checked||runtimeVersionMismatch;
+ }catch(e){
+  msg.textContent='No se pudo verificar el programa 10x10: '+String(e.message||e);
+  body.textContent='Estado no disponible';
+  $('multibot-start').disabled=true;
+ }
+}
+$('multibot-consent').onchange=()=>{void showMultiBotProgram();};
+$('multibot-start').onclick=async()=>{
+ const btn=$('multibot-start');
+ if(!$('multibot-consent').checked)return;
+ btn.disabled=true;
+ try{
+  await post('/api/lab/multibot-program/start',{
+   confirmation:'AUTORIZAR MULTIBOT DEMO 10X10 A Y SOMBRA B'
+  });
+  $('multibot-consent').checked=false;
+  await showMultiBotProgram();
+  await updateDemoProgram();
+ }catch(e){
+  $('multibot-program-note').textContent='No se inicio ninguna nueva sesion: '+e.message;
+ }finally{btn.disabled=false;await showMultiBotProgram();}
+};
+$('multibot-stop').onclick=async()=>{
+ const btn=$('multibot-stop');btn.disabled=true;
+ try{
+  await post('/api/lab/multibot-program/stop',{});
+  await showMultiBotProgram();
+ }catch(e){$('multibot-program-note').textContent='No se pudo detener: '+e.message;}
+ finally{await showMultiBotProgram();}
+};
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
@@ -737,6 +799,8 @@ async function showFourBotLab(){
  await showWalkForwardAudit();setInterval(showWalkForwardAudit,20000);
  await showCandlePatternAudit();setInterval(showCandlePatternAudit,20000);
  await showOpportunityShadow();setInterval(showOpportunityShadow,20000);
+ await showFourBotLab();setInterval(showFourBotLab,15000);
+ await showMultiBotProgram();setInterval(showMultiBotProgram,5000);
  async function diagnose(){
   try{
    const d=await get('/api/market/diagnostic');
