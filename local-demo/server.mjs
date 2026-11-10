@@ -20,6 +20,7 @@ import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
 import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {recentMarketRiskVerdict} from './empirical-market-veto.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
+import {buildProfitabilityResearch} from './learning-profitability.mjs';
 import {evaluateWalkForward} from './shadow-walk-forward.mjs';
 import {evaluateCandlePatterns,exportCandlesCsv,exportTickContextCsv} from './candle-patterns.mjs';
 
@@ -310,6 +311,7 @@ const qualityRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cent
  batch_id,proposal_payout_cents,app_version,strategy_version,bought_at_ms,settled_at_ms,created_at,candle_epoch,
  signal_age_ms,proposal_latency_ms,buy_latency_ms,signal_strength,signal_rsi,
  signal_five_tick_momentum,signal_tick_rsi14,
+ duration_ticks,prediction_policy,signal_reason,telemetry_buy_feed_age_ms,
  five_tick_study_hit_rate,five_tick_study_n,
  entry_tick,exit_tick,signal_quote,projection_model_mae,projection_naive_mae,error_code
  FROM demo_local_orders WHERE state IN ('SETTLED','REJECTED')
@@ -409,7 +411,9 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/api/learning')return answer(res,200,getAdaptiveReport());
   if(req.method==='GET'&&path==='/api/learning/quality')
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
-  if(req.method==='GET'&&path==='/api/learning/walk-forward')
+  if(req.method==='GET'&&path==='/api/learning/profitability')
+    return answer(res,200,buildProfitabilityResearch(qualityRows.all()));
+   if(req.method==='GET'&&path==='/api/learning/walk-forward')
    return answer(res,200,evaluateWalkForward(qualityRows.all()));
   if(req.method==='GET'&&path==='/api/learning/candle-patterns')
    return answer(res,200,evaluateCandlePatterns(candleRows.all()));
