@@ -12,6 +12,7 @@ import {dispatchMcp} from './mcp-local.mjs';
 import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
 import {createOpportunityShadow} from './opportunity-shadow.mjs';
+import {createDigitShadowObserver} from './digit-shadow.mjs';
 import {createDemoProgram} from './demo-program.mjs';
 import {analyzeProgramRounds} from './demo-round-diagnostics.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
@@ -73,6 +74,8 @@ const put=(name,data)=>db.prepare('INSERT INTO state(name,data) VALUES(?,?) ON C
 const del=name=>db.prepare('DELETE FROM state WHERE name=?').run(name);
 const audit=(action,detail)=>db.prepare('INSERT INTO audit(at,action,detail) VALUES(?,?,?)').run(now(),action,detail);
 const opportunityShadow=createOpportunityShadow({db,getVersion:localVersion});
+// Estudio de digitos en ticks vivos: solo memoria, sin propuestas ni permisos BUY.
+const digitShadow=createDigitShadowObserver();
 function seal(obj){const iv=randomBytes(12),c=createCipheriv('aes-256-gcm',KEY,iv);const bytes=Buffer.concat([c.update(JSON.stringify(obj),'utf8'),c.final()]);return {iv:base64(iv),data:base64(bytes),tag:base64(c.getAuthTag())};}
 function unseal(obj){if(!obj?.iv||!obj?.data||!obj?.tag)throw Error('CREDENCIALES_NO_DISPONIBLES');const d=createDecipheriv('aes-256-gcm',KEY,Buffer.from(obj.iv,'base64url'));d.setAuthTag(Buffer.from(obj.tag,'base64url'));return JSON.parse(Buffer.concat([d.update(Buffer.from(obj.data,'base64url')),d.final()]).toString('utf8'));}
 const safeEq=(a,b)=>{const aa=sha256(String(a)),bb=sha256(String(b));return timingSafeEqual(aa,bb);};
@@ -268,6 +271,9 @@ function publicSocket(){
    m.epoch=epoch;m.quote=price;m.receivedAtMs=performance.now();m.feedReceivedAtMs=Date.now();
    m.liveTickSeq=(m.liveTickSeq||0)+1;
    m.ticks.push({price,epoch});trimTickHistory(m.ticks);
+    // El ultimo digito se extrae solo si Deriv envio pip_size oficial.
+    digitShadow.onTick({symbol,quote:price,pipSize:tick.pipSize,
+     epoch,seq:m.liveTickSeq});
    // La señal de 5 ticks se liquida solo tras 5 ticks públicos recibidos.
    try{opportunityShadow.onTick(symbol,m.liveTickSeq,price,epoch);}
    catch(error){audit('SHADOW_TICK_ERROR',String(error?.message||'SHADOW_ERROR').slice(0,100));}
@@ -278,6 +284,7 @@ function publicSocket(){
   if(ws._disconnected)return;ws._disconnected=true;publicConnected=false;
   clearTimeout(symbolsTimer);clearInterval(tickTimer);publicStats.reconnects++;
   opportunityShadow.interrupt(); // No usar ticks ausentes tras reconexión.
+   digitShadow.interrupt(); // Nunca concatenar secuencias de ticks a traves de reconexiones.
   publicLastError=wasOpen?'CONEXION_PUBLICA_CERRADA':'NO_PUDO_CONECTAR';
   for(const m of market.values()){m.available=false;pushMarket(m);}
   for(const w of watchlist.values()){w.available=false;w.epoch=null;w.quote=null;}
@@ -409,7 +416,9 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/style.css'){return html(res,readFileSync(join(publicPath,'style.css')),'text/css; charset=utf-8');}
   if(req.method==='GET'&&path==='/api/training')return answer(res,200,readTraining(trainingFile));
   if(req.method==='GET'&&path==='/api/learning')return answer(res,200,getAdaptiveReport());
-  if(req.method==='GET'&&path==='/api/learning/quality')
+  if(req.method==='GET'&&path==='/api/learning/digits')
+    return answer(res,200,digitShadow.status());
+   if(req.method==='GET'&&path==='/api/learning/quality')
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
   if(req.method==='GET'&&path==='/api/learning/profitability')
     return answer(res,200,buildProfitabilityResearch(qualityRows.all()));
