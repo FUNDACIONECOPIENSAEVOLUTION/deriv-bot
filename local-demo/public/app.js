@@ -691,6 +691,43 @@ $('reconcile-open').onclick=async()=>{
 };
 $('history').onclick=async()=>{try{setMessage('Consultando los últimos contratos oficiales...');const d=await post('/api/demo/profit',{});const t=d.trades||[];$('trades').innerHTML='<p>'+t.length+' registros obtenidos de Deriv (consulta sin comprar).</p><div style="overflow-x:auto"><table><thead><tr><th>Contrato</th><th>Mercado</th><th>P&L</th></tr></thead><tbody>'+t.slice(0,30).map(x=>'<tr><td>'+escapeText(x.contractId)+'</td><td>'+escapeText(x.symbol)+'</td><td>'+usd(x.profit)+'</td></tr>').join('')+'</tbody></table></div>';setMessage('Consulta terminada.');}catch(e){setMessage(e.message);}};
 $('quote-btn').onclick=async()=>{try{$('quote-message').textContent='Consultando propuesta (sin comprar)...';const r=await post('/api/demo/quote',{symbol:$('quote-symbol').value,direction:$('quote-dir').value,stake:Number($('quote-stake').value)});$('quote-message').textContent='Deriv: apuesta '+usd(r.askPrice)+' · pago posible '+usd(r.payout)+' · latencia propuesta '+r.proposalRttMs+' ms. NINGUNA COMPRA.';}catch(e){$('quote-message').textContent=e.message;}};
+// Supervisor read-only, ninguna orden o saldo ficticio.
+async function showFourBotLab(){
+ const grid=$('multibot-grid'),msg=$('multibot-warning');
+ try{
+  const lab=await get('/api/lab/bots');
+  if(!lab.readOnly||!Array.isArray(lab.bots)||lab.bots.length!==4)throw Error('LAB_INVALID');
+  const labels={DEMO_OWNER_APPROVAL_ONLY:'DEMO autorizada localmente',WAITING_PUBLIC_TICKS:'Esperando ticks',WAITING_OPTIONS_DEMO_AUTH:'Sin cuenta DEMO',PUBLIC_SHADOW_OBSERVING:'Estudio de ticks sin compras',WAITING_PUBLIC_DIGIT_TICKS:'Esperando digitos',CONTRACT_DISCOVERY_REQUIRED:'Contratos pendientes de verificar',SEPARATE_MT5_DEMO_REQUIRED:'Requiere cuenta MT5 DEMO'};
+  grid.innerHTML=lab.bots.map(b=>'<article class="bot-lab-card"><div class="bot-lab-heading"><span>Bot '+escapeText(b.id)+'</span><span>USawait updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
+ if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
+ if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
+ setInterval(poll,15000);setInterval(showDemoOrders,15000);setInterval(updateBurstPanel,4000);setInterval(updateDemoProgram,4000);
+ await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
+ await showQualityAudit();setInterval(showQualityAudit,20000);
+ await showWalkForwardAudit();setInterval(showWalkForwardAudit,20000);
+ await showCandlePatternAudit();setInterval(showCandlePatternAudit,20000);
+ await showOpportunityShadow();setInterval(showOpportunityShadow,20000);
+ await showFourBotLab();setInterval(showFourBotLab,15000);
+ async function diagnose(){
+  try{
+   const d=await get('/api/market/diagnostic');
+   $('market-diagnostic').textContent='WebSocket '+(d.connected?'conectado':'desconectado')+
+    ' · símbolos '+d.symbolsReceived+' · índices '+d.activeMarkets+
+    ' · históricos '+d.historyLoaded+' · ticks '+d.ticksReceived+
+    ' · últ. tick '+(d.secondsSinceTick??'—')+' s'+
+    ' · estado '+(d.diagnosticCode||d.error||'PENDIENTE');
+   $('feed').textContent=d.activeMarkets>0&&d.secondsSinceTick!==null&&d.secondsSinceTick<15?
+    'Deriv en vivo · '+d.activeMarkets+' índices':'Deriv: '+(d.error||d.diagnosticCode||'sin cotizaciones');
+  }catch(e){$('market-diagnostic').textContent='Diagnóstico no disponible: '+e.message;}
+ }
+ await diagnose();setInterval(diagnose,5000);
+ setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},5000);
+ await refreshExternalWatchlist();setInterval(refreshExternalWatchlist,15000);
+})();
++fmt(b.plannedBudgetUsd)+' previstos</span></div><h3>'+escapeText(b.name)+'</h3><p>'+escapeText(labels[b.status]||'En estudio')+'</p><p>'+escapeText(b.note)+'</p><small>Observaciones: '+fmt(b.samples??0)+'</small>'+(Number.isFinite(b.historicalDemoPnlUsd)?'<small class="bot-lab-history">Historico DEMO existente (no de US$100): '+usd(b.historicalDemoPnlUsd)+'</small>':'<small class="bot-lab-history">P&L del nuevo estudio: N/D</small>')+'</article>').join('');
+  msg.textContent='US$100 por bot es solo presupuesto planificado, no un saldo separado ni un limite aplicado. Sin compras adicionales habilitadas. Opciones comparte cuenta DEMO; CFD necesita MT5.';
+ }catch(e){grid.textContent='Supervisor no disponible';msg.textContent=String(e?.message||'ERROR_LAB');}
+}
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
