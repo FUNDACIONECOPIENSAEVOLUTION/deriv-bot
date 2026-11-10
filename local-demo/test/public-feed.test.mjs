@@ -47,6 +47,14 @@ test('New underlying_symbol response produces 60 candles and prices in local API
   const status=await (await fetch(base+'/api/status')).json();
   assert.equal(status.realEnabled,false);
   assert.equal(status.buyEnabled,false);
+  const lab=await (await fetch(base+'/api/lab/bots')).json();
+  assert.equal(lab.readOnly,true);
+  assert.equal(lab.bots.length,4);
+  assert.equal(lab.plannedTotalUsd,400);
+  assert.equal(lab.budgetsEnforced,false);
+  assert.equal(lab.parallelBuyEnabled,false);
+  assert.equal(lab.bots[3].status,'SEPARATE_MT5_DEMO_REQUIRED');
+  assert.equal(lab.bots[0].autonomousTradingEnabled,false);
   const digits=await (await fetch(base+'/api/learning/digits')).json();
   assert.equal(digits.readOnly,true);
   assert.equal(digits.affectsBuy,false);
