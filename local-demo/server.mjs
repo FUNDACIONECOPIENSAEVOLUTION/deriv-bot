@@ -14,6 +14,7 @@ import {createDemoBurst} from './demo-burst.mjs';
 import {createOpportunityShadow} from './opportunity-shadow.mjs';
 import {createDigitShadowObserver} from './digit-shadow.mjs';
 import {buildFourBotLabStatus} from './four-bot-lab.mjs';
+import {createMultibotDemoProgram} from './multibot-program.mjs';
 import {createDemoProgram} from './demo-program.mjs';
 import {analyzeProgramRounds} from './demo-round-diagnostics.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
@@ -372,6 +373,9 @@ const bursts=createDemoBurst({
  },getAccount:()=>get('account'),audit
 });
 const program=createDemoProgram({db,bursts,trading,audit});
+const multiProgram=createMultibotDemoProgram({program,digitShadow,
+ isOptionsConnected:()=>status().connected,
+ isMarketConnected:()=>publicConnected,audit});
 const programAuditRows=db.prepare(`SELECT b.program_id AS programId,o.batch_id AS batchId,
  o.state,o.symbol,o.direction,o.stake_cents AS stakeCents,o.pnl_cents AS pnlCents,
  o.duration_ticks AS durationTicks,o.prediction_mode AS predictionMode,
@@ -417,7 +421,9 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/style.css'){return html(res,readFileSync(join(publicPath,'style.css')),'text/css; charset=utf-8');}
   if(req.method==='GET'&&path==='/api/training')return answer(res,200,readTraining(trainingFile));
   if(req.method==='GET'&&path==='/api/learning')return answer(res,200,getAdaptiveReport());
-  if(req.method==='GET'&&path==='/api/lab/bots')
+  if(req.method==='GET'&&path==='/api/lab/multibot-program')
+    return answer(res,200,multiProgram.status());
+   if(req.method==='GET'&&path==='/api/lab/bots')
     return answer(res,200,buildFourBotLabStatus({
      optionsConnected:status().connected,marketConnected:publicConnected,
      riseFallSummary:trading.getSummary(),digitReport:digitShadow.status()}));
@@ -497,7 +503,7 @@ server=http.createServer(async(req,res)=>{
     return answer(res,200,rpc);
    }
   if(req.method==='POST'&&codeVersionMismatch()&&
-   ['/api/demo/program/start','/api/demo/burst/start'].includes(path))
+   ['/api/demo/program/start','/api/demo/burst/start','/api/lab/multibot-program/start'].includes(path))
    return answer(res,409,{error:'DEMO_RUNTIME_VERSION_MISMATCH_RESTART_REQUIRED'});
   if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),runtimeVersionMismatch:codeVersionMismatch(),installedDiskVersion:readVersionFromDisk(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate()&&program.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
   if(req.method==='GET'&&path==='/api/status')return answer(res,200,{...status(),marketConnected:publicConnected,marketError:publicLastError});
@@ -551,7 +557,7 @@ server=http.createServer(async(req,res)=>{
   if(path==='/api/demo/refresh')return answer(res,200,await refreshBalance());
   if(path==='/api/demo/quote')return answer(res,200,await quoteDemo(b));
   if(path==='/api/demo/profit')return answer(res,200,await recentProfit());
-   if(isMaintenance()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start','/api/demo/program/start'].includes(path))throw Error('LOCAL_UPDATE_IN_PROGRESS');
+   if(isMaintenance()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start','/api/demo/program/start','/api/lab/multibot-program/start'].includes(path))throw Error('LOCAL_UPDATE_IN_PROGRESS');
    if(program.isRunning()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start'].includes(path))throw Error('DEMO_PROGRAM_IN_PROGRESS');
    if(path==='/api/demo/intent')return answer(res,200,trading.requestIntent({
     symbol:String(b.symbol||''),direction:String(b.direction||''),stakeCents:Number(b.stakeCents),source:'LOCAL_OWNER'}));
@@ -565,7 +571,11 @@ server=http.createServer(async(req,res)=>{
      mode:b.mode,confirmation:b.confirmation
    }));
    if(path==='/api/demo/burst/stop')return answer(res,200,program.isRunning()?program.stop():bursts.stop());
-   if(path==='/api/demo/program/start')return answer(res,200,program.start({
+   if(path==='/api/lab/multibot-program/start')
+     return answer(res,200,multiProgram.start({confirmation:b.confirmation}));
+    if(path==='/api/lab/multibot-program/stop')
+     return answer(res,200,multiProgram.stop());
+    if(path==='/api/demo/program/start')return answer(res,200,program.start({
     rounds:b.rounds,perRound:b.perRound,stakeCents:b.stakeCents,
     concurrency:b.concurrency,symbol:b.symbol,mode:b.mode,
      continueAfterNegativeRound:b.continueAfterNegativeRound,

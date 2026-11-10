@@ -31,3 +31,9 @@ border-radius:9px;background:#1b3644;padding:10px 14px;color:#c9f9ff;text-decora
 .bot-lab-history{color:#b8d9dc}
 @media(max-width:1000px){.bot-lab-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.bot-lab-grid{grid-template-columns:1fr}}
+
+/* Confirmacion de programa multibot DEMO - visible y legible en PC. */
+#multibot-panel h3{margin:16px 0 8px}
+.lab-check{flex-direction:row;align-items:start;gap:10px;background:#152f3d;border:1px solid #365f70;border-radius:9px;padding:12px;margin:12px 0;font-size:13px;line-height:1.45}
+.lab-check input[type=checkbox]{width:18px;height:18px;flex:none;margin:2px 0 0}
+#multibot-program-table td:nth-child(3){font-weight:700}

@@ -20,6 +20,13 @@
  <p>Supervisión local de cuatro estrategias con <strong>US$100 por bot como presupuesto PLANIFICADO de estudio</strong>. No son saldos independientes ni límites ya aplicados en Deriv. Rise/Fall conserva sus compras DEMO aprobadas manualmente; Dígitos observa ticks sin comprar; Multipliers y CFD están pendientes de conexión y validación. Ningún bot adicional ejecuta órdenes en esta fase.</p>
  <div id="multibot-grid" class="bot-lab-grid" aria-live="polite"><article>Consultando el supervisor de cuatro modalidades...</article></div>
  <p id="multibot-warning" class="msg">La cuenta DEMO de Opciones es compartida y CFD necesita una cuenta MT5 DEMO distinta. Riesgo REAL: bloqueado.</p>
+ <h3>Programa único 10 × 10 por modalidad · DEMO</h3>
+ <p><b>Una autorización local:</b> el bot A inicia el programa de hasta diez tandas de diez compras DEMO Rise/Fall; el bot B analiza diez tandas de diez predicciones públicas de dígitos, <b>sin comprar</b>. C (Multipliers) y D (CFD) aparecen pendientes hasta incorporar sus ejecutores y límites reales. No se autorizan automáticamente 400 compras.</p>
+ <p><strong>Reglas A:</strong> iniciar en US$1 por contrato, bajar a US$0,50 tras dos pérdidas consecutivas, proteger los resultados verdes con TRAILING_GREEN, avanzar de tanda solamente cuando la anterior fue validada y respetar el límite global de pérdida. Las tandas negativas detienen el programa; no se aplica martingala.</p>
+ <label class="lab-check"><input type="checkbox" id="multibot-consent"> Autorizo exclusivamente hasta 100 compras en la cuenta DEMO de Opciones para A (máximo nominal acumulado US$100), más 100 observaciones B sin inversión; C/D sin compras. Comprendo que no son cuatro saldos de US$100 separados.</label>
+ <div class="actions"><button id="multibot-start" disabled>Iniciar un programa 10×10 (A DEMO + B observación)</button><button id="multibot-stop" class="outline" disabled>Detener programa conjunto</button></div>
+ <p id="multibot-program-note" class="msg">Programa conjunto inactivo; espera aprobación local.</p>
+ <div class="table-wrap"><table><thead><tr><th>Bot</th><th>Modalidad</th><th>Estado 10×10</th><th>Tandas</th><th>Compras/observaciones</th><th>Neto oficial</th></tr></thead><tbody id="multibot-program-table"><tr><td colspan="6">Aún no autorizado.</td></tr></tbody></table></div>
  </section>
  <section><h2>3. Historial y entrenamiento experimental</h2>
  <h3>Aprendizaje experimental desde SQLite DEMO</h3>
