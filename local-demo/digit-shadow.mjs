@@ -1,7 +1,7 @@
 // Estudio PRECUENCIAL de contratos de digitos en ticks publicos Deriv.
 // Nunca cotiza ni envia BUY. No se infiere payout ni rentabilidad real.
 // El pip_size recibido del broker determina el ultimo digito mostrado.
-const uniform={DIGITDIFF:.9,DIGITEVEN:.5,DIGITODD:.5,DIGITOVER2:.7,DIGITUNDER7:.7};
+const uniform={DIGITDIFF:.9,DIGITPARITY:.5,DIGITOVER2:.7,DIGITUNDER7:.7};
 const options=Object.keys(uniform);
 const round=(n,places=5)=>Number.isFinite(n)?Number(n.toFixed(places)):null;
 export function lastDigitFromTick(quote,pipSize){
@@ -32,8 +32,8 @@ export function predictDigitCandidates(digits){
  const evens=count[0]+count[2]+count[4]+count[6]+count[8];
  const odd=digits.length-evens;
  // Paridad mayoritaria precompra: regla exploratoria SIN ventaja probada.
- return {DIGITDIFF:{barrier:least},DIGITEVEN:{enabled:evens>=odd},
-  DIGITODD:{enabled:odd>evens},DIGITOVER2:{barrier:2},
+ return {DIGITDIFF:{barrier:least},DIGITPARITY:{isEven:evens>=odd},
+  DIGITOVER2:{barrier:2},
   DIGITUNDER7:{barrier:7}};
 }
 export function createDigitShadowObserver({windowSize=50,maxSymbols=20}={}){
@@ -72,7 +72,7 @@ export function createDigitShadowObserver({windowSize=50,maxSymbols=20}={}){
   if(state.pending){
    const p=state.pending;
    const won={DIGITDIFF:digit!==p.DIGITDIFF.barrier,
-    DIGITEVEN:digit%2===0,DIGITODD:digit%2===1,
+    DIGITPARITY:(digit%2===0)===p.DIGITPARITY.isEven,
     DIGITOVER2:digit>2,DIGITUNDER7:digit<7};
    for(const id of options){
     const row=state.outcome[id];row.n++;row.wins+=Number(won[id]);
@@ -105,7 +105,7 @@ export function createDigitShadowObserver({windowSize=50,maxSymbols=20}={}){
    payoutAvailable:false,netProfitAvailable:false,
    instrumentAvailabilityConfirmed:false,
    symbolsObserved:states.size,ticksObserved:total,interruptions:interrupted,
-   candidates:['DIGITDIFF','DIGITEVEN','DIGITODD','DIGITOVER2','DIGITUNDER7'],
+   candidates:['DIGITDIFF','DIGITPARITY(EVEN/ODD)','DIGITOVER2','DIGITUNDER7'],
    symbols,method:'Predecir con hasta 50 digitos anteriores; puntuar en el SIGUIENTE tick publico antes de incorporarlo al historial. Los resultados no son ejecuciones ni cuotas verificadas.',
    warnings:['No usar win rate de digitos para inferir rentabilidad sin propuesta Deriv real.',
     'No operar DIGITDIFF por acierto ~90%: su payout puede anular la ventaja.',
