@@ -24,6 +24,7 @@ import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {recentMarketRiskVerdict} from './empirical-market-veto.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
 import {buildProfitabilityResearch} from './learning-profitability.mjs';
+import {buildHorizonDeskReport} from './horizon-desk.mjs';
 import {evaluateWalkForward} from './shadow-walk-forward.mjs';
 import {evaluateCandlePatterns,exportCandlesCsv,exportTickContextCsv} from './candle-patterns.mjs';
 
@@ -325,6 +326,10 @@ const qualityRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cent
  entry_tick,exit_tick,signal_quote,projection_model_mae,projection_naive_mae,error_code
  FROM demo_local_orders WHERE state IN ('SETTLED','REJECTED')
  ORDER BY created_at ASC`);
+// Incluye todos los estados; no fingir BUY si solo hubo intentos REJECTED.
+const horizonOrderRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
+ duration_ticks,prediction_policy,bought_at_ms,settled_at_ms
+ FROM demo_local_orders ORDER BY created_at ASC`);
 const candleRows=db.prepare(`SELECT id,batch_id,app_version,strategy_version,
  state,symbol,direction,stake_cents,pnl_cents,bought_at_ms,settled_at_ms,
  duration_ticks AS durationTicks,prediction_mode AS predictionMode,
@@ -421,7 +426,12 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/style.css'){return html(res,readFileSync(join(publicPath,'style.css')),'text/css; charset=utf-8');}
   if(req.method==='GET'&&path==='/api/training')return answer(res,200,readTraining(trainingFile));
   if(req.method==='GET'&&path==='/api/learning')return answer(res,200,getAdaptiveReport());
-  if(req.method==='GET'&&path==='/api/lab/multibot-program')
+  if(req.method==='GET'&&path==='/api/lab/horizons')
+     return answer(res,200,buildHorizonDeskReport(horizonOrderRows.all(),{
+      connected:status().connected,programRunning:program.isRunning(),
+      burstRunning:bursts.status().running,
+      latestBurstMode:bursts.status().batches?.[0]?.signalMode??null}));
+   if(req.method==='GET'&&path==='/api/lab/multibot-program')
     return answer(res,200,multiProgram.status());
    if(req.method==='GET'&&path==='/api/lab/bots')
     return answer(res,200,buildFourBotLabStatus({
