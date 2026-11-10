@@ -47,6 +47,12 @@ test('New underlying_symbol response produces 60 candles and prices in local API
   const status=await (await fetch(base+'/api/status')).json();
   assert.equal(status.realEnabled,false);
   assert.equal(status.buyEnabled,false);
+  const digits=await (await fetch(base+'/api/learning/digits')).json();
+  assert.equal(digits.readOnly,true);
+  assert.equal(digits.affectsBuy,false);
+  assert.equal(digits.brokerOrders,0);
+  assert.equal(digits.netProfitAvailable,false);
+  assert.ok(digits.ticksObserved>=1);
  }finally{
   child.kill();
   if(child.exitCode===null)await Promise.race([
