@@ -13,6 +13,7 @@ import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
 import {createOpportunityShadow} from './opportunity-shadow.mjs';
 import {createDigitShadowObserver} from './digit-shadow.mjs';
+import {buildFourBotLabStatus} from './four-bot-lab.mjs';
 import {createDemoProgram} from './demo-program.mjs';
 import {analyzeProgramRounds} from './demo-round-diagnostics.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
@@ -416,7 +417,11 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/style.css'){return html(res,readFileSync(join(publicPath,'style.css')),'text/css; charset=utf-8');}
   if(req.method==='GET'&&path==='/api/training')return answer(res,200,readTraining(trainingFile));
   if(req.method==='GET'&&path==='/api/learning')return answer(res,200,getAdaptiveReport());
-  if(req.method==='GET'&&path==='/api/learning/digits')
+  if(req.method==='GET'&&path==='/api/lab/bots')
+    return answer(res,200,buildFourBotLabStatus({
+     optionsConnected:status().connected,marketConnected:publicConnected,
+     riseFallSummary:trading.getSummary(),digitReport:digitShadow.status()}));
+   if(req.method==='GET'&&path==='/api/learning/digits')
     return answer(res,200,digitShadow.status());
    if(req.method==='GET'&&path==='/api/learning/quality')
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
