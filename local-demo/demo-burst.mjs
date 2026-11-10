@@ -49,10 +49,11 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
     reason='TICK_OR_PRICE_STALE';
   else if(predictive){
    const options=m.tickHorizonModels?.filter(x=>
-    ((mode==='RESEARCH_DEMO'||mode==='RESEARCH_FIVE_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
+    ((mode==='RESEARCH_DEMO'||mode==='RESEARCH_FIVE_ONLY'||mode==='RESEARCH_TEN_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
     (mode!=='RESEARCH_FIVE_ONLY'||x.durationTicks===5)&&
+     (mode!=='RESEARCH_TEN_ONLY'||x.durationTicks===10)&&
     !getAdaptiveVerdict(m.symbol,x.direction).blocked)||[];
-   if(!options.length)reason=['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode)?
+   if(!options.length)reason=['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode)?
     'NO_RESEARCH_TICK_EVIDENCE':'NO_VALIDATED_TICK_MODEL';
    else{
     const candleEpoch=m.candles?.at(-1)?.epoch??m.epoch;
@@ -168,8 +169,9 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     !m.fresh||!Number.isFinite(m.ageReceivedMs)||m.ageReceivedMs>1500||
     !Number.isInteger(m.epoch)||Math.abs(Date.now()-m.epoch*1000)>2500)continue;
    const options=(m.tickHorizonModels||[]).filter(x=>
-    ((batch.mode==='RESEARCH_DEMO'||batch.mode==='RESEARCH_FIVE_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
+    ((batch.mode==='RESEARCH_DEMO'||batch.mode==='RESEARCH_FIVE_ONLY'||batch.mode==='RESEARCH_TEN_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
     (batch.mode!=='RESEARCH_FIVE_ONLY'||x.durationTicks===5)&&
+     (batch.mode!=='RESEARCH_TEN_ONLY'||x.durationTicks===10)&&
     !getAdaptiveVerdict(m.symbol,x.direction).blocked)
     .sort((a,b)=>Number(b.readyForProposal)-Number(a.readyForProposal)||
      (b.readyForProposal?b.conservativeWinRateLower95:b.observedValidationHitRate)-
@@ -212,7 +214,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   // Investigacion 10x10: tolera rechazos sin BUY y espera señales nuevas,
   // pero nunca vuelve a enviar una compra incierta ni supera count operaciones.
   const researchProgram=!!batch.programId&&
-   ['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(batch.mode);
+   ['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(batch.mode);
   // Una campaña autorizada de investigacion no tiene reloj de compra:
   // si no aparece ventaja demostrable, se mantiene vigilando el mercado.
   // No existe derecho a forzar 100 operaciones ni a reintentar BUY incierto.
@@ -415,7 +417,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   if(confirmation!=='CONFIRMAR TANDA DEMO')throw Error('DEMO_BURST_APPROVAL_REQUIRED');
   if(!['VALIDATED_ONLY','RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
    throw Error('DEMO_SIGNAL_MODE_INVALID');
-  if(['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode)&&stakeCents>100)
+  if(['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode)&&stakeCents>100)
    throw Error('DEMO_EXPLORATORY_MAX_1USD');
   if(typeof globalProtection!=='boolean'||typeof downshiftAfterTwoLosses!=='boolean'||
    ((globalProtection||downshiftAfterTwoLosses)&&(!programId||profitTargetCents===0)))
@@ -424,7 +426,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    if(!programId||![50,100,150].includes(profitTargetCents)||
     lossCapCents!==0||!EXIT_POLICIES.includes(exitPolicy)||
     concurrency!==1||stakeCents!==100||count!==10||
-    !['RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
+    !['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode))
     throw Error('DEMO_PROFIT_LOCK_PARAMETERS_INVALID');
   }else if(lossCapCents!==0||exitPolicy!=='FIXED_TARGET')
    throw Error('DEMO_PROFIT_LOCK_PARAMETERS_INVALID');
@@ -448,6 +450,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
   insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,
    getVersion(),mode==='RESEARCH_FIVE_ONLY'?'TICK_5_ONLY_PILOT_DEMO_V1':
+    mode==='RESEARCH_TEN_ONLY'?'TICK_10_ONLY_PILOT_DEMO_V1':
    mode==='RESEARCH_DEMO'?'TICK_5_10_RESEARCH_DEMO_V1':
     'TICK_5_10_VALIDATED_V1',programId,mode,profitTargetCents,lossCapCents,
     exitPolicy,globalProtection?1:0,downshiftAfterTwoLosses?1:0);
