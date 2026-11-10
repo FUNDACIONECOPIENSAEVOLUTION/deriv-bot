@@ -40,7 +40,7 @@ const PUBLIC_WS='wss://api.derivws.com/trading/v1/options/ws/public';
 // Lista inicial para UI; nuevos índices SOLO si Deriv los anuncia.
 const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V'];
-const EXTERNAL_NAMES=Object.freeze(['USD/COP','EUR/USD','USD/JPY','Oro (XAU/USD)','Bitcoin (BTC/USD)']);
+const EXTERNAL_NAMES=Object.freeze(['USD/COP','EUR/USD','USD/JPY','Oro (XAU/USD)','Plata (XAG/USD)','Bitcoin (BTC/USD)']);
 const STAKES=new Set([0.35,0.50,0.75,0.90,1]);
 const now=()=>Math.floor(Date.now()/1000);
 const base64=x=>Buffer.from(x).toString('base64url');
@@ -200,6 +200,7 @@ function configureSymbols(ws,records){
   [/^(EUR\/USD|Euro\/US Dollar)$/i,'EUR/USD'],
   [/^(USD\/JPY|US Dollar\/Japanese Yen)$/i,'USD/JPY'],
   [/Gold|XAU\/USD|XAUUSD/i,'Oro (XAU/USD)'],
+   [/Silver|XAG\/USD|XAGUSD/i,'Plata (XAG/USD)'],
   [/Bitcoin|BTC\/USD|BTCUSD/i,'Bitcoin (BTC/USD)']
  ];
  let idx=0;
