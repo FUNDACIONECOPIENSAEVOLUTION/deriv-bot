@@ -55,6 +55,25 @@ test('New underlying_symbol response produces 60 candles and prices in local API
   assert.equal(lab.parallelBuyEnabled,false);
   assert.equal(lab.bots[3].status,'SEPARATE_MT5_DEMO_REQUIRED');
   assert.equal(lab.bots[0].autonomousTradingEnabled,false);
+  const unified=await (await fetch(base+'/api/lab/multibot-program')).json();
+  assert.equal(unified.realEnabled,false);
+  assert.equal(unified.maxPerBot,100);
+  assert.equal(unified.bots[0].state,'NOT_STARTED');
+  assert.equal(unified.bots[2].tradeEnabledWhenAuthorized,false);
+  const denied=await fetch(base+'/api/lab/multibot-program/start',{
+   method:'POST',headers:{Origin:base,'X-Ecopiensa-Local':'1',
+    'Content-Type':'application/json'},
+   body:JSON.stringify({confirmation:'INCORRECTA'})
+  });
+  assert.equal(denied.ok,false);
+  assert.equal((await denied.json()).error,'MULTIBOT_LOCAL_APPROVAL_REQUIRED');
+  const deniedNoAccount=await fetch(base+'/api/lab/multibot-program/start',{
+   method:'POST',headers:{Origin:base,'X-Ecopiensa-Local':'1',
+    'Content-Type':'application/json'},
+   body:JSON.stringify({confirmation:'AUTORIZAR MULTIBOT DEMO 10X10 A Y SOMBRA B'})
+  });
+  assert.equal(deniedNoAccount.ok,false);
+  assert.equal((await deniedNoAccount.json()).error,'DEMO_OPTIONS_ACCOUNT_REQUIRED');
   const digits=await (await fetch(base+'/api/learning/digits')).json();
   assert.equal(digits.readOnly,true);
   assert.equal(digits.affectsBuy,false);
