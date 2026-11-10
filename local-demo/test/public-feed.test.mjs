@@ -55,6 +55,14 @@ test('New underlying_symbol response produces 60 candles and prices in local API
   assert.equal(lab.parallelBuyEnabled,false);
   assert.equal(lab.bots[3].status,'SEPARATE_MT5_DEMO_REQUIRED');
   assert.equal(lab.bots[0].autonomousTradingEnabled,false);
+  const horizons=await (await fetch(base+'/api/lab/horizons')).json();
+  assert.equal(horizons.readOnly,true);
+  assert.equal(horizons.realEnabled,false);
+  assert.equal(horizons.canIssueOrders,false);
+  assert.deepEqual(horizons.groups.map(x=>x.key),
+   ['TICK_5','TICK_10','UNLABELED','OTHER']);
+  assert.equal(horizons.groups[0].settled,0);
+  assert.equal(horizons.groups[1].settled,0);
   const unified=await (await fetch(base+'/api/lab/multibot-program')).json();
   assert.equal(unified.realEnabled,false);
   assert.equal(unified.maxPerBot,100);
