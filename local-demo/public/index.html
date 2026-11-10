@@ -82,7 +82,8 @@
  <p>Una autorización local permite hasta <b>10 tandas consecutivas</b> de 10 compras DEMO de US$1, con máximo 5 contratos simultáneos. Total máximo de apuestas: US$100, <b>no una promesa de ganar</b>. Cada tanda debe terminar y liquidarse antes de iniciar la siguiente. INVESTIGACIÓN DEMO: el programa puede comprar con señales preliminares sin ventaja demostrada, pero exige muestra y cotización suficientes. El programa de evaluación se prepara con investigación extendida activada: tras una tanda perdedora continuará con las siguientes, siempre que se respeten los controles de riesgo, el saldo y las señales. El bot puede permanecer en ESPERAR tanto tiempo como sea necesario mientras el servidor del PC siga encendido; no acelera compras ni las fuerza por un plazo de espera. Puedes desactivar esa opción si deseas detenerte tras 5/5 (o peor) con resultado negativo. Incluso con la opción activa, las 100 compras son un objetivo, no una garantía.</p>
  <p><label>Perfil del nuevo programa <select id="program-mode">
   <option value="RESEARCH_DEMO">AUTO · analizar y comprar 5 o 10 ticks</option>
-  <option value="RESEARCH_FIVE_ONLY">Piloto 5 ticks · comprobar señal solo a 5 ticks</option>
+  <option value="RESEARCH_FIVE_ONLY">Bot 5 ticks · comprar SOLO a 5 ticks</option>
+   <option value="RESEARCH_TEN_ONLY">Bot 10 ticks · comprar SOLO a 10 ticks</option>
  </select></label></p>
  <p><label><input type="checkbox" id="program-global-guard" checked>
   <strong>Proteger beneficio global:</strong> antes de ganar US$3, limitar la pérdida del programa a US$3. Después de llegar a +US$3, conservar al menos +US$1 o el pico menos US$2. Puede pausar el programa antes de completar diez tandas.</label></p>
@@ -130,7 +131,8 @@
   <label>Modo de señal <select id="burst-mode">
    <option value="RESEARCH_DEMO" selected>Investigación DEMO · muestras preliminares (máx. US$1)</option>
    <option value="VALIDATED_ONLY">Conservador · solo evidencia estadística estricta</option>
-   <option value="RESEARCH_FIVE_ONLY">Piloto de investigación DEMO · únicamente 5 ticks</option>
+   <option value="RESEARCH_FIVE_ONLY">Bot 5 ticks · únicamente contratos a 5 ticks</option>
+    <option value="RESEARCH_TEN_ONLY">Bot 10 ticks · únicamente contratos a 10 ticks</option>
   </select></label>
   <label>Máximo simultáneas <select id="burst-concurrency"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5" selected>5</option></select></label>
  </div>
