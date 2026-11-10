@@ -61,6 +61,16 @@ export function captureCandleContext(snapshot,{count=20,atMs=Date.now()}={}){
   atr14:n(snapshot.atr14),fiveTickMomentum:n(snapshot.fiveTickMomentum),
   tickRsi14:n(snapshot.tickRsi14),candles:bars,lastTickPrices:ticks,
   lastTickEpochs:tickEpochs,lastLiveTickSeq:n(snapshot.liveTickSeq),
+  // Solo atributos observados antes del BUY; permiten estudio retrospectivo.
+  tickMicrostructure:snapshot.microstructure?.ready===true?{
+   period:n(snapshot.microstructure.period),
+   lastMoves:n(snapshot.microstructure.lastMoves),
+   efficiencyRatio:n(snapshot.microstructure.efficiencyRatio),
+   direction:String(snapshot.microstructure.direction||'FLAT'),
+   alignmentCount:n(snapshot.microstructure.alignmentCount),
+   reversals:n(snapshot.microstructure.reversals),
+   meanAbsoluteMove:n(snapshot.microstructure.meanAbsoluteMove),
+   researchOnly:true}:null,
   pattern:patternOf(bars,n(snapshot.atr14))};
 }
 export function parseCandleContext(raw){

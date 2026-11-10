@@ -1,6 +1,7 @@
 // Indicadores de investigación sobre ticks oficiales. NO son probabilidad de éxito ni BUY.
 import {evaluateTickHorizons} from './tick-horizon-model.mjs';
 import {performance} from 'node:perf_hooks';
+import {computeTickMicrostructure} from './tick-microstructure.mjs';
 export const CONTRACT_HORIZON_TICKS=5;
 export const TICKS_PER_CANDLE=10;
 export const CANDLES_VISIBLE=60;
@@ -56,6 +57,8 @@ export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}
  const prices=valid.map(x=>x.price);
  const last5=prices.length>=6?prices.at(-1)-prices.at(-6):null;
  const tickRsi14=rsi(prices,14);
+  // Diagnostico causal a partir de ticks ya observados; no modifica direction.
+  const microstructure=computeTickMicrostructure(prices);
  const studyStart=performance.now();
  const fiveTickStudy=fiveTickDirectionStudy(prices);
  const studyMs=performance.now()-studyStart;
@@ -120,6 +123,7 @@ export function computeMarketAnalysis(ticks,{connected=false,ageReceivedMs=null}
   ticksAnalyzed:prices.length,ema20,ema50,rsi14,atr14,momentum5,slope10,
   projectedNextTick,modelMae,naiveMae,projectionIsResearchOnly:true,
   fiveTickMomentum:last5,tickRsi14,fiveTickStudy,tickHorizonModels,
+   microstructure,
   tickHorizonAudit:{contractDurationTicks:5,
    candlesUsed:CANDLES_VISIBLE,candleSizeTicks:TICKS_PER_CANDLE,
    trendContextTicks:CANDLES_VISIBLE*TICKS_PER_CANDLE,
