@@ -32,7 +32,7 @@ export function createMultibotDemoProgram({
     isN(r?.evaluated?.DIGITDIFF?.n)&&r.evaluated.DIGITDIFF.n>0);
    available.sort((a,b)=>{
     const ia=PREFER.indexOf(a.symbol),ib=PREFER.indexOf(b.symbol);
-    return (ia===-1?999:ia)-(ib===-1?999)||a.symbol.localeCompare(b.symbol);
+    return (ia===-1?999:ia)-(ib===-1?999:ib)||a.symbol.localeCompare(b.symbol);
    });
    if(available.length){
     current.bSymbol=available[0].symbol;
