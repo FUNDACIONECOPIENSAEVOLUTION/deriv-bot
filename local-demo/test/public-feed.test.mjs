@@ -61,14 +61,14 @@ test('New underlying_symbol response produces 60 candles and prices in local API
   assert.equal(unified.bots[0].state,'NOT_STARTED');
   assert.equal(unified.bots[2].tradeEnabledWhenAuthorized,false);
   const denied=await fetch(base+'/api/lab/multibot-program/start',{
-   method:'POST',headers:{Origin:base,'X-Ecopiensa-Local':'1',
+   method:'POST',headers:{Origin:'http://localhost:'+port,'X-Ecopiensa-Local':'1',
     'Content-Type':'application/json'},
    body:JSON.stringify({confirmation:'INCORRECTA'})
   });
   assert.equal(denied.ok,false);
   assert.equal((await denied.json()).error,'MULTIBOT_LOCAL_APPROVAL_REQUIRED');
   const deniedNoAccount=await fetch(base+'/api/lab/multibot-program/start',{
-   method:'POST',headers:{Origin:base,'X-Ecopiensa-Local':'1',
+   method:'POST',headers:{Origin:'http://localhost:'+port,'X-Ecopiensa-Local':'1',
     'Content-Type':'application/json'},
    body:JSON.stringify({confirmation:'AUTORIZAR MULTIBOT DEMO 10X10 A Y SOMBRA B'})
   });
