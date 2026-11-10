@@ -19,3 +19,15 @@ border-radius:9px;background:#1b3644;padding:10px 14px;color:#c9f9ff;text-decora
 .download-link:hover{border-color:#49d8b5}
 #burst-message{min-height:42px;white-space:pre-wrap}
 @media(max-width:750px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Supervisor unificado de las cuatro modalidades, exclusivamente informativo. */
+#multibot-panel{border-color:#436a79}
+.bot-lab-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.bot-lab-card{padding:14px;background:#102c39}
+.bot-lab-card h3{margin:10px 0 3px;font-size:16px;color:#e4fbfb}
+.bot-lab-card p{font-size:12px;line-height:1.5}
+.bot-lab-card small{display:block;margin-top:8px}
+.bot-lab-heading{display:flex;justify-content:space-between;align-items:center;gap:5px;color:#b9e4e4;font-size:12px;font-weight:700}
+.bot-lab-history{color:#b8d9dc}
+@media(max-width:1000px){.bot-lab-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.bot-lab-grid{grid-template-columns:1fr}}
