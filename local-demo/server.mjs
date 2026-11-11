@@ -28,6 +28,7 @@ import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {recentMarketRiskVerdict} from './empirical-market-veto.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
 import {buildProfitabilityResearch} from './learning-profitability.mjs';
+import {buildDemoDecisionDesk} from './demo-decision-desk.mjs';
 import {buildHorizonDeskReport} from './horizon-desk.mjs';
 import {evaluateWalkForward} from './shadow-walk-forward.mjs';
 import {evaluateCandlePatterns,exportCandlesCsv,exportTickContextCsv} from './candle-patterns.mjs';
@@ -582,6 +583,11 @@ const openReconciliationTimer=setInterval(()=>{
   .catch(e=>audit('DEMO_AUTO_RECONCILE_ERROR',errorCode(e)));
 },20000);
 openReconciliationTimer.unref?.();
+const decisionDesk=()=>buildDemoDecisionDesk({
+ profitability:buildProfitabilityResearch(qualityRows.all()),
+ shadow:strategyShadow.status(),selection:getSignalSelectionAudit(),
+ risk:trading.getRiskStatus()
+});
 const mcpHandlers={
  version:()=>localVersion(),
  status:()=>({...status(),orders:trading.getSummary()}),
@@ -592,7 +598,18 @@ const mcpHandlers={
  program:()=>program.status(),
  walkForward:()=>evaluateWalkForward(qualityRows.all()),
  candlePatterns:()=>evaluateCandlePatterns(candleRows.all()),
- request:args=>{if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');if(program.isRunning()||microPilot.isRunning())throw Error('DEMO_PROGRAM_IN_PROGRESS');return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});}
+ profitability:()=>buildProfitabilityResearch(qualityRows.all()),
+ shadowStrategies:()=>strategyShadow.status(),
+ decisionDesk,
+ request:args=>{
+  if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');
+  if(program.isRunning()||microPilot.isRunning()||bursts.status().running)
+   throw Error('DEMO_PROGRAM_IN_PROGRESS');
+  const orders=trading.getSummary();
+  if(orders.pendingOrOpen>0||orders.awaitingApproval>0)
+   throw Error('MCP_REVIEW_REQUIRES_NO_PENDING_BUYS');
+  return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});
+ }
 };
 let server;
 server=http.createServer(async(req,res)=>{
@@ -632,7 +649,9 @@ server=http.createServer(async(req,res)=>{
     return answer(res,200,digitShadow.status());
    if(req.method==='GET'&&path==='/api/learning/quality')
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
-  if(req.method==='GET'&&path==='/api/learning/profitability')
+  if(req.method==='GET'&&path==='/api/learning/decision-desk')
+    return answer(res,200,decisionDesk());
+   if(req.method==='GET'&&path==='/api/learning/profitability')
     return answer(res,200,buildProfitabilityResearch(qualityRows.all()));
    if(req.method==='GET'&&path==='/api/learning/walk-forward')
    return answer(res,200,evaluateWalkForward(qualityRows.all()));
