@@ -77,14 +77,15 @@ export function createMultiIndexMicroPilot({
   const netCents=settled.reduce((t,x)=>t+x.pnlCents,0);
   const attempted=rows.filter(x=>x.orderId).length;
   const stakedCents=settled.reduce((a,x)=>a+(x.buyCents||0),0);
-  const brokerOrders=rows.filter(x=>['SETTLED','OPEN','UNKNOWN'].includes(x.state)).length;
+  const brokerOrders=rows.filter(x=>['SETTLED','OPEN'].includes(x.state)).length;
+  const unknownOrders=rows.filter(x=>x.state==='UNKNOWN').length;
   return {mode:'OWNER_AUTHORIZED_MICRO_MULTIINDEX_DEMO_V1',
    running:!!active,state:a?.state||'NOT_STARTED',runId:a?.id??null,
    stopReason:a?.stopReason||null,realEnabled:false,ownerClickRequired:true,
    stakeCents:MICRO_STAKE_CENTS,noStakeFallback:true,
    maximumContracts:MICRO_MAX_CONTRACTS,maximumNominalCents:MICRO_MAX_COMMITTED_CENTS,
    stopLossCents:MICRO_STOP_LOSS_CENTS,stopProfitCents:MICRO_STOP_PROFIT_CENTS,
-   candidates:rows.length,attempted,brokerOrders,settled:settled.length,
+   candidates:rows.length,attempted,brokerOrders,unknownOrders,settled:settled.length,
    wins,losses,winRatePct:settled.length?Number((100*wins/settled.length).toFixed(2)):null,
    netCents,stakedCents,roiPct:stakedCents?
     Number((100*netCents/stakedCents).toFixed(2)):null,
