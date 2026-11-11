@@ -13,6 +13,7 @@ import {createDemoTrading} from './demo-trading.mjs';
 import {createDemoBurst} from './demo-burst.mjs';
 import {createOpportunityShadow} from './opportunity-shadow.mjs';
 import {createDigitShadowObserver} from './digit-shadow.mjs';
+import {createStrategyComparisonShadow} from './strategy-comparison-shadow.mjs';
 import {buildFourBotLabStatus} from './four-bot-lab.mjs';
 import {createMultibotDemoProgram} from './multibot-program.mjs';
 import {createDemoProgram} from './demo-program.mjs';
@@ -80,6 +81,7 @@ const audit=(action,detail)=>db.prepare('INSERT INTO audit(at,action,detail) VAL
 const opportunityShadow=createOpportunityShadow({db,getVersion:localVersion});
 // Estudio de digitos en ticks vivos: solo memoria, sin propuestas ni permisos BUY.
 const digitShadow=createDigitShadowObserver();
+const strategyShadow=createStrategyComparisonShadow({db,getVersion:localVersion});
 function seal(obj){const iv=randomBytes(12),c=createCipheriv('aes-256-gcm',KEY,iv);const bytes=Buffer.concat([c.update(JSON.stringify(obj),'utf8'),c.final()]);return {iv:base64(iv),data:base64(bytes),tag:base64(c.getAuthTag())};}
 function unseal(obj){if(!obj?.iv||!obj?.data||!obj?.tag)throw Error('CREDENCIALES_NO_DISPONIBLES');const d=createDecipheriv('aes-256-gcm',KEY,Buffer.from(obj.iv,'base64url'));d.setAuthTag(Buffer.from(obj.tag,'base64url'));return JSON.parse(Buffer.concat([d.update(Buffer.from(obj.data,'base64url')),d.final()]).toString('utf8'));}
 const safeEq=(a,b)=>{const aa=sha256(String(a)),bb=sha256(String(b));return timingSafeEqual(aa,bb);};
@@ -131,11 +133,13 @@ async function recentProfit(){if(Date.now()-lastProfitRefresh<10000)throw Error(
 async function quoteDemo(body){const symbol=String(body.symbol||''),direction=String(body.direction||''),stake=Number(body.stake);if(!SYMBOLS.includes(symbol)||!market.get(symbol)?.available||!['CALL','PUT'].includes(direction)||!STAKES.has(stake))throw Error('PARAMETROS_INVALIDOS');if(Date.now()-lastQuote<3000)throw Error('ESPERAR_3S_COTIZACION');lastQuote=Date.now();const started=performance.now();const msg=await wsReadOnly({proposal:1,amount:stake,basis:'stake',contract_type:direction,currency:'USD',duration:5,duration_unit:'t',underlying_symbol:symbol,req_id:907},'proposal');const p=msg.proposal||{};if(!Number.isFinite(Number(p.ask_price))||!Number.isFinite(Number(p.payout)))throw Error('PROPUESTA_INVALIDA');audit('COTIZACION_DEMO',symbol+' '+direction);return {symbol,direction,stake,askPrice:Number(p.ask_price),payout:Number(p.payout),proposalRttMs:Math.round(performance.now()-started),noOrders:true,expires:'No reutilizar una propuesta antigua'};}
 const market=new Map(SYMBOLS.map(symbol=>[symbol,{symbol,ticks:[],epoch:0,quote:0,receivedAtMs:0,available:false}]));
 const watchSymbols=new Map(); // Precios externos de SOLO LECTURA, nunca fuente de BUY sintético.
+const researchOnlySymbols=new Map(); // Índices como R_20 para observación; NUNCA BUY.
 const watchlist=new Map(EXTERNAL_NAMES.map(name=>[name,{name,symbol:null,quote:null,epoch:null,available:false,source:'Deriv public'}]));
 let publicConnected=false,publicLastError='SIN_CONECTAR',backoff=1000;
 const publicStats={connections:0,reconnects:0,symbolsReceived:0,activeMarkets:0,historyLoaded:0,
  ticksReceived:0,duplicateTicks:0,syncResets:0,
  ignoredTradingSymbols:[],authorizedTradingSymbols:[],
+ researchOnlySymbols:[],researchSubscriptionErrors:0,
  lastMessageAt:null,lastTickAt:null,diagnosticCode:'SIN_CONECTAR'};
 const marketDiagnosis=()=>({connected:publicConnected,error:publicLastError,
  ...publicStats,secondsSinceMessage:publicStats.lastMessageAt?Math.round((Date.now()-publicStats.lastMessageAt)/1000):null,
@@ -177,6 +181,15 @@ function configureSymbols(ws,records){
  const available=new Set(candidates);
  publicStats.ignoredTradingSymbols=advertised.filter(s=>!available.has(s));
  publicStats.authorizedTradingSymbols=candidates.slice();
+ // La investigación puede observar índices adicionales SIN añadirlos a SYMBOLS.
+ researchOnlySymbols.clear();
+ const researchPriority=['R_20','1HZ20V','1HZ30V','1HZ15V','1HZ90V'];
+ const extras=publicStats.ignoredTradingSymbols.slice()
+  .sort((a,b)=>(researchPriority.indexOf(a)<0?99:researchPriority.indexOf(a))-
+   (researchPriority.indexOf(b)<0?99:researchPriority.indexOf(b))||a.localeCompare(b))
+  .slice(0,4);
+ for(const sym of extras)researchOnlySymbols.set(sym,{seq:0,lastEpoch:0,lastPrice:null});
+ publicStats.researchOnlySymbols=extras;
  const previous=new Map(market);
  SYMBOLS.splice(0,SYMBOLS.length,...candidates);
  market.clear();
@@ -206,6 +219,14 @@ function configureSymbols(ws,records){
   },i*95);
   timer.unref?.();
   pushMarket(m);
+ });
+ researchOnlySymbols.forEach((observed,symbol,i)=>{
+  const timer=setTimeout(()=>{
+   if(ws.readyState!==1)return;
+   try{ws.send(JSON.stringify({ticks:symbol,subscribe:1,req_id:900+i}));}
+   catch{publicStats.diagnosticCode='SHADOW_SUBSCRIPTION_FAILED';}
+  },(SYMBOLS.length+i)*95);
+  timer.unref?.();
  });
  const groups=[
   [new RegExp('^USD/COP$','i'),'USD/COP'],
@@ -252,6 +273,10 @@ function publicSocket(){
   publicStats.lastMessageAt=Date.now();
   const o=JSON.parse(ev.data);
   if(o.error||o.errors){
+   // Un indice extra de investigacion no debe degradar el flujo BUY autorizado.
+   if(Number.isInteger(o.req_id)&&o.req_id>=900&&o.req_id<904){
+    publicStats.researchSubscriptionErrors++;return;
+   }
    const code=o.error?.code??o.errors?.[0]?.code;
    const safe=typeof code==='string'&&/^[A-Za-z0-9_-]{1,40}$/.test(code)?code:'RECHAZADO';
    publicLastError='DERIV_'+safe;publicStats.diagnosticCode=publicLastError;return;
@@ -280,6 +305,17 @@ function publicSocket(){
    const {symbol,price,epoch}=tick;
    publicStats.ticksReceived++;publicStats.lastTickAt=Date.now();
    publicStats.diagnosticCode='TICKS_RECIBIDOS';
+   const shadowOnly=researchOnlySymbols.get(symbol);
+   if(shadowOnly){
+    // Fuente solo lectura: nunca crear un marketSnapshot elegible para comprar.
+    if(epoch<shadowOnly.lastEpoch||
+     (epoch===shadowOnly.lastEpoch&&price===shadowOnly.lastPrice))return;
+    shadowOnly.lastEpoch=epoch;shadowOnly.lastPrice=price;
+    shadowOnly.seq++;
+    try{strategyShadow.onTick({symbol,price,epoch,seq:shadowOnly.seq});}
+    catch(e){audit('STRATEGY_SHADOW_ERROR',String(e?.message||'SHADOW_ERROR').slice(0,80));}
+    return;
+   }
    const watchName=watchSymbols.get(symbol);
    if(watchName){Object.assign(watchlist.get(watchName),{quote:price,epoch});return;}
    const m=market.get(symbol);
@@ -296,6 +332,9 @@ function publicSocket(){
     // El ultimo digito se extrae solo si Deriv envio pip_size oficial.
     digitShadow.onTick({symbol,quote:price,pipSize:tick.pipSize,
      epoch,seq:m.liveTickSeq});
+   // Estudio por índice y horizonte sin modificar el selector financiero.
+   try{strategyShadow.onTick({symbol,price,epoch,seq:m.liveTickSeq});}
+   catch(e){audit('STRATEGY_SHADOW_ERROR',String(e?.message||'SHADOW_ERROR').slice(0,80));}
    // La señal de 5 ticks se liquida solo tras 5 ticks públicos recibidos.
    try{opportunityShadow.onTick(symbol,m.liveTickSeq,price,epoch);}
    catch(error){audit('SHADOW_TICK_ERROR',String(error?.message||'SHADOW_ERROR').slice(0,100));}
@@ -306,11 +345,12 @@ function publicSocket(){
   if(ws._disconnected)return;ws._disconnected=true;publicConnected=false;
   clearTimeout(symbolsTimer);clearInterval(tickTimer);publicStats.reconnects++;
   opportunityShadow.interrupt(); // No usar ticks ausentes tras reconexión.
+  strategyShadow.interrupt(); // No evaluar secuencias que crucen reconexiones.
    digitShadow.interrupt(); // Nunca concatenar secuencias de ticks a traves de reconexiones.
   publicLastError=wasOpen?'CONEXION_PUBLICA_CERRADA':'NO_PUDO_CONECTAR';
   for(const m of market.values()){m.available=false;pushMarket(m);}
   for(const w of watchlist.values()){w.available=false;w.epoch=null;w.quote=null;}
-  watchSymbols.clear();
+  watchSymbols.clear();researchOnlySymbols.clear();
   setTimeout(publicSocket,backoff);backoff=Math.min(30000,backoff*2);
  }
  ws.addEventListener('close',lost);
@@ -506,6 +546,10 @@ server=http.createServer(async(req,res)=>{
     return answer(res,200,buildFourBotLabStatus({
      optionsConnected:status().connected,marketConnected:publicConnected,
      riseFallSummary:trading.getSummary(),digitReport:digitShadow.status()}));
+   if(req.method==='GET'&&path==='/api/learning/strategy-comparison')
+    return answer(res,200,{...strategyShadow.status(),
+     researchOnlySymbols:[...researchOnlySymbols.keys()],
+     authorizedTradingSymbols:SYMBOLS.slice()});
    if(req.method==='GET'&&path==='/api/learning/digits')
     return answer(res,200,digitShadow.status());
    if(req.method==='GET'&&path==='/api/learning/quality')

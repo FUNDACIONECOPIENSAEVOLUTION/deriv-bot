@@ -854,6 +854,43 @@ async function showMarketSourceAudit(){
   table.textContent='Sin informacion local.';
  }
 }
+// Investigación prospectiva solo lectura de seis políticas por mercado.
+async function showStrategyComparisonLab(){
+ const status=$('strategy-comparison-status'),table=$('strategy-comparison-table');
+ if(!status||!table)return;
+ try{
+  const data=await get('/api/learning/strategy-comparison');
+  if(!data.readOnly||data.realEnabled||!Array.isArray(data.results))
+   throw Error('STRATEGY_LAB_INVALID');
+  status.textContent='Muestras ya observadas: '+fmt(data.samplesStored)+
+   ' · activos en el estudio: '+(data.liveSymbols.join(', ')||'ninguno')+
+   ' · solo investigación adicionales: '+(data.researchOnlySymbols.join(', ')||'ninguno')+
+   ' · interrupciones: '+fmt(data.interruptions)+
+   '. Las operaciones existentes no cambian; rentabilidad contractual N/D.';
+  const labels={
+   MOMENTUM_10:'Momentum 10 ticks',
+   EMA_8_21:'EMA 8/21',MACD_12_26_9:'MACD 12/26/9',
+   RSI14_REVERSAL:'RSI 14 · reversión',
+   BOLLINGER20_REVERSAL:'Bollinger 20 · reversión',
+   ER10_TREND:'Eficiencia 10 · tendencia'
+  };
+  const lines=data.results.slice(0,180).map(r=>'<tr>'+
+   '<td>'+escapeText(r.symbol)+'</td>'+
+   '<td>'+fmt(r.horizonTicks)+'</td>'+
+   '<td>'+escapeText(labels[r.policy]||r.policy)+'</td>'+
+   '<td>'+escapeText(r.regime)+'</td>'+
+   '<td>'+fmt(r.n)+'</td>'+
+   '<td>'+fmt(r.correct)+'</td>'+
+   '<td>'+(r.hitRatePct===null?'N/D':fmt(r.hitRatePct)+' %')+
+   (r.n<30?' (muestra escasa)':'')+'</td>'+
+   '<td>N/D · sin BUY</td></tr>');
+  table.innerHTML=lines.length?lines.join(''):
+   '<tr><td colspan="8">Aún no hay pronósticos nuevos liquidados; este experimento no importa rentabilidad histórica como si fuera predicción.</td></tr>';
+ }catch(error){
+  status.textContent='No se pudo consultar el laboratorio local: '+String(error.message||error);
+  table.textContent='Consulta no disponible.';
+ }
+}
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
@@ -866,6 +903,7 @@ async function showMarketSourceAudit(){
  await showFourBotLab();setInterval(showFourBotLab,15000);
  await showHorizonDesk();setInterval(showHorizonDesk,12000);
  await showMarketSourceAudit();setInterval(showMarketSourceAudit,15000);
+ await showStrategyComparisonLab();setInterval(showStrategyComparisonLab,30000);
  await showMultiBotProgram();setInterval(showMultiBotProgram,5000);
  async function diagnose(){
   try{
