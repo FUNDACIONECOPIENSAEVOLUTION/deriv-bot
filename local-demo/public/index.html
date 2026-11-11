@@ -23,6 +23,13 @@
  <p id="horizon-desk-status" class="msg">Última compra DEMO: sin comprobar. No se puede confirmar actividad desde GitHub.</p>
  <small>«Sin horizonte» corresponde a compras anteriores que no tienen etiqueta de duración: no se reasignan artificialmente. Solo el servidor local conectado a Deriv puede verificar las compras actuales.</small>
  </section>
+ <section id="strategy-comparison-lab">
+ <h2>Laboratorio de predicción por índice · videos y buenas prácticas</h2>
+ <p>Compara seis indicadores de referencia sobre los ticks públicos de cada índice, con horizonte de 5 y 10 ticks. El estudio incluye índices de investigación como R_20 <strong>solo si Deriv los anuncia</strong>. Las predicciones no son contratos, y no se atribuyen ganancias en dólares sin cotización y liquidación oficial.</p>
+ <p id="strategy-comparison-status" class="msg">Cargando comparador causal por índice...</p>
+ <div class="table-wrap"><table><thead><tr><th>Índice</th><th>Ticks</th><th>Estrategia</th><th>Régimen</th><th>Pruebas cerradas</th><th>Aciertos</th><th>Precisión observada</th><th>Ganancia contractual</th></tr></thead><tbody id="strategy-comparison-table"><tr><td colspan="8">Esperando observaciones nuevas de Deriv.</td></tr></tbody></table></div>
+ <p><small>Solo se evalúa una nueva señal cada 600 ticks por índice para evitar muestras superpuestas por horizonte. RSI, MACD, EMA y Bollinger pueden señalar fluctuaciones aleatorias; las cifras NO son predicciones certificadas ni alteran el motor de compras.</small></p>
+ </section>
  <section id="multibot-panel"><h2>Laboratorio de 4 bots · modalidades Deriv</h2>
  <p>Supervisión local de cuatro estrategias con <strong>US$100 por bot como presupuesto PLANIFICADO de estudio</strong>. No son saldos independientes ni límites ya aplicados en Deriv. Rise/Fall conserva sus compras DEMO aprobadas manualmente; Dígitos observa ticks sin comprar; Multipliers y CFD están pendientes de conexión y validación. Ningún bot adicional ejecuta órdenes en esta fase.</p>
  <div id="multibot-grid" class="bot-lab-grid" aria-live="polite"><article>Consultando el supervisor de cuatro modalidades...</article></div>
