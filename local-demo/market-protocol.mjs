@@ -12,7 +12,11 @@ export function normalizeActiveSymbols(records){
  return [...found.values()];
 }
 export function decodePublicHistory(response,expectedSymbol){
- const symbol=String(response?.echo_req?.ticks_history??expectedSymbol??'');
+ const announced=response?.echo_req?.ticks_history;
+ const symbol=String(announced??expectedSymbol??'');
+ // No atribuir historicos de otro indice al indice que hizo la peticion.
+ if(expectedSymbol&&announced&&announced!==expectedSymbol)
+  return {symbol:String(expectedSymbol),rows:[],valid:false,reason:'HISTORY_SYMBOL_MISMATCH'};
  const p=response?.history?.prices,t=response?.history?.times;
  if(!Array.isArray(p)||!Array.isArray(t)||p.length!==t.length||p.length>1000)
   return {symbol,rows:[],valid:false};
@@ -22,11 +26,17 @@ export function decodePublicHistory(response,expectedSymbol){
   if(Number.isFinite(price)&&price>0&&Number.isSafeInteger(epoch)&&epoch>0)
    rows.push({price,epoch});
  }
+ // El calculo de velas exige orden cronologico: nunca ordenar silenciosamente
+ // precios mezclados o datos mas antiguos bajo la misma etiqueta.
+ if(rows.some((r,i)=>i>0&&r.epoch<rows[i-1].epoch))
+  return {symbol,rows:[],valid:false,reason:'HISTORY_TIME_DISORDERED'};
  return {symbol,rows,valid:rows.length>0};
 }
 export function decodePublicTick(response){
  const value=response?.tick||{};
  const symbol=value.symbol??value.underlying_symbol??response?.echo_req?.ticks;
+ if(value.symbol&&response?.echo_req?.ticks&&value.symbol!==response.echo_req.ticks)
+  return null;
  const price=Number(value.quote),epoch=Number(value.epoch);
  if(typeof symbol!=='string'||!Number.isFinite(price)||price<=0||
     !Number.isSafeInteger(epoch)||epoch<=0)return null;
