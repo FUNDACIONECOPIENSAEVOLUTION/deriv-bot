@@ -18,7 +18,7 @@ import {createMultibotDemoProgram} from './multibot-program.mjs';
 import {createDemoProgram} from './demo-program.mjs';
 import {analyzeProgramRounds} from './demo-round-diagnostics.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
-import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
+import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol,resetPublicMarketSeries} from './market-protocol.mjs';
 import {discoverVolatilitySymbols,authorizeVolatilitySymbols,AUTHORIZED_VOLATILITY_SYMBOLS} from './synthetic-catalog.mjs';
 import {isExploratoryCandidate} from './tick-horizon-model.mjs';
 import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
@@ -183,8 +183,7 @@ function configureSymbols(ws,records){
  for(const symbol of candidates){
   const m=previous.get(symbol)||{symbol};
   // Nueva conexion = nueva serie. No interpolar velas entre desconexiones.
-  Object.assign(m,{ticks:[],epoch:0,quote:0,receivedAtMs:0,
-   feedReceivedAtMs:null,liveTickSeq:0,available:true});
+  resetPublicMarketSeries(m,symbol);
   market.set(symbol,m);
  }
  publicStats.syncResets++;
