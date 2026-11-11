@@ -200,8 +200,8 @@ function snapshot(m){
   source:'Deriv WebSocket: ticks históricos y en vivo; solo DEMO',
   trading:'synthetic-demo-only'};
 }
-function pushMarket(m){
- const line=`data: ${JSON.stringify(snapshot(m))}\n\n`;
+function pushMarket(m,precomputed=null){
+ const line=`data: ${JSON.stringify(precomputed||snapshot(m))}\n\n`;
  for(const response of streams){try{response.write(line);}catch{streams.delete(response);}}
 }
 function externalSnapshot(){
@@ -370,8 +370,10 @@ function publicSocket(){
     // El ultimo digito se extrae solo si Deriv envio pip_size oficial.
     digitShadow.onTick({symbol,quote:price,pipSize:tick.pipSize,
      epoch,seq:m.liveTickSeq});
-   // Estudio por índice y horizonte sin modificar el selector financiero.
-   try{strategyShadow.onTick({symbol,price,epoch,seq:m.liveTickSeq});}
+   // Calcular una única instantánea de indicadores/EMA/RSI para la investigación.
+   const marketAnalysis=snapshot(m);
+   // Comparación v13.6 / política actual / consenso, observaciones SIN BUY.
+   try{strategyShadow.onTick({symbol,price,epoch,seq:m.liveTickSeq,marketAnalysis});}
    catch(e){audit('STRATEGY_SHADOW_ERROR',String(e?.message||'SHADOW_ERROR').slice(0,80));}
    // El experimento 20x10 observa seis metodologias sin alterar BUY.
    try{pairedStudy.onTick({symbol,price,epoch,seq:m.liveTickSeq});}
@@ -379,7 +381,7 @@ function publicSocket(){
    // La señal de 5 ticks se liquida solo tras 5 ticks públicos recibidos.
    try{opportunityShadow.onTick(symbol,m.liveTickSeq,price,epoch);}
    catch(error){audit('SHADOW_TICK_ERROR',String(error?.message||'SHADOW_ERROR').slice(0,100));}
-   pushMarket(m);
+   pushMarket(m,marketAnalysis);
   }
  }catch{publicLastError='MENSAJE_MERCADO_INVALIDO';publicStats.diagnosticCode=publicLastError;}});
  function lost(){
