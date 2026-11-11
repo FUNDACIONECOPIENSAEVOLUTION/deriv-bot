@@ -238,9 +238,13 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    if(source==='LOCAL_OWNER_MULTIINDEX_010'&&
     !(stakeCents===10&&modelMode==='DEMO_136_CONSENSUS_5_10'))
     throw Error('PILOT_REQUIRES_EXACT_TEN_CENTS_AND_CONSENSUS');
+   // MCP solo prepara una revisión DEMO: no origina BUY y no permite alto importe.
+   if(source==='MCP_OWNER_REVIEW'&&
+      (stakeCents>100||(modelMode==='DEMO_136_CONSENSUS_5_10'&&stakeCents>50)))
+    throw Error('MCP_DEMO_REVIEW_MAX_STAKE');
   if(['PREDICTIVE_5_10','DEMO_EXPLORATORY_5_10','DEMO_136_CONSENSUS_5_10'].includes(modelMode)){
    if(![5,10].includes(durationTicks)||
-      !['LOCAL_OWNER','LOCAL_OWNER_MULTIINDEX_010'].includes(source))
+      !['LOCAL_OWNER','LOCAL_OWNER_MULTIINDEX_010','MCP_OWNER_REVIEW'].includes(source))
     throw Error('DEMO_PREDICTIVE_DURATION_INVALID');
    // Investigación: apuesta pequena y solo autorizacion local DEMO.
    if(['DEMO_EXPLORATORY_5_10','DEMO_136_CONSENSUS_5_10'].includes(modelMode)&&stakeCents>100)
