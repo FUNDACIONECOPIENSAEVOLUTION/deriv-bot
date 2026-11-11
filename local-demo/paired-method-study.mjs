@@ -97,7 +97,7 @@ export function createPairedMethodStudy({db,getVersion=()=>null,maxSymbols=14}={
     'RESEARCH_ONLY_MULTIPLE_COMPARISONS'})):[];
   return {mode:'PAIRED_20X10_MULTI_METHOD_SHADOW',readOnly:true,
    realEnabled:false,brokerOrders:0,affectsBuy:false,
-   status:active?(active.running?'RUNNING':'STOPPED'):'NOT_STARTED',
+   status:active?(active.running?'RUNNING':(active.interrupted?'INTERRUPTED':'STOPPED')):'NOT_STARTED',
    runId:active?.id??null,plannedStakeUsd:PAIRED_LOW_STAKE_USD,
    brokerMinimumConfirmed:false,estimatedNominalExposureUsdIfAccepted:20,
    nominalStakeIsNotApproved:true,
@@ -129,7 +129,11 @@ export function createPairedMethodStudy({db,getVersion=()=>null,maxSymbols=14}={
   return {stopped:true,brokerOrders:0,runId:active.id};
  }
  function interrupt(){
-  interruptions++;markets.clear(); // Las señales sin liquidar desaparecen.
+  interruptions++;markets.clear(); // Una desconexion invalida las parejas futuras.
+  if(active?.running){
+   stopRun.run('INTERRUPTED',Date.now(),active.id);
+   active.running=false;active.interrupted=true; // Nunca reiniciar shots desde cero en el mismo run.
+  }
  }
  function recordHorizon(symbol,shot,horizon,exitPrice,exitEpoch,exitSeq){
   db.exec('BEGIN IMMEDIATE');
