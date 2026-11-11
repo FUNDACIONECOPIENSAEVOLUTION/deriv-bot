@@ -537,7 +537,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const rows=csvList.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
-  const headers=['id','source','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','fiveTickMomentum','tickRsi14','fiveTickStudyHitRate','fiveTickStudyN','snapshotEpoch','signalReason',
+  const headers=['id','batchId','source','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','fiveTickMomentum','tickRsi14','fiveTickStudyHitRate','fiveTickStudyN','snapshotEpoch','signalReason',
    'durationTicks','predictionMode','predictionPolicy','predictionLower95','predictionQuoteEdge',
    'selectedAtMs','feedReceivedAtMs','analysisCompletedAtMs','analysisComputeMs',
    'analyzer5ComputeMs','analyzer10ComputeMs','analyzerStudy5ComputeMs',
