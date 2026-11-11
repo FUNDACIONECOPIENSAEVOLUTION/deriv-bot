@@ -23,6 +23,19 @@
  <p id="horizon-desk-status" class="msg">Última compra DEMO: sin comprobar. No se puede confirmar actividad desde GitHub.</p>
  <small>«Sin horizonte» corresponde a compras anteriores que no tienen etiqueta de duración: no se reasignan artificialmente. Solo el servidor local conectado a Deriv puede verificar las compras actuales.</small>
  </section>
+ <section id="paired-methods-panel">
+ <h2>Experimento único 20 × 10 · 5 y 10 ticks · seis métodos</h2>
+ <p><b>Un botón para investigar ambos horizontes:</b> diez tandas de diez <strong>observaciones</strong> de 5 ticks y diez tandas de diez de 10 ticks, para cada índice público observado. Compara 6 modelos individuales, 15 parejas y 20 tríos con consenso exacto. Es un estudio de mercado sin compras adicionales; no son 200 contratos.</p>
+ <p><strong>Apuesta deseada: US$0,10.</strong> Deriv anuncia importes desde US$1 y este programa financiero todavía no admite apuestas de US$0,10. Antes de comprar se debe comprobar el precio mínimo con el broker. El estudio no aumenta automáticamente a US$1 ni compromete US$200. No hay garantía de ganancia ni martingala.</p>
+ <div class="actions"><button id="paired-start" class="secondary">Iniciar estudio conjunto 10 × 10 + 10 × 10 (sin comprar)</button><button id="paired-stop" class="outline" disabled>Detener estudio</button></div>
+ <p id="paired-status" class="msg">Experimento detenido. Para iniciar las comparaciones pulsa el botón anterior.</p>
+ <div class="table-wrap"><table><thead><tr><th>Índice</th><th>5 ticks observados</th><th>10 ticks observados</th><th>Compra del broker</th></tr></thead><tbody id="paired-progress"><tr><td colspan="4">Sin observaciones de este programa.</td></tr></tbody></table></div>
+ <div class="actions"><label>Filtrar índice <select id="paired-index-filter"><option value="TODOS">Todos</option></select></label><label>Comparación <select id="paired-kind-filter"><option value="INDIVIDUAL">Seis métodos individuales</option><option value="PAIR_AGREEMENT">15 parejas con acuerdo</option><option value="TRIPLE_AGREEMENT">20 tríos con acuerdo</option></select></label></div>
+ <div class="table-wrap"><table><thead><tr><th>Índice</th><th>Ticks</th><th>Combinación</th><th>Señales</th><th>Cobertura</th><th>Acierto observado</th><th>Últimos 30 momentos</th><th>Ganancia oficial</th></tr></thead><tbody id="paired-method-results"><tr><td colspan="8">No hay evaluación activa.</td></tr></tbody></table></div>
+ <h3>Verificar US$0,10 con una propuesta oficial de Deriv (sin comprar)</h3>
+ <div class="actions"><label>Índice <select id="paired-quote-symbol"><option value="1HZ10V">1HZ10V</option><option value="1HZ25V">1HZ25V</option><option value="1HZ50V">1HZ50V</option><option value="1HZ75V">1HZ75V</option><option value="1HZ100V">1HZ100V</option><option value="R_10">R_10</option><option value="R_25">R_25</option><option value="R_50">R_50</option><option value="R_75">R_75</option><option value="R_100">R_100</option></select></label><button id="paired-quote-btn" class="outline">Consultar US$0,10 a 5 y 10 ticks (solo cotización)</button></div>
+ <p id="paired-quote-result" class="msg">Se requiere una cuenta Opciones DEMO autorizada en el PC. La consulta nunca envía órdenes BUY.</p>
+ </section>
  <section id="strategy-comparison-lab">
  <h2>Laboratorio de predicción por índice · videos y buenas prácticas</h2>
  <p>Compara seis indicadores de referencia sobre los ticks públicos de cada índice, con horizonte de 5 y 10 ticks. El estudio incluye índices de investigación como R_20 <strong>solo si Deriv los anuncia</strong>. Las predicciones no son contratos, y no se atribuyen ganancias en dólares sin cotización y liquidación oficial.</p>

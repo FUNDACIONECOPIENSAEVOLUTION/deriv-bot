@@ -95,6 +95,43 @@ test('New underlying_symbol response produces 60 candles and prices in local API
   });
   assert.equal(deniedNoAccount.ok,false);
   assert.equal((await deniedNoAccount.json()).error,'DEMO_OPTIONS_ACCOUNT_REQUIRED');
+  const pairedBefore=await (await fetch(base+'/api/lab/paired-methods')).json();
+  assert.equal(pairedBefore.status,'NOT_STARTED');
+  assert.equal(pairedBefore.readOnly,true);
+  assert.equal(pairedBefore.brokerOrders,0);
+  assert.equal(pairedBefore.combinations,41);
+  assert.equal(pairedBefore.estimatedNominalExposureUsdIfAccepted,20);
+  const deniedPaired=await fetch(base+'/api/lab/paired-methods/start',{
+   method:'POST',headers:{Origin:'http://localhost:'+port,
+    'X-Ecopiensa-Local':'1','Content-Type':'application/json'},
+   body:JSON.stringify({confirmation:'COMPRAR 200 CONTRATOS'})
+  });
+  assert.equal(deniedPaired.ok,false);
+  assert.equal((await deniedPaired.json()).error,'PAIRED_STUDY_OWNER_CLICK_REQUIRED');
+  const noAccountQuote=await fetch(base+'/api/lab/low-stake-quote',{
+   method:'POST',headers:{Origin:'http://localhost:'+port,
+    'X-Ecopiensa-Local':'1','Content-Type':'application/json'},
+   body:JSON.stringify({symbol:'R_100'})
+  });
+  assert.equal(noAccountQuote.ok,false);
+  assert.equal((await noAccountQuote.json()).error,'DEMO_OPTIONS_ACCOUNT_REQUIRED');
+  const beginPaired=await fetch(base+'/api/lab/paired-methods/start',{
+   method:'POST',headers:{Origin:'http://localhost:'+port,
+    'X-Ecopiensa-Local':'1','Content-Type':'application/json'},
+   body:JSON.stringify({confirmation:'INICIAR ESTUDIO 20X10 SIN COMPRAS'})
+  });
+  assert.equal(beginPaired.ok,true);
+  assert.equal((await beginPaired.json()).brokerOrders,0);
+  const afterPaired=await (await fetch(base+'/api/lab/paired-methods')).json();
+  assert.equal(afterPaired.status,'RUNNING');
+  assert.equal(afterPaired.affectsBuy,false);
+  const stopPaired=await fetch(base+'/api/lab/paired-methods/stop',{
+   method:'POST',headers:{Origin:'http://localhost:'+port,
+    'X-Ecopiensa-Local':'1','Content-Type':'application/json'},
+   body:'{}'
+  });
+  assert.equal(stopPaired.ok,true);
+  assert.equal((await stopPaired.json()).stopped,true);
   const strategies=await (await fetch(base+'/api/learning/strategy-comparison')).json();
   assert.equal(strategies.readOnly,true);
   assert.equal(strategies.realEnabled,false);

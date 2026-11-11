@@ -891,6 +891,95 @@ async function showStrategyComparisonLab(){
   table.textContent='Consulta no disponible.';
  }
 }
+// Programa de investigación de 20 tandas: solo observaciones de ticks.
+// No habilita apuestas de USD 0.10, no altera el motor BUY ni ejecuta un contrato.
+async function showPairedMethodStudy(){
+ const status=$('paired-status'),progress=$('paired-progress'),
+  results=$('paired-method-results'),indexSelect=$('paired-index-filter'),
+  kindSelect=$('paired-kind-filter');
+ if(!status||!progress||!results)return;
+ try{
+  const d=await get('/api/lab/paired-methods');
+  if(!d.readOnly||d.brokerOrders!==0||!Array.isArray(d.results))
+   throw Error('PAIRED_STATUS_INVALID');
+  const active=d.status==='RUNNING';
+  $('paired-start').disabled=active;
+  $('paired-stop').disabled=!active;
+  status.textContent='Estado: '+d.status+
+   ' · un programa de 100 momentos por índice (cada momento se observa a 5 y a 10 ticks)'+
+   ' · comparaciones evaluadas: '+fmt(d.observations)+
+   ' · métodos solos: 6, parejas: 15, tríos: 20'+
+   ' · BUY adicionales: 0 · ganancia contractual: N/D'+
+   (d.gaps?' · saltos de ticks: '+fmt(d.gaps):'')+
+   '. Si hay interrupciones, hay que iniciar una sesión nueva; no se rellenan desenlaces faltantes.';
+  const groups=new Map();
+  for(const r of d.completed){
+   const g=groups.get(r.symbol)||{symbol:r.symbol,a:0,b:0};
+   if(r.horizon===5)g.a=r.completed;
+   if(r.horizon===10)g.b=r.completed;
+   groups.set(r.symbol,g);
+  }
+  progress.innerHTML=groups.size?[...groups.values()].map(g=>
+   '<tr><td>'+escapeText(g.symbol)+'</td><td>'+fmt(g.a)+' / 100</td>'+
+   '<td>'+fmt(g.b)+' / 100</td><td>0 (solo estudio)</td></tr>').join(''):
+   '<tr><td colspan="4">Aun sin parejas observadas; requiere nuevos ticks publicos.</td></tr>';
+  const options=[...new Set([...d.activeIndices,...d.results.map(x=>x.symbol)])].sort();
+  const old=indexSelect.value;
+  indexSelect.innerHTML='<option value="TODOS">Todos</option>'+
+   options.map(sym=>'<option value="'+escapeText(sym)+'">'+escapeText(sym)+'</option>').join('');
+  if(options.includes(old))indexSelect.value=old;
+  const sym=indexSelect.value,kind=kindSelect.value;
+  const rows=d.results.filter(r=>(sym==='TODOS'||r.symbol===sym)&&r.kind===kind).slice(0,120);
+  results.innerHTML=rows.length?rows.map(r=>
+   '<tr><td>'+escapeText(r.symbol)+'</td><td>'+fmt(r.horizon)+'</td>'+
+   '<td>'+escapeText(r.combination.replaceAll('+',' + '))+'</td>'+
+   '<td>'+fmt(r.nSignals)+' / '+fmt(r.nMoments)+'</td>'+
+   '<td>'+(r.coveragePct===null?'N/D':fmt(r.coveragePct)+' %')+'</td>'+
+   '<td>'+(r.hitRatePct===null?'N/D':fmt(r.hitRatePct)+' %')+'</td>'+
+   '<td>'+(r.holdoutSignals<30?'Muestra insuficiente ('+fmt(r.holdoutSignals)+')':
+      fmt(r.holdoutHitRatePct)+' % ('+fmt(r.holdoutSignals)+')')+'</td>'+
+   '<td>N/D (sin BUY)</td></tr>').join(''):
+   '<tr><td colspan="8">Sin resultados aun para esta combinacion. Un desacuerdo equivale a abstencion, no perdida.</td></tr>';
+ }catch(e){
+  status.textContent='No se pudo verificar el estudio: '+String(e.message||e);
+  $('paired-start').disabled=true;$('paired-stop').disabled=true;
+ }
+}
+$('paired-index-filter').onchange=()=>{void showPairedMethodStudy();};
+$('paired-kind-filter').onchange=()=>{void showPairedMethodStudy();};
+$('paired-start').onclick=async()=>{
+ $('paired-start').disabled=true;
+ try{
+  await post('/api/lab/paired-methods/start',{
+   confirmation:'INICIAR ESTUDIO 20X10 SIN COMPRAS'});
+  await showPairedMethodStudy();
+ }catch(e){$('paired-status').textContent='Estudio NO iniciado: '+String(e.message||e);}
+ finally{await showPairedMethodStudy();}
+};
+$('paired-stop').onclick=async()=>{
+ $('paired-stop').disabled=true;
+ try{await post('/api/lab/paired-methods/stop',{});}
+ catch(e){$('paired-status').textContent='Error al detener: '+String(e.message||e);}
+ finally{await showPairedMethodStudy();}
+};
+$('paired-quote-btn').onclick=async()=>{
+ const btn=$('paired-quote-btn');btn.disabled=true;
+ $('paired-quote-result').textContent='Consultando propuestas oficiales sin enviar BUY...';
+ try{
+  const q=await post('/api/lab/low-stake-quote',{
+   symbol:$('paired-quote-symbol').value});
+  $('paired-quote-result').textContent=q.quotes.map(x=>
+   x.durationTicks+' ticks: '+(x.acceptedByQuote?
+    'cotizacion aceptada. Precio USD '+fmt(x.askPrice)+
+    ', payout USD '+fmt(x.payout)+
+    ', acierto de equilibrio '+fmt(x.breakEvenWinRate*100)+' %':
+    'no disponible/rechazado por Deriv')).join(' · ')+
+    ' · SOLO COTIZACIONES; 0 compras, monto minimo operativo pendiente de validacion.';
+ }catch(e){
+  $('paired-quote-result').textContent='No fue posible cotizar: '+
+   String(e.message||e)+'. Sin ordenes enviadas.';
+ }finally{btn.disabled=false;}
+};
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
@@ -904,6 +993,7 @@ async function showStrategyComparisonLab(){
  await showHorizonDesk();setInterval(showHorizonDesk,12000);
  await showMarketSourceAudit();setInterval(showMarketSourceAudit,15000);
  await showStrategyComparisonLab();setInterval(showStrategyComparisonLab,30000);
+ await showPairedMethodStudy();setInterval(showPairedMethodStudy,25000);
  await showMultiBotProgram();setInterval(showMultiBotProgram,5000);
  async function diagnose(){
   try{
