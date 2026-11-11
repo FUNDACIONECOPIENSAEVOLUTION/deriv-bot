@@ -37,7 +37,7 @@
  <p id="paired-quote-result" class="msg">Se requiere una cuenta Opciones DEMO autorizada en el PC. La consulta nunca envía órdenes BUY.</p>
  </section>
  <section id="strategy-comparison-lab">
- <h2>Laboratorio de predicción por índice · videos y buenas prácticas</h2>
+ <h2>Laboratorio de predicción por índice · videos y buenas prácticas</h2><p><strong>Comparación prospectiva v13.6:</strong> además de las seis reglas, la tabla estudia EMA20/EMA50 + RSI14 + pendiente/momentum de 60 velas, el modelo de ticks actual y su consenso exacto, cada uno por índice y 5/10 ticks. Ninguna coincidencia implica rentabilidad. En los selectores de programa y tanda puedes elegir el consenso DEMO como <em>piloto opcional</em>, no predeterminado.</p>
  <p>Compara seis indicadores de referencia sobre los ticks públicos de cada índice, con horizonte de 5 y 10 ticks. El estudio incluye índices de investigación como R_20 <strong>solo si Deriv los anuncia</strong>. Las predicciones no son contratos, y no se atribuyen ganancias en dólares sin cotización y liquidación oficial.</p>
  <p id="strategy-comparison-status" class="msg">Cargando comparador causal por índice...</p>
  <div class="table-wrap"><table><thead><tr><th>Índice</th><th>Ticks</th><th>Estrategia</th><th>Régimen</th><th>Pruebas cerradas</th><th>Aciertos</th><th>Precisión observada</th><th>Ganancia contractual</th></tr></thead><tbody id="strategy-comparison-table"><tr><td colspan="8">Esperando observaciones nuevas de Deriv.</td></tr></tbody></table></div>
@@ -111,6 +111,8 @@
   <option value="RESEARCH_DEMO">AUTO · analizar y comprar 5 o 10 ticks</option>
   <option value="RESEARCH_FIVE_ONLY">Bot 5 ticks · comprar SOLO a 5 ticks</option>
    <option value="RESEARCH_TEN_ONLY">Bot 10 ticks · comprar SOLO a 10 ticks</option>
+   <option value="RESEARCH_136_CONSENSUS_FIVE">Piloto v13.6 + política actual · consenso estricto 5 ticks (DEMO)</option>
+   <option value="RESEARCH_136_CONSENSUS_TEN">Piloto v13.6 + política actual · consenso estricto 10 ticks (DEMO)</option>
  </select></label></p>
  <p><label><input type="checkbox" id="program-global-guard" checked>
   <strong>Proteger beneficio global:</strong> antes de ganar US$3, limitar la pérdida del programa a US$3. Después de llegar a +US$3, conservar al menos +US$1 o el pico menos US$2. Puede pausar el programa antes de completar diez tandas.</label></p>
@@ -160,6 +162,8 @@
    <option value="VALIDATED_ONLY">Conservador · solo evidencia estadística estricta</option>
    <option value="RESEARCH_FIVE_ONLY">Bot 5 ticks · únicamente contratos a 5 ticks</option>
     <option value="RESEARCH_TEN_ONLY">Bot 10 ticks · únicamente contratos a 10 ticks</option>
+    <option value="RESEARCH_136_CONSENSUS_FIVE">Prueba consenso EMA/RSI v13.6 + ticks actuales · 5 ticks</option>
+    <option value="RESEARCH_136_CONSENSUS_TEN">Prueba consenso EMA/RSI v13.6 + ticks actuales · 10 ticks</option>
   </select></label>
   <label>Máximo simultáneas <select id="burst-concurrency"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5" selected>5</option></select></label>
  </div>
