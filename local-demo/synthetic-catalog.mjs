@@ -16,3 +16,16 @@ export function discoverVolatilitySymbols(records,max=MAX_VOLATILITY_FEEDS){
  });
  return unique.slice(0,Math.max(1,Math.min(MAX_VOLATILITY_FEEDS,max))).map(x=>x.symbol);
 }
+
+// Universo de INVESTIGACION OPERABLE elegido explicitamente por el proyecto.
+// La lista que anuncia Deriv puede incluir 15/90/150/500 u otros indices;
+// descubrir un codigo NO constituye aprobacion para seleccionarlo en AUTO.
+// Una cotizacion, la senal y la disponibilidad de contrato siguen siendo requisitos.
+export const AUTHORIZED_VOLATILITY_SYMBOLS=Object.freeze([
+ 'R_10','R_25','R_50','R_75','R_100',
+ '1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'
+]);
+export function authorizeVolatilitySymbols(records){
+ const announced=new Set(normalizeActiveSymbols(records).map(x=>x.symbol));
+ return AUTHORIZED_VOLATILITY_SYMBOLS.filter(x=>announced.has(x));
+}
