@@ -381,7 +381,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    const wsStart=performance.now();
    socket=await socketConnect(url);
    recordConnectionTiming.run(otpLookupMs,Number((performance.now()-wsStart).toFixed(3)),id);
-   const request={proposal:1,amount:row.stake_cents/100,basis:'stake',
+   const request={proposal:1,subscribe:1,amount:row.stake_cents/100,basis:'stake',
     contract_type:row.direction,currency:'USD',duration:row.duration_ticks||5,duration_unit:'t',
     underlying_symbol:row.symbol,req_id:804};
    const proposalSentAtMs=Date.now(),t=performance.now();
