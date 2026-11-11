@@ -48,3 +48,12 @@ export function decodePublicTick(response){
 export function findWatchSymbol(available,pattern){
  return available.find(x=>pattern.test(x.symbol)||pattern.test(x.name))||null;
 }
+
+// Un nuevo WebSocket no puede reutilizar ticks ni velas de otro flujo desconectado.
+export function resetPublicMarketSeries(m,symbol){
+ if(!m||typeof symbol!=='string'||!/^[A-Za-z0-9_]{2,30}$/.test(symbol))
+  throw Error('PUBLIC_MARKET_RESET_INVALID');
+ Object.assign(m,{symbol,ticks:[],epoch:0,quote:0,receivedAtMs:0,
+  feedReceivedAtMs:null,liveTickSeq:0,available:true});
+ return m;
+}
