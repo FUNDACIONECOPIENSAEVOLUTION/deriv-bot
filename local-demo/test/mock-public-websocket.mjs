@@ -12,6 +12,8 @@ class TestPublicSocket extends EventTarget {
    response={msg_type:'active_symbols',req_id:req.req_id,active_symbols:[
     {underlying_symbol:'R_100',underlying_symbol_name:'Volatility 100 Index'},
     {underlying_symbol:'1HZ100V',underlying_symbol_name:'Volatility 100 (1s) Index'},
+    {underlying_symbol:'1HZ90V',underlying_symbol_name:'Volatility 90 (1s) Index'},
+    {underlying_symbol:'R_20',underlying_symbol_name:'Volatility 20 Index'},
     {underlying_symbol:'frxEURUSD',underlying_symbol_name:'EUR/USD'}]};
   }else if(req.ticks_history){
    const epoch=Math.floor(Date.now()/1000);
