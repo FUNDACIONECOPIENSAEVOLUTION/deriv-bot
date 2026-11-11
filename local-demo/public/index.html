@@ -23,6 +23,19 @@
  <p id="horizon-desk-status" class="msg">Última compra DEMO: sin comprobar. No se puede confirmar actividad desde GitHub.</p>
  <small>«Sin horizonte» corresponde a compras anteriores que no tienen etiqueta de duración: no se reasignan artificialmente. Solo el servidor local conectado a Deriv puede verificar las compras actuales.</small>
  </section>
+ <section id="micro-multiindex-panel">
+ <h2>Piloto opcional: un botón para comprar distintos índices en DEMO a US$0,10</h2>
+ <p><strong>Máximo 20 compras en total:</strong> una por cada índice autorizado y duración de 5 o 10 ticks (hasta 10 índices × 2 horizontes). Exposición nominal máxima US$2; cierre si el resultado neto alcanza −US$0,50 o +US$0,25, o se acumulan tres pérdidas seguidas. Es un límite de exposición, NO garantía de resultado. Sin Martingale.</p>
+ <p>El bot espera una coincidencia explícita entre la señal histórica EMA20/EMA50 + RSI14 de v13.6 y el predictor estadístico del mismo horizonte. Comprueba la cotización de Deriv para US$0,10 y vuelve a cotizar antes del BUY. <b>Si Deriv no acepta US$0,10, no compra ni sube automáticamente a otro importe.</b> Índices de investigación como R_20 siguen excluidos de BUY hasta validación y autorización propias. Solo cuenta DEMO y consentimiento en este PC.</p>
+ <div class="actions">
+  <label><input type="checkbox" id="micro-multiindex-consent"> Autorizo hasta 20 compras DEMO de US$0,10, máximo US$2 nominales, con reglas de riesgo y sin cuenta REAL.</label>
+  <button id="micro-multiindex-start" disabled>Iniciar compras DEMO de índices disponibles · US$0,10</button>
+  <button id="micro-multiindex-stop" class="outline" disabled>Detener después del contrato activo</button>
+ </div>
+ <p id="micro-multiindex-status" class="msg">No se han iniciado compras con este piloto. Las pruebas pueden quedarse en espera si no hay señal o cotización válida.</p>
+ <div class="table-wrap"><table><thead><tr><th>Índice</th><th>Ticks</th><th>Estado</th><th>Señal</th><th>Precio cotizado</th><th>P&L confirmado</th><th>Motivo</th></tr></thead><tbody id="micro-multiindex-results"><tr><td colspan="7">Sin solicitudes.</td></tr></tbody></table></div>
+ <p><small>Para investigar eficacia de los seis métodos continúa disponible el laboratorio de predicciones separado. Este piloto solo puede ejecutar el consenso v13.6 + modelo actual, no representa compras automáticas independientes para las 41 combinaciones sin validar.</small></p>
+ </section>
  <section id="paired-methods-panel">
  <h2>Experimento único 20 × 10 · 5 y 10 ticks · seis métodos</h2>
  <p><b>Un botón para investigar ambos horizontes:</b> diez tandas de diez <strong>observaciones</strong> de 5 ticks y diez tandas de diez de 10 ticks, para cada índice público observado. Compara 6 modelos individuales, 15 parejas y 20 tríos con consenso exacto. Es un estudio de mercado sin compras adicionales; no son 200 contratos.</p>
