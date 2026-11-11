@@ -95,6 +95,16 @@ test('New underlying_symbol response produces 60 candles and prices in local API
   });
   assert.equal(deniedNoAccount.ok,false);
   assert.equal((await deniedNoAccount.json()).error,'DEMO_OPTIONS_ACCOUNT_REQUIRED');
+  const strategies=await (await fetch(base+'/api/learning/strategy-comparison')).json();
+  assert.equal(strategies.readOnly,true);
+  assert.equal(strategies.realEnabled,false);
+  assert.equal(strategies.brokerOrders,0);
+  assert.equal(strategies.changesBuy,false);
+  assert.ok(strategies.policies.includes('MACD_12_26_9'));
+  assert.ok(strategies.researchOnlySymbols.includes('R_20'));
+  assert.ok(strategies.researchOnlySymbols.includes('1HZ90V'));
+  assert.ok(!strategies.authorizedTradingSymbols.includes('R_20'));
+  assert.equal(strategies.samplesStored,0,'un tick no basta para inferir beneficio');
   const digits=await (await fetch(base+'/api/learning/digits')).json();
   assert.equal(digits.readOnly,true);
   assert.equal(digits.affectsBuy,false);
