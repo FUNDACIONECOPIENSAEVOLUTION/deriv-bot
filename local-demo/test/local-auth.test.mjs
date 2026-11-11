@@ -106,3 +106,28 @@ test('Market watchlist and new UI remain read-only without any public connection
  assert.match(html,/id="market-analysis"/);
  assert.match(html,/id="watchlist"/);
 }));
+
+test('Piloto multindice exige consentimiento local, demo conectada y no puede ejecutar REAL',async()=>boot(async({base,originBase})=>{
+ const initial=await (await fetch(base+'/api/lab/multiindex-micro')).json();
+ assert.equal(initial.realEnabled,false);
+ assert.equal(initial.running,false);
+ assert.equal(initial.stakeCents,10);
+ assert.equal(initial.maximumNominalCents,200);
+ assert.equal(initial.brokerOrders,0);
+ const wrong=await fetch(base+'/api/lab/multiindex-micro/start',{
+  method:'POST',headers:{Origin:originBase,'X-Ecopiensa-Local':'1','Content-Type':'application/json'},
+  body:JSON.stringify({confirmation:'COMPRAR REAL'})});
+ assert.equal(wrong.status,400);
+ assert.equal((await wrong.json()).error,'MICRO_OWNER_APPROVAL_REQUIRED');
+ const noDemo=await fetch(base+'/api/lab/multiindex-micro/start',{
+  method:'POST',headers:{Origin:originBase,'X-Ecopiensa-Local':'1','Content-Type':'application/json'},
+  body:JSON.stringify({confirmation:'AUTORIZAR DEMO MULTIINDICE 0.10 MAXIMO 2 USD'})});
+ assert.equal(noDemo.status,400);
+ assert.equal((await noDemo.json()).error,'DEMO_OPTIONS_ACCOUNT_REQUIRED');
+ const again=await (await fetch(base+'/api/lab/multiindex-micro')).json();
+ assert.equal(again.brokerOrders,0);
+ assert.equal(again.running,false);
+ const html=await (await fetch(base+'/')).text();
+ assert.match(html,/id="micro-multiindex-start"/);
+ assert.match(html,/id="micro-multiindex-consent"/);
+}));

@@ -983,6 +983,60 @@ $('paired-quote-btn').onclick=async()=>{
    String(e.message||e)+'. Sin ordenes enviadas.';
  }finally{btn.disabled=false;}
 };
+// Piloto local de compras DEMO a USD 0.10. No modifica el laboratorio de lectura.
+async function refreshMicroPilot(){
+ const el=$('micro-multiindex-status'),table=$('micro-multiindex-results');
+ if(!el||!table)return;
+ try{
+  const d=await get('/api/lab/multiindex-micro');
+  if(d.realEnabled!==false||d.stakeCents!==10||d.maximumNominalCents!==200)
+   throw Error('MICRO_SECURITY_MISMATCH');
+  $('micro-multiindex-start').disabled=d.running||
+   !$('micro-multiindex-consent').checked||runtimeVersionMismatch;
+  $('micro-multiindex-stop').disabled=!d.running;
+  el.textContent='Estado: '+d.state+(d.stopReason?' · '+d.stopReason:'')+
+   ' · Compras confirmadas: '+fmt(d.brokerOrders)+
+   ' · Inciertas: '+fmt(d.unknownOrders)+
+   ' · Liquidadas: '+fmt(d.settled)+
+   ' · Ganadas: '+fmt(d.wins)+' · Perdidas: '+fmt(d.losses)+
+   ' · Acierto: '+(d.winRatePct===null?'N/D':fmt(d.winRatePct)+' %')+
+   ' · Ganancia bruta: '+signedCents(d.positivePnlCents)+
+   ' · Pérdida bruta: '+signedCents(-d.negativePnlCents)+
+   ' · Neto: '+signedCents(d.netCents)+
+   ' · ROI: '+(d.roiPct===null?'N/D':fmt(d.roiPct)+' %')+
+   ' · Riesgo nominal máximo USD 2.00. Sin apuestas mayores automáticas.';
+  table.innerHTML=d.rows?.length?d.rows.map(r=>
+   '<tr><td>'+escapeText(r.symbol)+'</td><td>'+fmt(r.horizon)+
+   '</td><td>'+escapeText(r.state)+'</td><td>'+escapeText(r.direction||'ESPERAR')+
+   '</td><td>'+(Number.isFinite(r.askPrice)?'USD '+fmt(r.askPrice):'N/D')+
+   '</td><td>'+(Number.isFinite(r.pnlCents)?signedCents(r.pnlCents):'N/D')+
+   '</td><td>'+escapeText(r.reason||'—')+'</td></tr>').join(''):
+   '<tr><td colspan="7">Sin operaciones de este piloto.</td></tr>';
+ }catch(e){
+  el.textContent='Piloto no disponible: '+String(e.message||e);
+  $('micro-multiindex-start').disabled=true;
+  $('micro-multiindex-stop').disabled=true;
+ }
+}
+$('micro-multiindex-consent').onchange=()=>void refreshMicroPilot();
+$('micro-multiindex-start').onclick=async()=>{
+ if(!$('micro-multiindex-consent').checked)return;
+ $('micro-multiindex-start').disabled=true;
+ try{
+  await post('/api/lab/multiindex-micro/start',{
+   confirmation:'AUTORIZAR DEMO MULTIINDICE 0.10 MAXIMO 2 USD'
+  });
+  $('micro-multiindex-consent').checked=false;
+ }catch(e){
+  $('micro-multiindex-status').textContent='No iniciado: '+String(e.message||e);
+ }finally{await refreshMicroPilot();}
+};
+$('micro-multiindex-stop').onclick=async()=>{
+ $('micro-multiindex-stop').disabled=true;
+ try{await post('/api/lab/multiindex-micro/stop',{});}
+ catch(e){$('micro-multiindex-status').textContent='Error al detener: '+String(e.message||e);}
+ finally{await refreshMicroPilot();}
+};
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
@@ -997,6 +1051,7 @@ $('paired-quote-btn').onclick=async()=>{
  await showMarketSourceAudit();setInterval(showMarketSourceAudit,15000);
  await showStrategyComparisonLab();setInterval(showStrategyComparisonLab,30000);
  await showPairedMethodStudy();setInterval(showPairedMethodStudy,25000);
+ await refreshMicroPilot();setInterval(refreshMicroPilot,5000);
  await showMultiBotProgram();setInterval(showMultiBotProgram,5000);
  async function diagnose(){
   try{
