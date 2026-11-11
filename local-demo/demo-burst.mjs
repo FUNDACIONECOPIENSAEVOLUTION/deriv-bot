@@ -52,7 +52,7 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
     ((mode==='RESEARCH_DEMO'||mode==='RESEARCH_FIVE_ONLY'||mode==='RESEARCH_TEN_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
     (mode!=='RESEARCH_FIVE_ONLY'||x.durationTicks===5)&&
      (mode!=='RESEARCH_TEN_ONLY'||x.durationTicks===10)&&
-    !getAdaptiveVerdict(m.symbol,x.direction).blocked)||[];
+    !getAdaptiveVerdict(m.symbol,x.direction,x.durationTicks).blocked)||[];
    if(!options.length)reason=['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode)?
     'NO_RESEARCH_TICK_EVIDENCE':'NO_VALIDATED_TICK_MODEL';
    else{
@@ -62,7 +62,7 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
    }
   }
   else if(!['CALL','PUT'].includes(m.direction))reason='NO_CONFIRMED_DIRECTION';
-  else if(getAdaptiveVerdict(m.symbol,m.direction).blocked)reason='ADAPTIVE_RISK_VETO';
+  else if(getAdaptiveVerdict(m.symbol,m.direction,5).blocked)reason='ADAPTIVE_RISK_VETO';
   else{
    const candleEpoch=m.candles?.at(-1)?.epoch??m.epoch;
    if(!Number.isInteger(candleEpoch)||candleEpoch<=0)reason='INVALID_CANDLE_EPOCH';
@@ -172,7 +172,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     ((batch.mode==='RESEARCH_DEMO'||batch.mode==='RESEARCH_FIVE_ONLY'||batch.mode==='RESEARCH_TEN_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
     (batch.mode!=='RESEARCH_FIVE_ONLY'||x.durationTicks===5)&&
      (batch.mode!=='RESEARCH_TEN_ONLY'||x.durationTicks===10)&&
-    !getAdaptiveVerdict(m.symbol,x.direction).blocked)
+    !getAdaptiveVerdict(m.symbol,x.direction,x.durationTicks).blocked)
     .sort((a,b)=>Number(b.readyForProposal)-Number(a.readyForProposal)||
      (b.readyForProposal?b.conservativeWinRateLower95:b.observedValidationHitRate)-
       (a.readyForProposal?a.conservativeWinRateLower95:a.observedValidationHitRate)||
