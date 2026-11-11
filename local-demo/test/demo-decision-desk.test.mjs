@@ -65,7 +65,8 @@ test('Los modelos estrictos siguen requiriendo propuesta broker y confirmación 
 });
 test('Ni modelos de otro índice ni índices no autorizados se incluyen como comprables',()=>{
  const x=buildDemoDecisionDesk(sources(Array.from({length:80},(_,i)=>trade(i,88,'1HZ90V')),{
-  selection:{readOnly:true,subscribedSymbols:['1HZ10V'],rows:[
+  selection:{readOnly:true,subscribedSymbols:['1HZ10V'],
+   excludedAdvertisedSymbols:['1HZ90V'],rows:[
    {symbol:'1HZ90V',fresh:true,models:[model('1HZ90V')]},
    {symbol:'1HZ10V',fresh:false,models:[model('1HZ10V',10,'REVERSION_5','PUT')]}
   ]}
