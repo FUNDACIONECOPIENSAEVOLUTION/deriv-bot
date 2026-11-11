@@ -19,7 +19,8 @@ import {createDemoProgram} from './demo-program.mjs';
 import {analyzeProgramRounds} from './demo-round-diagnostics.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
 import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
-import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
+import {discoverVolatilitySymbols,authorizeVolatilitySymbols,AUTHORIZED_VOLATILITY_SYMBOLS} from './synthetic-catalog.mjs';
+import {isExploratoryCandidate} from './tick-horizon-model.mjs';
 import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {recentMarketRiskVerdict} from './empirical-market-veto.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
@@ -39,7 +40,7 @@ const PUBLIC_WS='wss://api.derivws.com/trading/v1/options/ws/public';
 // Candidatos, NO símbolos autorizados a operar hasta validarlos con active_symbols.
 // Lista inicial para UI; nuevos índices SOLO si Deriv los anuncia.
 const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
- '1HZ10V','1HZ50V','1HZ75V','1HZ100V'];
+ '1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'];
 const EXTERNAL_NAMES=Object.freeze(['USD/COP','EUR/USD','USD/JPY','Oro (XAU/USD)','Plata (XAG/USD)','Bitcoin (BTC/USD)']);
 const STAKES=new Set([0.35,0.50,0.75,0.90,1]);
 const now=()=>Math.floor(Date.now()/1000);
@@ -133,7 +134,9 @@ const watchSymbols=new Map(); // Precios externos de SOLO LECTURA, nunca fuente 
 const watchlist=new Map(EXTERNAL_NAMES.map(name=>[name,{name,symbol:null,quote:null,epoch:null,available:false,source:'Deriv public'}]));
 let publicConnected=false,publicLastError='SIN_CONECTAR',backoff=1000;
 const publicStats={connections:0,reconnects:0,symbolsReceived:0,activeMarkets:0,historyLoaded:0,
- ticksReceived:0,lastMessageAt:null,lastTickAt:null,diagnosticCode:'SIN_CONECTAR'};
+ ticksReceived:0,duplicateTicks:0,syncResets:0,
+ ignoredTradingSymbols:[],authorizedTradingSymbols:[],
+ lastMessageAt:null,lastTickAt:null,diagnosticCode:'SIN_CONECTAR'};
 const marketDiagnosis=()=>({connected:publicConnected,error:publicLastError,
  ...publicStats,secondsSinceMessage:publicStats.lastMessageAt?Math.round((Date.now()-publicStats.lastMessageAt)/1000):null,
  secondsSinceTick:publicStats.lastTickAt?Math.round((Date.now()-publicStats.lastTickAt)/1000):null,
@@ -168,13 +171,23 @@ function externalSnapshot(){
 }
 function configureSymbols(ws,records){
  const active=normalizeActiveSymbols(records); // Nueva API: underlying_symbol.
- const candidates=discoverVolatilitySymbols(records);
+ const advertised=discoverVolatilitySymbols(records);
+ // Regla explicita del proyecto: indice anunciado NO significa indice autorizado.
+ const candidates=authorizeVolatilitySymbols(records);
  const available=new Set(candidates);
+ publicStats.ignoredTradingSymbols=advertised.filter(s=>!available.has(s));
+ publicStats.authorizedTradingSymbols=candidates.slice();
  const previous=new Map(market);
  SYMBOLS.splice(0,SYMBOLS.length,...candidates);
  market.clear();
- for(const symbol of candidates)
-  market.set(symbol,previous.get(symbol)||{symbol,ticks:[],epoch:0,quote:0,receivedAtMs:0,available:false});
+ for(const symbol of candidates){
+  const m=previous.get(symbol)||{symbol};
+  // Nueva conexion = nueva serie. No interpolar velas entre desconexiones.
+  Object.assign(m,{ticks:[],epoch:0,quote:0,receivedAtMs:0,
+   feedReceivedAtMs:null,liveTickSeq:0,available:true});
+  market.set(symbol,m);
+ }
+ publicStats.syncResets++;
  for(const [oldSymbol,oldMarket] of previous){
   if(!available.has(oldSymbol)){oldMarket.available=false;pushMarket(oldMarket);}
  }
@@ -272,6 +285,12 @@ function publicSocket(){
    if(watchName){Object.assign(watchlist.get(watchName),{quote:price,epoch});return;}
    const m=market.get(symbol);
    if(!m||!m.available||(m.epoch&&epoch<m.epoch))return;
+   const latest=m.ticks.at(-1);
+   // ticks_history puede contener el primer tick ya emitido por subscribe;
+   // no contar ese replay como segundo tick ni adelantar ventanas de 5/10.
+   if(latest&&latest.epoch===epoch&&latest.price===price){
+    publicStats.duplicateTicks++;return;
+   }
    m.epoch=epoch;m.quote=price;m.receivedAtMs=performance.now();m.feedReceivedAtMs=Date.now();
    m.liveTickSeq=(m.liveTickSeq||0)+1;
    m.ticks.push({price,epoch});trimTickHistory(m.ticks);
