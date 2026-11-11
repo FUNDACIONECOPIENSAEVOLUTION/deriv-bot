@@ -18,7 +18,7 @@ export const MCP_TOOLS=[
   type:'object',properties:{
    symbol:{type:'string',minLength:4,maxLength:12,pattern:'^(R_(10|25|50|75|100|500)|1HZ(10|25|50|75|100|500)V)$'},
    direction:{type:'string',enum:['CALL','PUT']},
-   stakeCents:{type:'integer',enum:[35,50,75,90,100,200,500,1000]},
+   stakeCents:{type:'integer',enum:[35,50,75,90,100]},
    durationTicks:{type:'integer',enum:[5,10]},
    modelMode:{type:'string',enum:['LEGACY_60_CANDLES','PREDICTIVE_5_10','DEMO_136_CONSENSUS_5_10']}
   },required:['symbol','direction','stakeCents'],additionalProperties:false}}
@@ -32,7 +32,7 @@ function validateBuyRequest(args){
     Object.keys(args).some(k=>!['symbol','direction','stakeCents','durationTicks','modelMode'].includes(k))||
     typeof args.symbol!=='string'||!DEMO_MARKET.test(args.symbol)||
     !['CALL','PUT'].includes(args.direction)||
-    ![35,50,75,90,100,200,500,1000].includes(args.stakeCents))return null;
+    ![35,50,75,90,100].includes(args.stakeCents))return null;
  const durationTicks=args.durationTicks??5,modelMode=args.modelMode??'LEGACY_60_CANDLES';
  if(![5,10].includes(durationTicks)||
     !['LEGACY_60_CANDLES','PREDICTIVE_5_10','DEMO_136_CONSENSUS_5_10'].includes(modelMode)||
