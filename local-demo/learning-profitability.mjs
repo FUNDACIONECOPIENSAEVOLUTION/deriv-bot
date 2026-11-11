@@ -36,6 +36,10 @@ export function buildProfitabilityResearch(rawRows,{minTrain=60,minHoldout=30}={
   Number.isFinite(r.at)&&r.at>0&&Number.isFinite(r.settledAt)&&r.settledAt>=r.at&&
   ['CALL','PUT'].includes(r.direction)).sort((a,b)=>a.at-b.at||a.settledAt-b.settledAt);
  const groups=[['policy',r=>r.policy],['market',r=>r.symbol],
+  ['marketHorizon',r=>r.symbol+'|'+(r.horizon??'SIN_DATO')],
+  ['policyHorizon',r=>r.policy+'|'+(r.horizon??'SIN_DATO')],
+  ['marketHorizonDirection',r=>[r.symbol,r.horizon??'SIN_DATO',r.direction].join('|')],
+  ['marketHorizonPolicyDirection',r=>[r.symbol,r.horizon??'SIN_DATO',r.policy,r.direction].join('|')],
   ['direction',r=>r.direction],['horizon',r=>String(r.horizon??'SIN_DATO')],
   ['marketDirection',r=>`${r.symbol}/${r.direction}`],
   ['reason',r=>r.reason],['version',r=>r.version]];

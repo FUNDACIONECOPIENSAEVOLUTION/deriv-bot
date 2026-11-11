@@ -1037,6 +1037,44 @@ $('micro-multiindex-stop').onclick=async()=>{
  catch(e){$('micro-multiindex-status').textContent='Error al detener: '+String(e.message||e);}
  finally{await refreshMicroPilot();}
 };
+// Cruza PnL de contratos oficiales y modelos sombra: informa, NO compra.
+async function showDecisionDesk(){
+ const msg=$('decision-desk-status'),candidates=$('decision-desk-candidates'),
+   comparison=$('decision-desk-shadow');
+ if(!msg||!candidates||!comparison)return;
+ try{
+  const d=await get('/api/learning/decision-desk');
+  if(!d.readOnly||d.realEnabled||d.autoTradeEnabled||d.brokerOrders!==0||
+    d.eligibleToBuyNow!==0)throw Error('DECISION_DESK_SECURITY_MISMATCH');
+  const r=d.allTimeOfficial||{},sources=d.sampleSources||{};
+  msg.textContent='DEMO histórico: '+fmt(r.n)+' contratos liquidados · '+fmt(r.wins)+
+   ' ganados · '+fmt(r.losses)+' perdidos · acierto '+(Number.isFinite(r.winRatePct)?fmt(r.winRatePct)+' %':'N/D')+
+   ' · neto '+(Number.isFinite(r.netUsd)?usd(r.netUsd):'N/D')+
+   ' · ROI '+(Number.isFinite(r.roiPct)?fmt(r.roiPct)+' %':'N/D')+
+   ' · punto de equilibrio histórico '+(Number.isFinite(r.breakEvenWinRatePct)?fmt(r.breakEvenWinRatePct)+' %':'N/D')+
+   ' · '+fmt(sources.shadowLabels)+' predicciones observadas (NO contratos)'+
+   ' · candidatos vivos '+fmt(sources.snapshotCandidates)+
+   ' · candidatos autorizados para BUY desde esta tabla: 0'+
+   (d.riskStopActive?' · STOP DE RIESGO ACTIVO':'');
+  candidates.innerHTML=(d.candidateRanking||[]).slice(0,22).map(x=>
+   '<tr><td>'+escapeText(x.symbol)+'</td><td>'+fmt(x.durationTicks)+'</td>'+
+   '<td>'+escapeText(x.direction)+'</td><td>'+escapeText(x.policy||'N/D')+'</td>'+
+   '<td>'+fmt(x.officialContracts)+'</td>'+
+   '<td>'+(Number.isFinite(x.officialHoldoutRoiPct)?fmt(x.officialHoldoutRoiPct)+' %':'N/D')+
+   ' ('+fmt(x.officialHoldoutN)+' casos posteriores)</td>'+
+   '<td>'+escapeText(x.reason)+'</td></tr>').join('')||
+   '<tr><td colspan="7">No hay señales vivas válidas; esperar, no comprar a ciegas.</td></tr>';
+  comparison.innerHTML=(d.shadowPolicyComparison||[]).slice(0,28).map(x=>
+   '<tr><td>'+escapeText(x.policy)+'</td><td>'+fmt(x.durationTicks)+'</td>'+
+   '<td>'+fmt(x.observedDirections)+'</td>'+
+   '<td>'+(x.directionalHitRatePct===null?'N/D':fmt(x.directionalHitRatePct)+' %')+
+   '</td><td>N/D · sin BUY</td></tr>').join('')||
+   '<tr><td colspan="5">Muestras de shadow no disponibles.</td></tr>';
+ }catch(e){
+  msg.textContent='No se pudo leer el informe de decisiones: '+String(e.message||e);
+  candidates.textContent='Sin diagnóstico confiable.';
+ }
+}
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
@@ -1049,6 +1087,7 @@ $('micro-multiindex-stop').onclick=async()=>{
  await showFourBotLab();setInterval(showFourBotLab,15000);
  await showHorizonDesk();setInterval(showHorizonDesk,12000);
  await showMarketSourceAudit();setInterval(showMarketSourceAudit,15000);
+ await showDecisionDesk();setInterval(showDecisionDesk,20000);
  await showStrategyComparisonLab();setInterval(showStrategyComparisonLab,30000);
  await showPairedMethodStudy();setInterval(showPairedMethodStudy,25000);
  await refreshMicroPilot();setInterval(refreshMicroPilot,5000);

@@ -131,3 +131,25 @@ test('Piloto multindice exige consentimiento local, demo conectada y no puede ej
  assert.match(html,/id="micro-multiindex-start"/);
  assert.match(html,/id="micro-multiindex-consent"/);
 }));
+
+test('Informe integrado local no autoriza una compra; MCP rechaza peticiones sin bearer',async()=>boot(async({base,originBase})=>{
+ const x=await fetch(base+'/api/learning/decision-desk');
+ assert.equal(x.status,200);
+ const d=await x.json();
+ assert.equal(d.readOnly,true);
+ assert.equal(d.realEnabled,false);
+ assert.equal(d.autoTradeEnabled,false);
+ assert.equal(d.eligibleToBuyNow,0);
+ assert.equal(d.allTimeOfficial.n,0);
+ assert.equal(d.sampleSources.officialSettled,0);
+ assert.equal(d.brokerOrders,0);
+ const untrusted=await fetch(base+'/mcp',{
+  method:'POST',headers:{Origin:originBase,'Content-Type':'application/json'},
+  body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});
+ assert.equal(untrusted.status,401);
+ assert.equal((await untrusted.json()).error,'MCP_AUTH_REQUIRED');
+ const html=await (await fetch(base+'/')).text();
+ assert.match(html,/id="decision-desk"/);
+ assert.match(html,/id="decision-desk-candidates"/);
+ assert.match(html,/id="decision-desk-shadow"/);
+}));
