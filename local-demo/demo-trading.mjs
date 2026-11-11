@@ -63,6 +63,8 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
  // Las intenciones de tanda no enviadas de una ejecución interrumpida se cancelan;
  // UNKNOWN / OPEN permanecen para conciliación y nunca se reenvía BUY.
  db.prepare("UPDATE demo_local_orders SET state='CANCELLED',updated_at=?,error_code='BATCH_INTERRUPTED' WHERE state='PENDING_APPROVAL' AND batch_id IS NOT NULL").run(epoch());
+  // En reinicio, una intencion del piloto sin BUY se cancela, nunca se reenvia.
+  db.prepare("UPDATE demo_local_orders SET state='CANCELLED',updated_at=?,error_code='PILOT_INTERRUPTED' WHERE state='PENDING_APPROVAL' AND source='LOCAL_OWNER_MULTIINDEX_010'").run(epoch());
  const one=db.prepare('SELECT * FROM demo_local_orders WHERE id=?');
  const summary=db.prepare("SELECT COUNT(*) AS n, COALESCE(SUM(stake_cents),0) AS gross FROM demo_local_orders WHERE state IN ('SENDING','UNKNOWN','OPEN','SETTLED')");
  const active=db.prepare("SELECT COUNT(*) AS n FROM demo_local_orders WHERE state IN ('PENDING_APPROVAL','PREPARING','SENDING','UNKNOWN','OPEN')");
@@ -212,8 +214,9 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
      x.direction===direction&&isExploratoryCandidate(x));
   return modelMode==='LEGACY_60_CANDLES'&&durationTicks===5&&s.direction===direction;
  }
- function riskCheck(symbol,direction,stakeCents,balanceCents,ownId=null,durationTicks=5,modelMode='LEGACY_60_CANDLES'){
-  if(!isVolatilitySymbol(symbol)||!['CALL','PUT'].includes(direction)||!STAKES.has(stakeCents))
+ function riskCheck(symbol,direction,stakeCents,balanceCents,ownId=null,durationTicks=5,modelMode='LEGACY_60_CANDLES',source='LOCAL_OWNER'){
+  if(!isVolatilitySymbol(symbol)||!['CALL','PUT'].includes(direction)||
+    !(STAKES.has(stakeCents)||(stakeCents===10&&modelMode==='DEMO_136_CONSENSUS_5_10'&&source==='LOCAL_OWNER_MULTIINDEX_010')))
     throw Error('DEMO_PARAMETERS_INVALID');
   const a=getAccount();
   if(!a||a.currency!=='USD'||typeof a.accountId!=='string')throw Error('DEMO_ACCOUNT_NOT_VERIFIED');
@@ -231,9 +234,13 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   if(!signalValid(symbol,direction,durationTicks,modelMode))throw Error('DEMO_SIGNAL_STALE_OR_CONTRARY');
  }
  function requestIntent({symbol,direction,stakeCents,source='LOCAL_OWNER',durationTicks=5,modelMode='LEGACY_60_CANDLES',selectionTelemetry=null}){
-  if(!['LOCAL_OWNER','MCP_OWNER_REVIEW'].includes(source))throw Error('DEMO_SOURCE_INVALID');
+  if(!['LOCAL_OWNER','MCP_OWNER_REVIEW','LOCAL_OWNER_MULTIINDEX_010'].includes(source))throw Error('DEMO_SOURCE_INVALID');
+   if(source==='LOCAL_OWNER_MULTIINDEX_010'&&
+    !(stakeCents===10&&modelMode==='DEMO_136_CONSENSUS_5_10'))
+    throw Error('PILOT_REQUIRES_EXACT_TEN_CENTS_AND_CONSENSUS');
   if(['PREDICTIVE_5_10','DEMO_EXPLORATORY_5_10','DEMO_136_CONSENSUS_5_10'].includes(modelMode)){
-   if(![5,10].includes(durationTicks)||source!=='LOCAL_OWNER')
+   if(![5,10].includes(durationTicks)||
+      !['LOCAL_OWNER','LOCAL_OWNER_MULTIINDEX_010'].includes(source))
     throw Error('DEMO_PREDICTIVE_DURATION_INVALID');
    // Investigación: apuesta pequena y solo autorizacion local DEMO.
    if(['DEMO_EXPLORATORY_5_10','DEMO_136_CONSENSUS_5_10'].includes(modelMode)&&stakeCents>100)
@@ -245,7 +252,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
     throw Error('DEMO_BALANCE_MUST_BE_REFRESHED');
   if(unknown.get().n>0)throw Error('DEMO_UNKNOWN_BUY_REQUIRES_RECONCILIATION');
   if(active.get().n>=MAX_CONCURRENT)throw Error('DEMO_CONCURRENCY_LIMIT');
-  riskCheck(symbol,direction,stakeCents,cents(a.balance),null,durationTicks,modelMode);
+  riskCheck(symbol,direction,stakeCents,cents(a.balance),null,durationTicks,modelMode,source);
   const predictive=['PREDICTIVE_5_10','DEMO_EXPLORATORY_5_10','DEMO_136_CONSENSUS_5_10'].includes(modelMode);
   const prediction=predictive?
    marketSnapshot(symbol)?.tickHorizonModels?.find(x=>x.durationTicks===durationTicks&&
@@ -358,7 +365,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   if(fresh.accountId!==a.accountId)throw Error('DEMO_ACCOUNT_MISMATCH');
   try{
    riskCheck(row.symbol,row.direction,row.stake_cents,cents(fresh.balance),id,
-    row.duration_ticks||5,row.prediction_mode||'LEGACY_60_CANDLES');
+    row.duration_ticks||5,row.prediction_mode||'LEGACY_60_CANDLES',row.source);
   }catch(e){
    const code=cleanError(e);
    change.run('REJECTED',epoch(),code,id);
@@ -530,7 +537,7 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
   const rows=csvList.all();
   const chosen=scope==='last-burst'?(rows.find(r=>r.batchId)?.batchId||null):null;
   const selected=scope==='last-burst'?rows.filter(r=>r.batchId===chosen):rows;
-  const headers=['id','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','fiveTickMomentum','tickRsi14','fiveTickStudyHitRate','fiveTickStudyN','snapshotEpoch','signalReason',
+  const headers=['id','source','batchId','createdAtMs','boughtAtMs','settledAtMs','state','symbol','direction','stakeCents','buyCents','pnlCents','contractId','proposalLatencyMs','buyLatencyMs','signalAgeMs','rsi','smaFast','smaSlow','ema20','ema50','atr14','momentum5','signalStrength','proposalPayoutCents','signalQuote','entryTick','exitTick','entryTickEpoch','exitTickEpoch','candleOpen','candleHigh','candleLow','candleClose','candleEpoch','projectedNextTick','modelMae','naiveMae','appVersion','strategyVersion','fiveTickMomentum','tickRsi14','fiveTickStudyHitRate','fiveTickStudyN','snapshotEpoch','signalReason',
    'durationTicks','predictionMode','predictionPolicy','predictionLower95','predictionQuoteEdge',
    'selectedAtMs','feedReceivedAtMs','analysisCompletedAtMs','analysisComputeMs',
    'analyzer5ComputeMs','analyzer10ComputeMs','analyzerStudy5ComputeMs',
