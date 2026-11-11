@@ -872,7 +872,10 @@ async function showStrategyComparisonLab(){
    EMA_8_21:'EMA 8/21',MACD_12_26_9:'MACD 12/26/9',
    RSI14_REVERSAL:'RSI 14 · reversión',
    BOLLINGER20_REVERSAL:'Bollinger 20 · reversión',
-   ER10_TREND:'Eficiencia 10 · tendencia'
+   ER10_TREND:'Eficiencia 10 · tendencia',
+   LEGACY_136_EMA_RSI:'v13.6 · EMA20/50 + RSI14',
+   CURRENT_TICK_MODEL:'Modelo estadístico actual',
+   LEGACY_136_AND_CURRENT_CONSENSUS:'Consenso exacto v13.6 + modelo actual'
   };
   const lines=data.results.slice(0,180).map(r=>'<tr>'+
    '<td>'+escapeText(r.symbol)+'</td>'+
