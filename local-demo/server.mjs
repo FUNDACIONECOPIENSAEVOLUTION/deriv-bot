@@ -402,6 +402,40 @@ const getHorizonRiskVerdict=(symbol,direction,durationTicks)=>{
   samples:marketRisk.samples,upperWinRate:marketRisk.upperWinRate,
   source:marketRisk.policy,durationTicks}:{...prior,durationTicks};
 };
+// Auditoria del universo y predictores realmente usados por BUY, solo lectura.
+function getSignalSelectionAudit(){
+ const rows=[...market.values()].map(m=>{
+  const snap=snapshot(m);
+  const fresh=Boolean(m.available&&snap.ready&&snap.fresh);
+  return {symbol:m.symbol,feedAvailable:m.available,historyTicks:m.ticks.length,
+   candles:snap.candleCount,fresh,quoteAgeMs:snap.ageReceivedMs,
+   lastTickEpoch:snap.epoch,source:'DERIV_PUBLIC_TICKS',
+   models:(snap.tickHorizonModels||[]).map(model=>{
+    const risk=getHorizonRiskVerdict(m.symbol,model.direction,model.durationTicks);
+    const exploratory=isExploratoryCandidate(model);
+    return {durationTicks:model.durationTicks,direction:model.direction,
+     policy:model.selectedPolicy,trainingDecisions:model.trainingDecisions,
+     validationDecisions:model.validationDecisions,
+     validationHitRate:model.observedValidationHitRate,
+     strictValidated:model.readyForProposal,exploratoryEligible:exploratory,
+     riskVeto:risk.blocked,riskReason:risk.reason,
+     selectableByAuto:fresh&&(model.readyForProposal||exploratory)&&
+      !risk.blocked,quotedProfitabilityVerified:false,
+     note:'La seleccion aun requiere precio vigente, payout y autorizacion DEMO antes de cualquier BUY.'};
+   })};
+ });
+ return {mode:'DERIV_SYMBOL_SIGNAL_AUDIT',readOnly:true,realEnabled:false,
+  activeWebsocket:publicConnected,selectedFromActiveSymbols:true,
+  authorizedUniverse:AUTHORIZED_VOLATILITY_SYMBOLS.slice(),
+  subscribedSymbols:SYMBOLS.slice(),
+  excludedAdvertisedSymbols:publicStats.ignoredTradingSymbols.slice(),
+  countSubscribed:SYMBOLS.length,duplicateTicksSkipped:publicStats.duplicateTicks,
+  historyResets:publicStats.syncResets,
+  candlesRequireCurrentSubscription:true,
+  availableContractTypesNotProven:true,
+  rows,
+  caution:'Son señales descriptivas basadas en ticks recibidos. Las cifras históricas pueden dejar de funcionar; no son probabilidad calibrada de victoria y no se ha confirmado BUY en el PC.'};
+}
 const bursts=createDemoBurst({
  db,trading,marketSnapshot:symbol=>{const item=market.get(symbol);return item?snapshot(item):null;},
  getSymbols:()=>SYMBOLS.slice(),getVersion:localVersion,getStrategyVersion:()=>trading.getStrategyVersion(),
@@ -554,6 +588,8 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),runtimeVersionMismatch:codeVersionMismatch(),installedDiskVersion:readVersionFromDisk(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate()&&program.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
   if(req.method==='GET'&&path==='/api/status')return answer(res,200,{...status(),marketConnected:publicConnected,marketError:publicLastError});
    if(req.method==='GET'&&path==='/api/market/diagnostic')return answer(res,200,marketDiagnosis());
+   if(req.method==='GET'&&path==='/api/market/selection-audit')
+    return answer(res,200,getSignalSelectionAudit());
   if(req.method==='GET'&&path==='/api/markets')return answer(res,200,{connected:publicConnected,error:publicLastError,
   markets:[...market.values()].map(snapshot)});
    if(req.method==='GET'&&path==='/api/watchlist')return answer(res,200,{
