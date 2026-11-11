@@ -357,7 +357,8 @@ const candleRows=db.prepare(`SELECT id,batch_id,app_version,strategy_version,
  WHERE state IN ('SETTLED','REJECTED','OPEN','UNKNOWN')
  ORDER BY created_at ASC,id ASC`);
 const outcomeRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
- bought_at_ms,created_at,candle_epoch,signal_age_ms,signal_rsi,buy_latency_ms
+ bought_at_ms,created_at,candle_epoch,signal_age_ms,signal_rsi,buy_latency_ms,
+ duration_ticks
  FROM demo_local_orders WHERE state='SETTLED' ORDER BY created_at DESC`);
 let reportCache=null,reportCacheAt=0;
 const getAdaptiveReport=()=>{
@@ -366,30 +367,45 @@ const getAdaptiveReport=()=>{
  }
  return reportCache;
 };
+// Los vetos de 5 ticks NO deben entrenarse con contratos de 10 ticks,
+// ni los de 10 con 5: datos y caches estan segmentados por horizonte.
+const horizonAdaptiveCache=new Map();
+const getHorizonAdaptiveReport=durationTicks=>{
+ if(![5,10].includes(durationTicks))return {groups:[],policy:'UNKNOWN_DURATION'};
+ const cached=horizonAdaptiveCache.get(durationTicks);
+ if(cached&&Date.now()-cached.at<10000)return cached.report;
+ const rows=outcomeRows.all().filter(r=>r.duration_ticks===durationTicks);
+ const report=buildAdaptiveReport(rows);
+ horizonAdaptiveCache.set(durationTicks,{at:Date.now(),report});
+ return report;
+};
 // Solo resultados ya liquidados; nunca datos posteriores a la decision.
 // Cache evita consultas en cada tick; modulo unico, sin proceso paralelo.
 const marketVetoRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
  duration_ticks,bought_at_ms,candle_epoch FROM demo_local_orders
- WHERE state='SETTLED' AND symbol=? AND duration_ticks IN (5,10)
+ WHERE state='SETTLED' AND symbol=? AND duration_ticks=?
  AND bought_at_ms IS NOT NULL ORDER BY bought_at_ms DESC LIMIT 100`);
 const marketVetoCache=new Map();
-const getMarketVeto=symbol=>{
- const cached=marketVetoCache.get(symbol);
+const getMarketVeto=(symbol,durationTicks)=>{
+ if(![5,10].includes(durationTicks))return {blocked:true,status:'INVALID_HORIZON'};
+ const key=symbol+'|'+durationTicks,cached=marketVetoCache.get(key);
  if(cached&&Date.now()-cached.at<10000)return cached.value;
- const value=recentMarketRiskVerdict(marketVetoRows.all(symbol),{symbol});
- marketVetoCache.set(symbol,{at:Date.now(),value});return value;
+ const value=recentMarketRiskVerdict(marketVetoRows.all(symbol,durationTicks),{symbol});
+ marketVetoCache.set(key,{at:Date.now(),value});return value;
+};
+const getHorizonRiskVerdict=(symbol,direction,durationTicks)=>{
+ if(![5,10].includes(durationTicks))return {blocked:true,reason:'INVALID_HORIZON'};
+ const prior=adaptiveVerdict(getHorizonAdaptiveReport(durationTicks),symbol,direction);
+ if(prior.blocked)return {...prior,durationTicks};
+ const marketRisk=getMarketVeto(symbol,durationTicks);
+ return marketRisk.blocked?{blocked:true,reason:marketRisk.status,
+  samples:marketRisk.samples,upperWinRate:marketRisk.upperWinRate,
+  source:marketRisk.policy,durationTicks}:{...prior,durationTicks};
 };
 const bursts=createDemoBurst({
  db,trading,marketSnapshot:symbol=>{const item=market.get(symbol);return item?snapshot(item):null;},
  getSymbols:()=>SYMBOLS.slice(),getVersion:localVersion,getStrategyVersion:()=>trading.getStrategyVersion(),
- getAdaptiveVerdict:(symbol,direction)=>{
-  const prior=adaptiveVerdict(getAdaptiveReport(),symbol,direction);
-  if(prior.blocked)return prior;
-  const market=getMarketVeto(symbol);
-  return market.blocked?{blocked:true,reason:market.status,
-   samples:market.samples,upperWinRate:market.upperWinRate,
-   source:market.policy}:prior;
- },
+ getAdaptiveVerdict:getHorizonRiskVerdict,
  onSignalSelection:({batchId,eligible,selected})=>opportunityShadow.capture(batchId,eligible,selected),
  refreshAccount:async()=>{
   const c=await credentials();
