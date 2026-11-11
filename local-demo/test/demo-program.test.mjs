@@ -202,3 +202,19 @@ test('Programa de evaluación completa sigue tras 5/5 negativo con la opción ac
  assert.equal(counts().seq,10);
  db.close();
 });
+
+test('Piloto 10 ticks y pilotos opt-in v13.6 se propagan al DEMO sin saltar controles',async()=>{
+ for(const mode of ['RESEARCH_TEN_ONLY',
+  'RESEARCH_136_CONSENSUS_FIVE','RESEARCH_136_CONSENSUS_TEN']){
+  const {db,program,modes,counts}=setup({wins:5});
+  const started=program.start({...request(),mode});
+  assert.equal(started.mode,mode);
+  assert.equal(started.realEnabled,false);
+  await done(program);
+  assert.deepEqual(modes,[mode]);
+  assert.equal(counts().seq,1);
+  assert.equal(program.status().programs[0].stopReason,
+   'DEMO_PERFORMANCE_STOP_NEGATIVE_ROUND');
+  db.close();
+ }
+});
