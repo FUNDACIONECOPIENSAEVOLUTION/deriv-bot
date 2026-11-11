@@ -29,6 +29,11 @@ test('Historia de otro simbolo o de tiempos desordenados no genera velas ni BUY'
   history:{times:[1800000000,1799999999],prices:[100,101]}},'1HZ10V');
  assert.equal(order.valid,false);
  assert.equal(order.reason,'HISTORY_TIME_DISORDERED');
+ const incomplete=decodePublicHistory({echo_req:{ticks_history:'1HZ10V'},
+  history:{times:[1800000000,1800000001,1800000002],
+   prices:[100,null,102]}},'1HZ10V');
+ assert.equal(incomplete.valid,false);
+ assert.equal(incomplete.reason,'HISTORY_ROW_INVALID');
  assert.equal(decodePublicTick({tick:{symbol:'R_10',quote:100,epoch:1800000001},
   echo_req:{ticks:'R_100'}}),null);
 });
