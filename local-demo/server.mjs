@@ -139,7 +139,7 @@ let publicConnected=false,publicLastError='SIN_CONECTAR',backoff=1000;
 const publicStats={connections:0,reconnects:0,symbolsReceived:0,activeMarkets:0,historyLoaded:0,
  ticksReceived:0,duplicateTicks:0,syncResets:0,
  ignoredTradingSymbols:[],authorizedTradingSymbols:[],
- researchOnlySymbols:[],
+ researchOnlySymbols:[],researchSubscriptionErrors:0,
  lastMessageAt:null,lastTickAt:null,diagnosticCode:'SIN_CONECTAR'};
 const marketDiagnosis=()=>({connected:publicConnected,error:publicLastError,
  ...publicStats,secondsSinceMessage:publicStats.lastMessageAt?Math.round((Date.now()-publicStats.lastMessageAt)/1000):null,
@@ -273,6 +273,10 @@ function publicSocket(){
   publicStats.lastMessageAt=Date.now();
   const o=JSON.parse(ev.data);
   if(o.error||o.errors){
+   // Un indice extra de investigacion no debe degradar el flujo BUY autorizado.
+   if(Number.isInteger(o.req_id)&&o.req_id>=900&&o.req_id<904){
+    publicStats.researchSubscriptionErrors++;return;
+   }
    const code=o.error?.code??o.errors?.[0]?.code;
    const safe=typeof code==='string'&&/^[A-Za-z0-9_-]{1,40}$/.test(code)?code:'RECHAZADO';
    publicLastError='DERIV_'+safe;publicStats.diagnosticCode=publicLastError;return;
