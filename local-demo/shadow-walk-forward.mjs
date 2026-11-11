@@ -25,9 +25,11 @@ function beforePurchaseFeatures(r){
 }
 function metrics(items){
  const n=items.length,wins=items.filter(x=>x.y===1).length;
+ const stakeCents=items.reduce((sum,item)=>sum+item.stake,0);
+ const netCents=Math.round(items.reduce((sum,item)=>sum+item.pnl,0));
  const avg=(fn)=>n?items.reduce((s,x)=>s+fn(x),0)/n:null;
  return {n,wins,losses:n-wins,winRate:round(n?wins/n:null),
-  netCents:Math.round(items.reduce((s,x)=>s+x.pnl,0)),
+  netCents,stakeCents,returnOnStake:stakeCents?round(netCents/stakeCents):null,
   brierModel:round(avg(x=>(x.pred-x.y)**2)),
   brierNeutral:round(avg(x=>(.5-x.y)**2)),
   brierHistorical:round(avg(x=>(x.historical-x.y)**2)),
@@ -67,7 +69,7 @@ export function evaluateWalkForward(raw,{minHistory=40,foldSize=20}={}){
  const weights=Array(7).fill(0);
  const output=[];
  for(const d of decisions){
-  while(settlementIndex<completed.length&&completed[settlementIndex].settledAt<=d.buyAt){
+  while(settlementIndex<completed.length&&completed[settlementIndex].settledAt<d.buyAt){
    const closed=completed[settlementIndex++];
    const p=logistic(dot(weights,closed.x)),error=closed.y-p;
    const rate=.075/Math.sqrt(1+trained/100);
@@ -78,7 +80,7 @@ export function evaluateWalkForward(raw,{minHistory=40,foldSize=20}={}){
   if(trained<minHistory)continue;
   output.push({at:d.buyAt,pred:logistic(dot(weights,d.x)),
    historical:(previousWins+1)/(trained+2),
-   y:d.y,pnl:d.pnl,symbol:d.symbol,direction:d.direction});
+   y:d.y,stake:d.stake,pnl:d.pnl,symbol:d.symbol,direction:d.direction});
  }
  const folds=[];
  for(let i=0;i<output.length;i+=foldSize){
