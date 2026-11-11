@@ -14,6 +14,7 @@ import {createDemoBurst} from './demo-burst.mjs';
 import {createOpportunityShadow} from './opportunity-shadow.mjs';
 import {createDigitShadowObserver} from './digit-shadow.mjs';
 import {createStrategyComparisonShadow} from './strategy-comparison-shadow.mjs';
+import {createPairedMethodStudy} from './paired-method-study.mjs';
 import {buildFourBotLabStatus} from './four-bot-lab.mjs';
 import {createMultibotDemoProgram} from './multibot-program.mjs';
 import {createDemoProgram} from './demo-program.mjs';
@@ -82,6 +83,7 @@ const opportunityShadow=createOpportunityShadow({db,getVersion:localVersion});
 // Estudio de digitos en ticks vivos: solo memoria, sin propuestas ni permisos BUY.
 const digitShadow=createDigitShadowObserver();
 const strategyShadow=createStrategyComparisonShadow({db,getVersion:localVersion});
+const pairedStudy=createPairedMethodStudy({db,getVersion:localVersion});
 function seal(obj){const iv=randomBytes(12),c=createCipheriv('aes-256-gcm',KEY,iv);const bytes=Buffer.concat([c.update(JSON.stringify(obj),'utf8'),c.final()]);return {iv:base64(iv),data:base64(bytes),tag:base64(c.getAuthTag())};}
 function unseal(obj){if(!obj?.iv||!obj?.data||!obj?.tag)throw Error('CREDENCIALES_NO_DISPONIBLES');const d=createDecipheriv('aes-256-gcm',KEY,Buffer.from(obj.iv,'base64url'));d.setAuthTag(Buffer.from(obj.tag,'base64url'));return JSON.parse(Buffer.concat([d.update(Buffer.from(obj.data,'base64url')),d.final()]).toString('utf8'));}
 const safeEq=(a,b)=>{const aa=sha256(String(a)),bb=sha256(String(b));return timingSafeEqual(aa,bb);};
@@ -127,6 +129,40 @@ async function wsReadOnly(request,expected){const c=await credentials(),id=encod
  ws.addEventListener('open',()=>{try{ws.send(JSON.stringify(request));}catch{finish(Error('WS_SEND_ERROR'));}});
  ws.addEventListener('message',ev=>{try{if(typeof ev.data!=='string'||ev.data.length>100000)throw Error('DERIV_WS_PAYLOAD_INVALID');const x=JSON.parse(ev.data);if(x.error||x.errors)throw Error('DERIV_WS_RECHAZADO');if(x.msg_type===expected&&x.req_id===request.req_id)finish(null,x);}catch(e){finish(e);}});
  ws.addEventListener('error',()=>finish(Error('DERIV_WS_ERROR')));ws.addEventListener('close',()=>finish(Error('DERIV_WS_CLOSED')));});}
+// Cotización de importe deseado USD 0.10 SOLO para verificar si Deriv lo acepta.
+// NUNCA compra, ni habilita ese stake en riskCheck ni en el motor de tandas.
+let lastLowStakeQuote=0;
+async function quoteTenCentsReadOnly(body){
+ const symbol=String(body?.symbol||'');
+ if(!SYMBOLS.includes(symbol)||!market.get(symbol)?.available)
+  throw Error('PAIRED_QUOTE_SYMBOL_NOT_AUTHORIZED');
+ if(!status().connected)throw Error('DEMO_OPTIONS_ACCOUNT_REQUIRED');
+ if(Date.now()-lastLowStakeQuote<10000)throw Error('PAIRED_QUOTE_RATE_LIMIT_10S');
+ lastLowStakeQuote=Date.now();
+ const offers=[];
+ for(const duration of [5,10]){
+  try{
+   const msg=await wsReadOnly({proposal:1,amount:0.10,basis:'stake',
+    contract_type:'CALL',currency:'USD',duration,duration_unit:'t',
+    underlying_symbol:symbol,req_id:950+duration},'proposal');
+   const p=msg.proposal||{},askPrice=Number(p.ask_price),payout=Number(p.payout);
+   if(!Number.isFinite(askPrice)||askPrice<=0||
+      !Number.isFinite(payout)||payout<=askPrice)
+    throw Error('PAIRED_QUOTE_INVALID');
+   offers.push({durationTicks:duration,acceptedByQuote:true,
+    askPrice,payout,breakEvenWinRate:askPrice/payout,
+    realBuyEnabled:false});
+  }catch(e){
+   offers.push({durationTicks:duration,acceptedByQuote:false,
+    reason:'BROKER_QUOTE_REJECTED_OR_UNAVAILABLE',
+    realBuyEnabled:false});
+  }
+ }
+ return {symbol,requestedStakeUsd:.1,quotes:offers,
+  readOnly:true,realEnabled:false,brokerOrders:0,
+  buyingAtTenCentsEnabled:false,
+  warning:'Una propuesta aceptada no autoriza automaticamente compras: el motor de riesgo actual exige al menos US$0.35, y la disponibilidad puede cambiar. No aumentar a US$1 sin permiso.'};
+}
 let lastBalanceRefresh=0,lastProfitRefresh=0,lastQuote=0;
 async function refreshBalance(){if(Date.now()-lastBalanceRefresh<10000)throw Error('ESPERAR_10S_BALANCE');lastBalanceRefresh=Date.now();const c=await credentials();const row=selectAccount(await boundedFetch(API,{headers:brokerHeaders(c)}),c.accountId);put('account',row);audit('BALANCE_DEMO','REST oficial verificado');return status();}
 async function recentProfit(){if(Date.now()-lastProfitRefresh<10000)throw Error('ESPERAR_10S_HISTORIAL');lastProfitRefresh=Date.now();const result=await wsReadOnly({profit_table:1,limit:50,sort:'DESC',req_id:908},'profit_table');const t=result.profit_table?.transactions||[];if(!Array.isArray(t))throw Error('HISTORIAL_FORMATO_INVALIDO');const trades=t.slice(0,50).map(x=>({contractId:String(x.contract_id??''),symbol:String(x.underlying_symbol||x.symbol||''),contractType:String(x.contract_type||''),purchaseTime:Number(x.purchase_time||0),buy:Number(x.buy_price||0),sell:Number(x.sell_price||0),payout:Number(x.payout||0),profit:Number(x.sell_price||0)-Number(x.buy_price||0)}));audit('HISTORIAL_DEMO','50 contratos máximo; lectura, sin BUY');return {source:'DERIV_PROFIT_TABLE',independentlyConfirmedBy:'Deriv API',trades};}
@@ -314,6 +350,8 @@ function publicSocket(){
     shadowOnly.seq++;
     try{strategyShadow.onTick({symbol,price,epoch,seq:shadowOnly.seq});}
     catch(e){audit('STRATEGY_SHADOW_ERROR',String(e?.message||'SHADOW_ERROR').slice(0,80));}
+    try{pairedStudy.onTick({symbol,price,epoch,seq:shadowOnly.seq});}
+    catch(e){audit('PAIRED_METHOD_STUDY_ERROR',String(e?.message||'PAIRED_ERROR').slice(0,70));}
     return;
    }
    const watchName=watchSymbols.get(symbol);
@@ -335,6 +373,9 @@ function publicSocket(){
    // Estudio por índice y horizonte sin modificar el selector financiero.
    try{strategyShadow.onTick({symbol,price,epoch,seq:m.liveTickSeq});}
    catch(e){audit('STRATEGY_SHADOW_ERROR',String(e?.message||'SHADOW_ERROR').slice(0,80));}
+   // El experimento 20x10 observa seis metodologias sin alterar BUY.
+   try{pairedStudy.onTick({symbol,price,epoch,seq:m.liveTickSeq});}
+   catch(e){audit('PAIRED_METHOD_STUDY_ERROR',String(e?.message||'PAIRED_ERROR').slice(0,70));}
    // La señal de 5 ticks se liquida solo tras 5 ticks públicos recibidos.
    try{opportunityShadow.onTick(symbol,m.liveTickSeq,price,epoch);}
    catch(error){audit('SHADOW_TICK_ERROR',String(error?.message||'SHADOW_ERROR').slice(0,100));}
@@ -346,6 +387,7 @@ function publicSocket(){
   clearTimeout(symbolsTimer);clearInterval(tickTimer);publicStats.reconnects++;
   opportunityShadow.interrupt(); // No usar ticks ausentes tras reconexión.
   strategyShadow.interrupt(); // No evaluar secuencias que crucen reconexiones.
+  pairedStudy.interrupt(); // No puntuar operaciones entre dos conexiones.
    digitShadow.interrupt(); // Nunca concatenar secuencias de ticks a traves de reconexiones.
   publicLastError=wasOpen?'CONEXION_PUBLICA_CERRADA':'NO_PUDO_CONECTAR';
   for(const m of market.values()){m.available=false;pushMarket(m);}
@@ -546,6 +588,10 @@ server=http.createServer(async(req,res)=>{
     return answer(res,200,buildFourBotLabStatus({
      optionsConnected:status().connected,marketConnected:publicConnected,
      riseFallSummary:trading.getSummary(),digitReport:digitShadow.status()}));
+   if(req.method==='GET'&&path==='/api/lab/paired-methods')
+    return answer(res,200,{...pairedStudy.status(),
+     selectedAuthorizedIndices:SYMBOLS.slice(),
+     researchOnlyIndices:[...researchOnlySymbols.keys()]});
    if(req.method==='GET'&&path==='/api/learning/strategy-comparison')
     return answer(res,200,{...strategyShadow.status(),
      researchOnlySymbols:[...researchOnlySymbols.keys()],
@@ -679,6 +725,12 @@ server=http.createServer(async(req,res)=>{
     audit('AUTORIZACION_PAT_DEMO','Cuenta DEMO comprobada. Token local cifrado; solo lectura.');
     return answer(res,200,status());
   }
+  if(path==='/api/lab/paired-methods/start')
+    return answer(res,200,pairedStudy.start({confirmation:b.confirmation}));
+  if(path==='/api/lab/paired-methods/stop')
+    return answer(res,200,pairedStudy.stop());
+  if(path==='/api/lab/low-stake-quote')
+    return answer(res,200,await quoteTenCentsReadOnly(b));
   if(path==='/api/demo/refresh')return answer(res,200,await refreshBalance());
   if(path==='/api/demo/quote')return answer(res,200,await quoteDemo(b));
   if(path==='/api/demo/profit')return answer(res,200,await recentProfit());
