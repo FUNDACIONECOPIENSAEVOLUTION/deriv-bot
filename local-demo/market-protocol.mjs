@@ -12,21 +12,32 @@ export function normalizeActiveSymbols(records){
  return [...found.values()];
 }
 export function decodePublicHistory(response,expectedSymbol){
- const symbol=String(response?.echo_req?.ticks_history??expectedSymbol??'');
+ const announced=response?.echo_req?.ticks_history;
+ const symbol=String(announced??expectedSymbol??'');
+ // No atribuir historicos de otro indice al indice que hizo la peticion.
+ if(expectedSymbol&&announced&&announced!==expectedSymbol)
+  return {symbol:String(expectedSymbol),rows:[],valid:false,reason:'HISTORY_SYMBOL_MISMATCH'};
  const p=response?.history?.prices,t=response?.history?.times;
  if(!Array.isArray(p)||!Array.isArray(t)||p.length!==t.length||p.length>1000)
   return {symbol,rows:[],valid:false};
  const rows=[];
  for(let i=0;i<p.length;i++){
   const price=Number(p[i]),epoch=Number(t[i]);
-  if(Number.isFinite(price)&&price>0&&Number.isSafeInteger(epoch)&&epoch>0)
-   rows.push({price,epoch});
+  if(!Number.isFinite(price)||price<=0||!Number.isSafeInteger(epoch)||epoch<=0)
+   return {symbol,rows:[],valid:false,reason:'HISTORY_ROW_INVALID'};
+  rows.push({price,epoch});
  }
+ // El calculo de velas exige orden cronologico: nunca ordenar silenciosamente
+ // precios mezclados o datos mas antiguos bajo la misma etiqueta.
+ if(rows.some((r,i)=>i>0&&r.epoch<rows[i-1].epoch))
+  return {symbol,rows:[],valid:false,reason:'HISTORY_TIME_DISORDERED'};
  return {symbol,rows,valid:rows.length>0};
 }
 export function decodePublicTick(response){
  const value=response?.tick||{};
  const symbol=value.symbol??value.underlying_symbol??response?.echo_req?.ticks;
+ if(value.symbol&&response?.echo_req?.ticks&&value.symbol!==response.echo_req.ticks)
+  return null;
  const price=Number(value.quote),epoch=Number(value.epoch);
  if(typeof symbol!=='string'||!Number.isFinite(price)||price<=0||
     !Number.isSafeInteger(epoch)||epoch<=0)return null;
@@ -37,4 +48,13 @@ export function decodePublicTick(response){
 }
 export function findWatchSymbol(available,pattern){
  return available.find(x=>pattern.test(x.symbol)||pattern.test(x.name))||null;
+}
+
+// Un nuevo WebSocket no puede reutilizar ticks ni velas de otro flujo desconectado.
+export function resetPublicMarketSeries(m,symbol){
+ if(!m||typeof symbol!=='string'||!/^[A-Za-z0-9_]{2,30}$/.test(symbol))
+  throw Error('PUBLIC_MARKET_RESET_INVALID');
+ Object.assign(m,{symbol,ticks:[],epoch:0,quote:0,receivedAtMs:0,
+  feedReceivedAtMs:null,liveTickSeq:0,available:true});
+ return m;
 }

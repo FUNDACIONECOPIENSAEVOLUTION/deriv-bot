@@ -22,8 +22,12 @@ test('Invalid symbols cannot be subscribed to',()=>{
  assert.deepEqual(active.map(x=>x.symbol),['R_100']);
 });
 test('Deriv official history is parsed into ordered price/timestamp pairs',()=>{
- const result=decodePublicHistory({echo_req:{ticks_history:'1HZ100V'},
-  history:{prices:[100.1,100.2,100.3],times:[1762637001,1762637002,1762637003]}},'R_10');
+ const fixture={echo_req:{ticks_history:'1HZ100V'},
+  history:{prices:[100.1,100.2,100.3],times:[1762637001,1762637002,1762637003]}};
+ const result=decodePublicHistory(fixture,'1HZ100V');
+ const mismatched=decodePublicHistory(fixture,'R_10');
+ assert.equal(mismatched.valid,false);
+ assert.equal(mismatched.reason,'HISTORY_SYMBOL_MISMATCH');
  assert.equal(result.symbol,'1HZ100V');
  assert.equal(result.valid,true);
  assert.equal(result.rows.length,3);

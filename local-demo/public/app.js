@@ -818,6 +818,42 @@ async function showHorizonDesk(){
   body.textContent='Datos no disponibles';
  }
 }
+// Auditoria descriptiva del mercado: no dispara cotizaciones ni compras.
+async function showMarketSourceAudit(){
+ const state=$('signal-source-audit-status'),table=$('signal-source-audit-table');
+ if(!state||!table)return;
+ try{
+  const report=await get('/api/market/selection-audit');
+  if(!report.readOnly||report.realEnabled||!Array.isArray(report.rows))
+   throw Error('SIGNAL_AUDIT_INVALID');
+  const excluded=report.excludedAdvertisedSymbols||[];
+  state.textContent='Deriv: '+(report.activeWebsocket?'conectado':'desconectado')+
+   ' · autorizados activos: '+report.countSubscribed+
+   ' · excluidos del selector AUTO: '+(excluded.join(', ')||'ninguno')+
+   ' · reconfiguraciones de historico: '+report.historyResets+
+   ' · ticks duplicados ignorados: '+report.duplicateTicksSkipped+
+   '. Solo 10/25/50/75/100 en R_ y 1HZ. No confirma contratos comprables ni ventajas futuras.';
+  const candidates=report.rows.flatMap(row=>(row.models||[]).map(model=>{
+   const current=row.feedAvailable&&row.fresh&&row.candles>=60;
+   const status=!current?'DATOS INSUFICIENTES/OBSOLETOS':
+    model.riskVeto?'VETO '+(model.riskReason||'RIESGO'):
+    model.selectableByAuto?'CANDIDATA DEMO (pago no validado)':
+    'SIN EVIDENCIA SUFICIENTE';
+   return '<tr><td>'+escapeText(row.symbol)+'</td>'+
+    '<td>'+fmt(model.durationTicks)+' ticks</td>'+
+    '<td>'+escapeText(model.policy||'SIN POLITICA')+'</td>'+
+    '<td>'+escapeText(model.direction||'ESPERAR')+'</td>'+
+    '<td>'+fmt(model.validationDecisions||0)+'</td>'+
+    '<td>'+(Number.isFinite(model.validationHitRate)?fmt(model.validationHitRate*100)+' %':'N/D')+'</td>'+
+    '<td>'+escapeText(status)+'</td></tr>';
+  }));
+  table.innerHTML=candidates.length?candidates.join(''):
+   '<tr><td colspan="7">No hay indices verificados por Deriv en este momento.</td></tr>';
+ }catch(e){
+  state.textContent='Auditoria no disponible: '+String(e.message||e);
+  table.textContent='Sin informacion local.';
+ }
+}
 (async()=>{await poll();await showDemoOrders();await updateBurstPanel();await updateDemoProgram();try{const d=await get('/api/markets');(d.markets||[]).forEach(market);}catch{}try{const t=await get('/api/training'),x=t.total||{};$('training').innerHTML='<div class="item"><b>Contratos históricos:</b> '+(x.contracts??0)+' · <b>Aciertos:</b> '+(x.wins??'—')+' · <b>Neto:</b> '+usd(x.netUsd)+'</div><div class="item"><b>Estado:</b> '+escapeText(t.trainingModel||'NO_ENTRENADO')+' — '+escapeText(t.warning||'Se necesita importar CSV DEMO.')+'</div>'+(t.latestFour?.length?'<div class="item"><b>Últimas cuatro tandas:</b> '+t.latestFour.map(b=>usd(b.netUsd)).join(' · ')+'</div>':'');}catch(e){$('training').textContent=e.message;}
  if(new URLSearchParams(location.search).get('oauth')==='ok')setMessage('Autorización recibida. Verificando cuenta DEMO...');
  if(typeof EventSource!=='undefined'){const es=new EventSource('/api/market-events');es.onmessage=ev=>{try{market(JSON.parse(ev.data));}catch{}};es.onerror=()=>{$('feed').textContent='Reconectando precios...';};}else setInterval(async()=>{try{(await get('/api/markets')).markets.forEach(market);}catch{}},3000);
@@ -829,6 +865,7 @@ async function showHorizonDesk(){
  await showOpportunityShadow();setInterval(showOpportunityShadow,20000);
  await showFourBotLab();setInterval(showFourBotLab,15000);
  await showHorizonDesk();setInterval(showHorizonDesk,12000);
+ await showMarketSourceAudit();setInterval(showMarketSourceAudit,15000);
  await showMultiBotProgram();setInterval(showMultiBotProgram,5000);
  async function diagnose(){
   try{

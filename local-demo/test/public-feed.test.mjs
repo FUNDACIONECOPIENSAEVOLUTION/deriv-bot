@@ -37,6 +37,19 @@ test('New underlying_symbol response produces 60 candles and prices in local API
   assert.ok(result.d.symbolsReceived>=3);
   assert.ok(result.d.historyLoaded>=1);
   assert.equal(result.d.realEnabled,false);
+  assert.ok(result.d.ignoredTradingSymbols.includes('R_20'));
+  assert.ok(result.d.ignoredTradingSymbols.includes('1HZ90V'));
+  assert.ok(!details.markets.some(x=>['R_20','1HZ90V'].includes(x.symbol)));
+  const symbolAudit=await (await fetch(base+'/api/market/selection-audit')).json();
+  assert.equal(symbolAudit.readOnly,true);
+  assert.equal(symbolAudit.realEnabled,false);
+  assert.ok(symbolAudit.excludedAdvertisedSymbols.includes('R_20'));
+  assert.ok(symbolAudit.excludedAdvertisedSymbols.includes('1HZ90V'));
+  assert.ok(symbolAudit.subscribedSymbols.every(x=>
+   symbolAudit.authorizedUniverse.includes(x)));
+  assert.ok(symbolAudit.rows.every(x=>x.models.every(m=>
+   [5,10].includes(m.durationTicks)&&m.quotedProfitabilityVerified===false)));
+  assert.equal(symbolAudit.historyResets,1);
   assert.equal(result.m.available,true);
   assert.equal(result.m.ready,true);
   assert.equal(result.m.candles.length,60);

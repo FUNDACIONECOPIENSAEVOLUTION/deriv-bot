@@ -18,8 +18,9 @@ import {createMultibotDemoProgram} from './multibot-program.mjs';
 import {createDemoProgram} from './demo-program.mjs';
 import {analyzeProgramRounds} from './demo-round-diagnostics.mjs';
 import {computeMarketAnalysis,HISTORY_TICKS,MAX_TICKS,trimTickHistory} from './market-analysis.mjs';
-import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol} from './market-protocol.mjs';
-import {discoverVolatilitySymbols} from './synthetic-catalog.mjs';
+import {normalizeActiveSymbols,decodePublicHistory,decodePublicTick,findWatchSymbol,resetPublicMarketSeries} from './market-protocol.mjs';
+import {discoverVolatilitySymbols,authorizeVolatilitySymbols,AUTHORIZED_VOLATILITY_SYMBOLS} from './synthetic-catalog.mjs';
+import {isExploratoryCandidate} from './tick-horizon-model.mjs';
 import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {recentMarketRiskVerdict} from './empirical-market-veto.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
@@ -39,7 +40,7 @@ const PUBLIC_WS='wss://api.derivws.com/trading/v1/options/ws/public';
 // Candidatos, NO símbolos autorizados a operar hasta validarlos con active_symbols.
 // Lista inicial para UI; nuevos índices SOLO si Deriv los anuncia.
 const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
- '1HZ10V','1HZ50V','1HZ75V','1HZ100V'];
+ '1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V'];
 const EXTERNAL_NAMES=Object.freeze(['USD/COP','EUR/USD','USD/JPY','Oro (XAU/USD)','Plata (XAG/USD)','Bitcoin (BTC/USD)']);
 const STAKES=new Set([0.35,0.50,0.75,0.90,1]);
 const now=()=>Math.floor(Date.now()/1000);
@@ -133,7 +134,9 @@ const watchSymbols=new Map(); // Precios externos de SOLO LECTURA, nunca fuente 
 const watchlist=new Map(EXTERNAL_NAMES.map(name=>[name,{name,symbol:null,quote:null,epoch:null,available:false,source:'Deriv public'}]));
 let publicConnected=false,publicLastError='SIN_CONECTAR',backoff=1000;
 const publicStats={connections:0,reconnects:0,symbolsReceived:0,activeMarkets:0,historyLoaded:0,
- ticksReceived:0,lastMessageAt:null,lastTickAt:null,diagnosticCode:'SIN_CONECTAR'};
+ ticksReceived:0,duplicateTicks:0,syncResets:0,
+ ignoredTradingSymbols:[],authorizedTradingSymbols:[],
+ lastMessageAt:null,lastTickAt:null,diagnosticCode:'SIN_CONECTAR'};
 const marketDiagnosis=()=>({connected:publicConnected,error:publicLastError,
  ...publicStats,secondsSinceMessage:publicStats.lastMessageAt?Math.round((Date.now()-publicStats.lastMessageAt)/1000):null,
  secondsSinceTick:publicStats.lastTickAt?Math.round((Date.now()-publicStats.lastTickAt)/1000):null,
@@ -168,13 +171,22 @@ function externalSnapshot(){
 }
 function configureSymbols(ws,records){
  const active=normalizeActiveSymbols(records); // Nueva API: underlying_symbol.
- const candidates=discoverVolatilitySymbols(records);
+ const advertised=discoverVolatilitySymbols(records);
+ // Regla explicita del proyecto: indice anunciado NO significa indice autorizado.
+ const candidates=authorizeVolatilitySymbols(records);
  const available=new Set(candidates);
+ publicStats.ignoredTradingSymbols=advertised.filter(s=>!available.has(s));
+ publicStats.authorizedTradingSymbols=candidates.slice();
  const previous=new Map(market);
  SYMBOLS.splice(0,SYMBOLS.length,...candidates);
  market.clear();
- for(const symbol of candidates)
-  market.set(symbol,previous.get(symbol)||{symbol,ticks:[],epoch:0,quote:0,receivedAtMs:0,available:false});
+ for(const symbol of candidates){
+  const m=previous.get(symbol)||{symbol};
+  // Nueva conexion = nueva serie. No interpolar velas entre desconexiones.
+  resetPublicMarketSeries(m,symbol);
+  market.set(symbol,m);
+ }
+ publicStats.syncResets++;
  for(const [oldSymbol,oldMarket] of previous){
   if(!available.has(oldSymbol)){oldMarket.available=false;pushMarket(oldMarket);}
  }
@@ -272,6 +284,12 @@ function publicSocket(){
    if(watchName){Object.assign(watchlist.get(watchName),{quote:price,epoch});return;}
    const m=market.get(symbol);
    if(!m||!m.available||(m.epoch&&epoch<m.epoch))return;
+   const latest=m.ticks.at(-1);
+   // ticks_history puede contener el primer tick ya emitido por subscribe;
+   // no contar ese replay como segundo tick ni adelantar ventanas de 5/10.
+   if(latest&&latest.epoch===epoch&&latest.price===price){
+    publicStats.duplicateTicks++;return;
+   }
    m.epoch=epoch;m.quote=price;m.receivedAtMs=performance.now();m.feedReceivedAtMs=Date.now();
    m.liveTickSeq=(m.liveTickSeq||0)+1;
    m.ticks.push({price,epoch});trimTickHistory(m.ticks);
@@ -338,7 +356,8 @@ const candleRows=db.prepare(`SELECT id,batch_id,app_version,strategy_version,
  WHERE state IN ('SETTLED','REJECTED','OPEN','UNKNOWN')
  ORDER BY created_at ASC,id ASC`);
 const outcomeRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
- bought_at_ms,created_at,candle_epoch,signal_age_ms,signal_rsi,buy_latency_ms
+ bought_at_ms,created_at,candle_epoch,signal_age_ms,signal_rsi,buy_latency_ms,
+ duration_ticks
  FROM demo_local_orders WHERE state='SETTLED' ORDER BY created_at DESC`);
 let reportCache=null,reportCacheAt=0;
 const getAdaptiveReport=()=>{
@@ -347,30 +366,79 @@ const getAdaptiveReport=()=>{
  }
  return reportCache;
 };
+// Los vetos de 5 ticks NO deben entrenarse con contratos de 10 ticks,
+// ni los de 10 con 5: datos y caches estan segmentados por horizonte.
+const horizonAdaptiveCache=new Map();
+const getHorizonAdaptiveReport=durationTicks=>{
+ if(![5,10].includes(durationTicks))return {groups:[],policy:'UNKNOWN_DURATION'};
+ const cached=horizonAdaptiveCache.get(durationTicks);
+ if(cached&&Date.now()-cached.at<10000)return cached.report;
+ const rows=outcomeRows.all().filter(r=>r.duration_ticks===durationTicks);
+ const report=buildAdaptiveReport(rows);
+ horizonAdaptiveCache.set(durationTicks,{at:Date.now(),report});
+ return report;
+};
 // Solo resultados ya liquidados; nunca datos posteriores a la decision.
 // Cache evita consultas en cada tick; modulo unico, sin proceso paralelo.
 const marketVetoRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
  duration_ticks,bought_at_ms,candle_epoch FROM demo_local_orders
- WHERE state='SETTLED' AND symbol=? AND duration_ticks IN (5,10)
+ WHERE state='SETTLED' AND symbol=? AND duration_ticks=?
  AND bought_at_ms IS NOT NULL ORDER BY bought_at_ms DESC LIMIT 100`);
 const marketVetoCache=new Map();
-const getMarketVeto=symbol=>{
- const cached=marketVetoCache.get(symbol);
+const getMarketVeto=(symbol,durationTicks)=>{
+ if(![5,10].includes(durationTicks))return {blocked:true,status:'INVALID_HORIZON'};
+ const key=symbol+'|'+durationTicks,cached=marketVetoCache.get(key);
  if(cached&&Date.now()-cached.at<10000)return cached.value;
- const value=recentMarketRiskVerdict(marketVetoRows.all(symbol),{symbol});
- marketVetoCache.set(symbol,{at:Date.now(),value});return value;
+ const value=recentMarketRiskVerdict(marketVetoRows.all(symbol,durationTicks),{symbol});
+ marketVetoCache.set(key,{at:Date.now(),value});return value;
 };
+const getHorizonRiskVerdict=(symbol,direction,durationTicks)=>{
+ if(![5,10].includes(durationTicks))return {blocked:true,reason:'INVALID_HORIZON'};
+ const prior=adaptiveVerdict(getHorizonAdaptiveReport(durationTicks),symbol,direction);
+ if(prior.blocked)return {...prior,durationTicks};
+ const marketRisk=getMarketVeto(symbol,durationTicks);
+ return marketRisk.blocked?{blocked:true,reason:marketRisk.status,
+  samples:marketRisk.samples,upperWinRate:marketRisk.upperWinRate,
+  source:marketRisk.policy,durationTicks}:{...prior,durationTicks};
+};
+// Auditoria del universo y predictores realmente usados por BUY, solo lectura.
+function getSignalSelectionAudit(){
+ const rows=[...market.values()].map(m=>{
+  const snap=snapshot(m);
+  const fresh=Boolean(m.available&&snap.ready&&snap.fresh);
+  return {symbol:m.symbol,feedAvailable:m.available,historyTicks:m.ticks.length,
+   candles:snap.candleCount,fresh,quoteAgeMs:snap.ageReceivedMs,
+   lastTickEpoch:snap.epoch,source:'DERIV_PUBLIC_TICKS',
+   models:(snap.tickHorizonModels||[]).map(model=>{
+    const risk=getHorizonRiskVerdict(m.symbol,model.direction,model.durationTicks);
+    const exploratory=isExploratoryCandidate(model);
+    return {durationTicks:model.durationTicks,direction:model.direction,
+     policy:model.selectedPolicy,trainingDecisions:model.trainingDecisions,
+     validationDecisions:model.validationDecisions,
+     validationHitRate:model.observedValidationHitRate,
+     strictValidated:model.readyForProposal,exploratoryEligible:exploratory,
+     riskVeto:risk.blocked,riskReason:risk.reason,
+     selectableByAuto:fresh&&(model.readyForProposal||exploratory)&&
+      !risk.blocked,quotedProfitabilityVerified:false,
+     note:'La seleccion aun requiere precio vigente, payout y autorizacion DEMO antes de cualquier BUY.'};
+   })};
+ });
+ return {mode:'DERIV_SYMBOL_SIGNAL_AUDIT',readOnly:true,realEnabled:false,
+  activeWebsocket:publicConnected,selectedFromActiveSymbols:true,
+  authorizedUniverse:AUTHORIZED_VOLATILITY_SYMBOLS.slice(),
+  subscribedSymbols:SYMBOLS.slice(),
+  excludedAdvertisedSymbols:publicStats.ignoredTradingSymbols.slice(),
+  countSubscribed:SYMBOLS.length,duplicateTicksSkipped:publicStats.duplicateTicks,
+  historyResets:publicStats.syncResets,
+  candlesRequireCurrentSubscription:true,
+  availableContractTypesNotProven:true,
+  rows,
+  caution:'Son señales descriptivas basadas en ticks recibidos. Las cifras históricas pueden dejar de funcionar; no son probabilidad calibrada de victoria y no se ha confirmado BUY en el PC.'};
+}
 const bursts=createDemoBurst({
  db,trading,marketSnapshot:symbol=>{const item=market.get(symbol);return item?snapshot(item):null;},
  getSymbols:()=>SYMBOLS.slice(),getVersion:localVersion,getStrategyVersion:()=>trading.getStrategyVersion(),
- getAdaptiveVerdict:(symbol,direction)=>{
-  const prior=adaptiveVerdict(getAdaptiveReport(),symbol,direction);
-  if(prior.blocked)return prior;
-  const market=getMarketVeto(symbol);
-  return market.blocked?{blocked:true,reason:market.status,
-   samples:market.samples,upperWinRate:market.upperWinRate,
-   source:market.policy}:prior;
- },
+ getAdaptiveVerdict:getHorizonRiskVerdict,
  onSignalSelection:({batchId,eligible,selected})=>opportunityShadow.capture(batchId,eligible,selected),
  refreshAccount:async()=>{
   const c=await credentials();
@@ -519,6 +587,8 @@ server=http.createServer(async(req,res)=>{
   if(req.method==='GET'&&path==='/api/health')return answer(res,200,{ok:true,readOnly:true,cloudflareDependent:false,version:'v'+localVersion(),runtimeVersionMismatch:codeVersionMismatch(),installedDiskVersion:readVersionFromDisk(),uptimeSeconds:Math.floor((Date.now()-startedAt)/1000),client:'PC-local',safeToUpdate:trading.canUpdate()&&bursts.canUpdate()&&program.canUpdate(),demoManualPilot:true,demoBursts:true,mcpLocal:true});
   if(req.method==='GET'&&path==='/api/status')return answer(res,200,{...status(),marketConnected:publicConnected,marketError:publicLastError});
    if(req.method==='GET'&&path==='/api/market/diagnostic')return answer(res,200,marketDiagnosis());
+   if(req.method==='GET'&&path==='/api/market/selection-audit')
+    return answer(res,200,getSignalSelectionAudit());
   if(req.method==='GET'&&path==='/api/markets')return answer(res,200,{connected:publicConnected,error:publicLastError,
   markets:[...market.values()].map(snapshot)});
    if(req.method==='GET'&&path==='/api/watchlist')return answer(res,200,{
