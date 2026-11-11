@@ -3,6 +3,8 @@
 // Una prediccion cada 600 ticks por simbolo, puntuada 5 y 10 ticks despues.
 // No atribuir dinero/payout a predicciones no compradas.
 import {randomUUID} from 'node:crypto';
+import {legacy136Direction} from './legacy-136-consensus.mjs';
+import {isExploratoryCandidate} from './tick-horizon-model.mjs';
 
 export const SHADOW_POLICIES=Object.freeze([
  'MOMENTUM_10','EMA_8_21','MACD_12_26_9',
@@ -115,7 +117,7 @@ export function createStrategyComparisonShadow({db,getVersion=()=>null,
  FROM demo_strategy_comparison ORDER BY id DESC LIMIT 30`);
  const states=new Map();
  let interrupted=0,gaps=0,skipped=0;
- function onTick({symbol,price,epoch,seq}={}){
+ function onTick({symbol,price,epoch,seq,marketAnalysis=null}={}){
   if(typeof symbol!=='string'||!/^[A-Za-z0-9_]{2,30}$/.test(symbol)||
    !safe(price)||price<=0||!Number.isSafeInteger(epoch)||epoch<1||
    !Number.isSafeInteger(seq)||seq<1)return 0;
@@ -158,6 +160,25 @@ export function createStrategyComparisonShadow({db,getVersion=()=>null,
       er10:x.indicators.er10,rmsReturnBps:x.indicators.rmsReturnBps});
     }
    }
+   // Comparación A/B prospectiva sobre las mismas cotizaciones del índice.
+   // La v13.6 usa OHLC de 60 velas; no confundir con EMA sobre ticks.
+   const classic=legacy136Direction(marketAnalysis);
+   if(classic)for(const horizon of HORIZONS){
+    state.pending.push({entrySeq:seq,entryEpoch:epoch,entryPrice:price,
+     horizon,policy:'LEGACY_136_EMA_RSI',direction:classic,
+     regime:x.regime,er10:x.indicators.er10,rmsReturnBps:x.indicators.rmsReturnBps});
+   }
+   for(const horizon of HORIZONS){
+    const current=marketAnalysis?.tickHorizonModels?.find(m=>m.durationTicks===horizon);
+    if(!isExploratoryCandidate(current))continue;
+    state.pending.push({entrySeq:seq,entryEpoch:epoch,entryPrice:price,
+     horizon,policy:'CURRENT_TICK_MODEL',direction:current.direction,
+     regime:x.regime,er10:x.indicators.er10,rmsReturnBps:x.indicators.rmsReturnBps});
+    if(classic===current.direction)state.pending.push({
+     entrySeq:seq,entryEpoch:epoch,entryPrice:price,
+     horizon,policy:'LEGACY_136_AND_CURRENT_CONSENSUS',direction:classic,
+     regime:x.regime,er10:x.indicators.er10,rmsReturnBps:x.indicators.rmsReturnBps});
+   }
    state.lastDecision=seq;
   }
   return settled;
@@ -173,7 +194,10 @@ export function createStrategyComparisonShadow({db,getVersion=()=>null,
   return {mode:'PER_INDEX_MULTI_POLICY_PREQUENTIAL_SHADOW',readOnly:true,
    realEnabled:false,brokerOrders:0,changesBuy:false,
    sampleIntervalTicks,maxSymbols,horizonsTicks:HORIZONS,
-   policies:SHADOW_POLICIES,liveSymbols:[...states.keys()],
+   policies:SHADOW_POLICIES,
+   benchmarkPolicies:['LEGACY_136_EMA_RSI','CURRENT_TICK_MODEL',
+    'LEGACY_136_AND_CURRENT_CONSENSUS'],
+   liveSymbols:[...states.keys()],
    samplesStored:total.get().n,gaps,interruptions:interrupted,
    capacityDrops:skipped,results:row,
    recent:observations.all(),
