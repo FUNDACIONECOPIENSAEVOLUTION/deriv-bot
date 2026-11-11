@@ -23,8 +23,9 @@ export function decodePublicHistory(response,expectedSymbol){
  const rows=[];
  for(let i=0;i<p.length;i++){
   const price=Number(p[i]),epoch=Number(t[i]);
-  if(Number.isFinite(price)&&price>0&&Number.isSafeInteger(epoch)&&epoch>0)
-   rows.push({price,epoch});
+  if(!Number.isFinite(price)||price<=0||!Number.isSafeInteger(epoch)||epoch<=0)
+   return {symbol,rows:[],valid:false,reason:'HISTORY_ROW_INVALID'};
+  rows.push({price,epoch});
  }
  // El calculo de velas exige orden cronologico: nunca ordenar silenciosamente
  // precios mezclados o datos mas antiguos bajo la misma etiqueta.
