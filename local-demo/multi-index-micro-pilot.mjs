@@ -62,7 +62,11 @@ export function createMultiIndexMicroPilot({
   direction=?,order_id=?,broker_pnl_cents=?,quote_ask=?,quote_payout=?,updated_ms=?
   WHERE run_id=? AND symbol=? AND horizon=?`);
  const updateRun=db.prepare("UPDATE demo_micro_pilot_runs SET state=?,stop_reason=?,ended_ms=? WHERE id=?");
- const getPairs=db.prepare("SELECT symbol,horizon,state,reason,policy,direction,order_id AS orderId,broker_pnl_cents AS pnlCents,quote_ask AS askPrice,quote_payout AS payout FROM demo_micro_pilot_pairs WHERE run_id=? ORDER BY symbol,horizon");
+ const getPairs=db.prepare(`SELECT p.symbol,p.horizon,p.state,p.reason,p.policy,
+  p.direction,p.updated_ms AS updatedAt,p.order_id AS orderId,p.broker_pnl_cents AS pnlCents,
+  o.buy_cents AS buyCents,p.quote_ask AS askPrice,p.quote_payout AS payout
+  FROM demo_micro_pilot_pairs p LEFT JOIN demo_local_orders o ON o.id=p.order_id
+  WHERE p.run_id=? ORDER BY p.symbol,p.horizon`);
  const terminal=new Set(['SETTLED','REJECTED','SKIPPED_BROKER_MINIMUM','UNKNOWN','OPEN','SKIPPED_RISK']);
  let active=null,finished=null;
  function report(){
@@ -71,7 +75,8 @@ export function createMultiIndexMicroPilot({
   const wins=settled.filter(x=>x.pnlCents>0).length;
   const losses=settled.filter(x=>x.pnlCents<0).length;
   const netCents=settled.reduce((t,x)=>t+x.pnlCents,0);
-  const attempted=rows.filter(x=>x.orderId||x.state==='REJECTED'||x.state==='UNKNOWN'||x.state==='OPEN').length;
+  const attempted=rows.filter(x=>x.orderId).length;
+  const stakedCents=settled.reduce((a,x)=>a+(x.buyCents||0),0);
   const brokerOrders=rows.filter(x=>['SETTLED','OPEN','UNKNOWN'].includes(x.state)).length;
   return {mode:'OWNER_AUTHORIZED_MICRO_MULTIINDEX_DEMO_V1',
    running:!!active,state:a?.state||'NOT_STARTED',runId:a?.id??null,
@@ -81,7 +86,8 @@ export function createMultiIndexMicroPilot({
    stopLossCents:MICRO_STOP_LOSS_CENTS,stopProfitCents:MICRO_STOP_PROFIT_CENTS,
    candidates:rows.length,attempted,brokerOrders,settled:settled.length,
    wins,losses,winRatePct:settled.length?Number((100*wins/settled.length).toFixed(2)):null,
-   netCents,roiPct:brokerOrders?null:null,
+   netCents,stakedCents,roiPct:stakedCents?
+    Number((100*netCents/stakedCents).toFixed(2)):null,
    positivePnlCents:settled.filter(x=>x.pnlCents>0).reduce((a,b)=>a+b.pnlCents,0),
    negativePnlCents:settled.filter(x=>x.pnlCents<0).reduce((a,b)=>a-b.pnlCents,0),
    rows,
@@ -105,7 +111,8 @@ export function createMultiIndexMicroPilot({
   if(risk?.pendingOrders||risk?.unresolvedOrders||
      (typeof trading.canUpdate==='function'&&!trading.canUpdate()))
    return 'DEMO_OPEN_OR_UNKNOWN_ORDERS';
-  const rows=getPairs.all(a.id),settled=rows.filter(x=>x.state==='SETTLED');
+  const rows=getPairs.all(a.id),settled=rows.filter(x=>x.state==='SETTLED')
+    .sort((a,b)=>a.updatedAt-b.updatedAt);
   const net=settled.reduce((t,x)=>t+x.pnlCents,0);
   const streak=settled.slice(-3);
   if(net<=-MICRO_STOP_LOSS_CENTS)return 'PILOT_NET_STOP_LOSS';
