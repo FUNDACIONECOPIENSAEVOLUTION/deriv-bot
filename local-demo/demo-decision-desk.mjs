@@ -1,7 +1,8 @@
 // Centro de decisiones: SOLO DATOS. No compra, no habilita REAL,
 // no confunde ticks de sombra con contratos oficiales ni elige una
 // estrategia como rentable sin una muestra cronológica suficiente.
-const safePct=(a,b)=>b>0?Number((100*a/b).toFixed(2)):null;
+const safePct=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)&&b>0?
+ Number((100*a/b).toFixed(2)):null;
 const asNum=x=>Number.isFinite(Number(x))?Number(x):null;
 function normalizeKey(x){return String(x??'SIN_DATO').trim();}
 const statusRank={PRELIMINARY_UNCORRECTED_FOR_MULTIPLE_TESTING:1,
