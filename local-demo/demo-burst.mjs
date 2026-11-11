@@ -7,6 +7,7 @@ import {evaluateGlobalRisk,replaySettlements} from './program-equity-guard.mjs';
 import {decideStake} from './adaptive-demo-stake.mjs';
 import {isVolatilitySymbol} from './synthetic-catalog.mjs';
 import {isExploratoryCandidate} from './tick-horizon-model.mjs';
+import {ALL_SIGNAL_MODES,isResearchMode,isLegacy136Mode,modeAllowsHorizon,legacy136AgreesWithModel} from './legacy-136-consensus.mjs';
 
 const SYMBOLS=['R_10','R_25','R_50','R_75','R_100',
  '1HZ10V','1HZ50V','1HZ75V','1HZ100V','1HZ500V','R_500'];
@@ -49,11 +50,12 @@ export function inspectSignalAvailability(symbols,marketSnapshot,usedCandleEpoch
     reason='TICK_OR_PRICE_STALE';
   else if(predictive){
    const options=m.tickHorizonModels?.filter(x=>
-    ((mode==='RESEARCH_DEMO'||mode==='RESEARCH_FIVE_ONLY'||mode==='RESEARCH_TEN_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
-    (mode!=='RESEARCH_FIVE_ONLY'||x.durationTicks===5)&&
-     (mode!=='RESEARCH_TEN_ONLY'||x.durationTicks===10)&&
+    (isResearchMode(mode)?isExploratoryCandidate(x):x.readyForProposal)&&
+    modeAllowsHorizon(mode,x.durationTicks)&&
+    (!isLegacy136Mode(mode)||legacy136AgreesWithModel(m,x))&&
     !getAdaptiveVerdict(m.symbol,x.direction,x.durationTicks).blocked)||[];
-   if(!options.length)reason=['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode)?
+   if(!options.length)reason=isLegacy136Mode(mode)?
+    'LEGACY_136_TICK_CONSENSUS_MISSING':isResearchMode(mode)?
     'NO_RESEARCH_TICK_EVIDENCE':'NO_VALIDATED_TICK_MODEL';
    else{
     const candleEpoch=m.candles?.at(-1)?.epoch??m.epoch;
@@ -169,9 +171,9 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     !m.fresh||!Number.isFinite(m.ageReceivedMs)||m.ageReceivedMs>1500||
     !Number.isInteger(m.epoch)||Math.abs(Date.now()-m.epoch*1000)>2500)continue;
    const options=(m.tickHorizonModels||[]).filter(x=>
-    ((batch.mode==='RESEARCH_DEMO'||batch.mode==='RESEARCH_FIVE_ONLY'||batch.mode==='RESEARCH_TEN_ONLY')?isExploratoryCandidate(x):x.readyForProposal)&&
-    (batch.mode!=='RESEARCH_FIVE_ONLY'||x.durationTicks===5)&&
-     (batch.mode!=='RESEARCH_TEN_ONLY'||x.durationTicks===10)&&
+    (isResearchMode(batch.mode)?isExploratoryCandidate(x):x.readyForProposal)&&
+    modeAllowsHorizon(batch.mode,x.durationTicks)&&
+    (!isLegacy136Mode(batch.mode)||legacy136AgreesWithModel(m,x))&&
     !getAdaptiveVerdict(m.symbol,x.direction,x.durationTicks).blocked)
     .sort((a,b)=>Number(b.readyForProposal)-Number(a.readyForProposal)||
      (b.readyForProposal?b.conservativeWinRateLower95:b.observedValidationHitRate)-
@@ -181,7 +183,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     const best=options[0],strict=best.readyForProposal;
     eligible.push({...m,direction:best.direction,
      durationTicks:best.durationTicks,
-     modelMode:strict?'PREDICTIVE_5_10':'DEMO_EXPLORATORY_5_10',
+     modelMode:isLegacy136Mode(batch.mode)?'DEMO_136_CONSENSUS_5_10':
+      strict?'PREDICTIVE_5_10':'DEMO_EXPLORATORY_5_10',
      predictionValidated:strict,
      predictedLower95:best.conservativeWinRateLower95??0,
      observedHitRate:best.observedValidationHitRate??0,
@@ -214,7 +217,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   // Investigacion 10x10: tolera rechazos sin BUY y espera señales nuevas,
   // pero nunca vuelve a enviar una compra incierta ni supera count operaciones.
   const researchProgram=!!batch.programId&&
-   ['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(batch.mode);
+   isResearchMode(batch.mode);
   // Una campaña autorizada de investigacion no tiene reloj de compra:
   // si no aparece ventaja demostrable, se mantiene vigilando el mercado.
   // No existe derecho a forzar 100 operaciones ni a reintentar BUY incierto.
@@ -415,9 +418,9 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
   lossCapCents=0,exitPolicy='FIXED_TARGET',
   globalProtection=false,downshiftAfterTwoLosses=false}){
   if(confirmation!=='CONFIRMAR TANDA DEMO')throw Error('DEMO_BURST_APPROVAL_REQUIRED');
-  if(!['VALIDATED_ONLY','RESEARCH_DEMO','RESEARCH_FIVE_ONLY'].includes(mode))
+  if(!ALL_SIGNAL_MODES.includes(mode))
    throw Error('DEMO_SIGNAL_MODE_INVALID');
-  if(['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode)&&stakeCents>100)
+  if(isResearchMode(mode)&&stakeCents>100)
    throw Error('DEMO_EXPLORATORY_MAX_1USD');
   if(typeof globalProtection!=='boolean'||typeof downshiftAfterTwoLosses!=='boolean'||
    ((globalProtection||downshiftAfterTwoLosses)&&(!programId||profitTargetCents===0)))
@@ -426,7 +429,7 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    if(!programId||![50,100,150].includes(profitTargetCents)||
     lossCapCents!==0||!EXIT_POLICIES.includes(exitPolicy)||
     concurrency!==1||stakeCents!==100||count!==10||
-    !['RESEARCH_DEMO','RESEARCH_FIVE_ONLY','RESEARCH_TEN_ONLY'].includes(mode))
+    !isResearchMode(mode))
     throw Error('DEMO_PROFIT_LOCK_PARAMETERS_INVALID');
   }else if(lossCapCents!==0||exitPolicy!=='FIXED_TARGET')
    throw Error('DEMO_PROFIT_LOCK_PARAMETERS_INVALID');
@@ -449,7 +452,8 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
    downshiftAfterTwoLosses,inFlight:0,stopRequested:false,waitingSinceMs:null,waitingReason:null,
    usedCandleEpoch:usedCandleEpoch instanceof Map?usedCandleEpoch:new Map()};
   insert.run(id,epoch(),epoch(),'RUNNING',count,stakeCents,symbol,concurrency,
-   getVersion(),mode==='RESEARCH_FIVE_ONLY'?'TICK_5_ONLY_PILOT_DEMO_V1':
+   getVersion(),isLegacy136Mode(mode)?'LEGACY_136_CONSENSUS_TICK_DEMO_PILOT_V1':
+    mode==='RESEARCH_FIVE_ONLY'?'TICK_5_ONLY_PILOT_DEMO_V1':
     mode==='RESEARCH_TEN_ONLY'?'TICK_10_ONLY_PILOT_DEMO_V1':
    mode==='RESEARCH_DEMO'?'TICK_5_10_RESEARCH_DEMO_V1':
     'TICK_5_10_VALIDATED_V1',programId,mode,profitTargetCents,lossCapCents,
