@@ -118,7 +118,8 @@ test('Orden incierta detiene sin reintentar ni comprar mas',async()=>{
  const s=await finished(lab);
  assert.equal(s.state,'PAUSED');
  assert.equal(s.stopReason,'BROKER_OPEN_OR_UNKNOWN_RECONCILE_FIRST');
- assert.equal(s.brokerOrders,1);
+ assert.equal(s.brokerOrders,0);
+ assert.equal(s.unknownOrders,1);
  assert.equal(counters().count,1);
  db.close();
 });
