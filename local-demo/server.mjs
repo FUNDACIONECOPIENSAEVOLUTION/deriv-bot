@@ -15,6 +15,7 @@ import {createOpportunityShadow} from './opportunity-shadow.mjs';
 import {createDigitShadowObserver} from './digit-shadow.mjs';
 import {createStrategyComparisonShadow} from './strategy-comparison-shadow.mjs';
 import {createPairedMethodStudy} from './paired-method-study.mjs';
+import {createMultiIndexMicroPilot} from './multi-index-micro-pilot.mjs';
 import {buildFourBotLabStatus} from './four-bot-lab.mjs';
 import {createMultibotDemoProgram} from './multibot-program.mjs';
 import {createDemoProgram} from './demo-program.mjs';
@@ -531,6 +532,31 @@ const bursts=createDemoBurst({
  },getAccount:()=>get('account'),audit
 });
 const program=createDemoProgram({db,bursts,trading,audit});
+// Piloto DEMO por indice/horizonte. Una sola aprobacion local: un BUY por par,
+// valor maximo USD 0.10 y cero sustituciones automaticas.
+const microPilot=createMultiIndexMicroPilot({
+ db,trading,getSymbols:()=>SYMBOLS.slice(),getVersion:localVersion,
+ marketSnapshot:symbol=>{const m=market.get(symbol);return m?snapshot(m):null;},
+ getRiskVerdict:getHorizonRiskVerdict,
+ isConnected:()=>status().connected&&publicConnected,
+ isBusy:()=>program.isRunning()||bursts.status().running,
+ refreshAccount:async()=>{
+  const c=await credentials();
+  const a=selectAccount(await boundedFetch(API,{headers:brokerHeaders(c)}),c.accountId);
+  put('account',a);return a;
+ },
+ quoteReadOnly:async({symbol,direction,horizon,amount})=>{
+  if(!SYMBOLS.includes(symbol)||![5,10].includes(horizon)||
+     !['CALL','PUT'].includes(direction)||amount!==0.10)
+   throw Error('MICRO_QUOTE_PARAMETERS_INVALID');
+  const q=await wsReadOnly({proposal:1,amount,basis:'stake',
+   contract_type:direction,currency:'USD',duration:horizon,duration_unit:'t',
+   underlying_symbol:symbol,req_id:970+horizon},'proposal');
+  const p=q.proposal||{},askPrice=Number(p.ask_price),payout=Number(p.payout);
+  return {accepted:Number.isFinite(askPrice)&&askPrice>0&&askPrice<=amount&&
+   Number.isFinite(payout)&&payout>askPrice,askPrice,payout};
+ },audit
+});
 const multiProgram=createMultibotDemoProgram({program,digitShadow,
  isOptionsConnected:()=>status().connected,
  isMarketConnected:()=>publicConnected,audit});
@@ -549,7 +575,7 @@ const isMaintenance=()=>existsSync(join(DATA,'actualizacion-en-curso.flag'));
 // Conciliador exclusivo de lectura oficial: cada 20 s verifica OPEN
 // solamente cuando no hay una tanda ejecutándose. Nunca reintenta BUY.
 const openReconciliationTimer=setInterval(()=>{
- if(isMaintenance()||bursts.status().running||program.isRunning())return;
+ if(isMaintenance()||bursts.status().running||program.isRunning()||microPilot.isRunning())return;
  void trading.reconcileOpenOrders({limit:5})
   .then(r=>{if(r.settled>0)audit('DEMO_AUTO_RECONCILED',
    r.settled+' liquidaciones oficiales');})
@@ -566,7 +592,7 @@ const mcpHandlers={
  program:()=>program.status(),
  walkForward:()=>evaluateWalkForward(qualityRows.all()),
  candlePatterns:()=>evaluateCandlePatterns(candleRows.all()),
- request:args=>{if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');if(program.isRunning())throw Error('DEMO_PROGRAM_IN_PROGRESS');return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});}
+ request:args=>{if(isMaintenance())throw Error('LOCAL_UPDATE_IN_PROGRESS');if(program.isRunning()||microPilot.isRunning())throw Error('DEMO_PROGRAM_IN_PROGRESS');return trading.requestIntent({...args,source:'MCP_OWNER_REVIEW'});}
 };
 let server;
 server=http.createServer(async(req,res)=>{
@@ -590,6 +616,10 @@ server=http.createServer(async(req,res)=>{
     return answer(res,200,buildFourBotLabStatus({
      optionsConnected:status().connected,marketConnected:publicConnected,
      riseFallSummary:trading.getSummary(),digitReport:digitShadow.status()}));
+   if(req.method==='GET'&&path==='/api/lab/multiindex-micro')
+    return answer(res,200,{...microPilot.status(),
+     authorizedOnly:SYMBOLS.slice(),
+     researchOnlyNotTradable:[...researchOnlySymbols.keys()]});
    if(req.method==='GET'&&path==='/api/lab/paired-methods')
     return answer(res,200,{...pairedStudy.status(),
      selectedAuthorizedIndices:SYMBOLS.slice(),
@@ -727,6 +757,10 @@ server=http.createServer(async(req,res)=>{
     audit('AUTORIZACION_PAT_DEMO','Cuenta DEMO comprobada. Token local cifrado; solo lectura.');
     return answer(res,200,status());
   }
+  if(path==='/api/lab/multiindex-micro/start')
+   return answer(res,200,microPilot.start({confirmation:b.confirmation}));
+  if(path==='/api/lab/multiindex-micro/stop')
+   return answer(res,200,microPilot.stop());
   if(path==='/api/lab/paired-methods/start')
     return answer(res,200,pairedStudy.start({confirmation:b.confirmation}));
   if(path==='/api/lab/paired-methods/stop')
@@ -736,8 +770,8 @@ server=http.createServer(async(req,res)=>{
   if(path==='/api/demo/refresh')return answer(res,200,await refreshBalance());
   if(path==='/api/demo/quote')return answer(res,200,await quoteDemo(b));
   if(path==='/api/demo/profit')return answer(res,200,await recentProfit());
-   if(isMaintenance()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start','/api/demo/program/start','/api/lab/multibot-program/start'].includes(path))throw Error('LOCAL_UPDATE_IN_PROGRESS');
-   if(program.isRunning()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start'].includes(path))throw Error('DEMO_PROGRAM_IN_PROGRESS');
+   if(isMaintenance()&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start','/api/demo/program/start','/api/lab/multibot-program/start','/api/lab/multiindex-micro/start'].includes(path))throw Error('LOCAL_UPDATE_IN_PROGRESS');
+   if((program.isRunning()||microPilot.isRunning())&&['/api/demo/intent','/api/demo/confirm','/api/demo/burst/start','/api/demo/program/start','/api/lab/multibot-program/start'].includes(path))throw Error('DEMO_PROGRAM_IN_PROGRESS');
    if(path==='/api/demo/intent')return answer(res,200,trading.requestIntent({
     symbol:String(b.symbol||''),direction:String(b.direction||''),stakeCents:Number(b.stakeCents),source:'LOCAL_OWNER'}));
    if(path==='/api/demo/confirm')return answer(res,200,await trading.approve(String(b.id||''),String(b.confirmation||'')));
@@ -766,7 +800,7 @@ server=http.createServer(async(req,res)=>{
    if(path==='/api/demo/program/stop')return answer(res,200,program.stop());
    if(path==='/api/system/update-now'){
     // Solo una acción local, sin comandos arbitrarios; no interrumpir contratos DEMO.
-    if(!trading.canUpdate()||!bursts.canUpdate()||!program.canUpdate())throw Error('DEMO_OPERATIONS_PENDING');
+    if(!trading.canUpdate()||!bursts.canUpdate()||!program.canUpdate()||microPilot.isRunning())throw Error('DEMO_OPERATIONS_PENDING');
     if(process.platform!=='win32')throw Error('UPDATE_ONLY_WINDOWS');
     const helper=join(HOME,'Tarea-Oculta.vbs'),root=dirname(HOME);
     const wscript=join(process.env.WINDIR||'C:\\Windows','System32','wscript.exe');
