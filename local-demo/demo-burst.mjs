@@ -5,6 +5,7 @@ import {setTimeout as pause} from 'node:timers/promises';
 import {createProfitExitTracker,GREEN_EXIT_REASONS,EXIT_POLICIES} from './profit-exit-policy.mjs';
 import {evaluateGlobalRisk,replaySettlements} from './program-equity-guard.mjs';
 import {decideStake} from './adaptive-demo-stake.mjs';
+import {researchLossBreak} from './version-execution-audit.mjs';
 import {isVolatilitySymbol} from './synthetic-catalog.mjs';
 import {isExploratoryCandidate} from './tick-horizon-model.mjs';
 import {ALL_SIGNAL_MODES,isResearchMode,isLegacy136Mode,modeAllowsHorizon,legacy136AgreesWithModel} from './legacy-136-consensus.mjs';
@@ -267,9 +268,24 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     }
     return result;
    }catch(e){
-    if(pending){try{trading.cancel(pending.id);}catch{}}
-    return {state:'REJECTED',brokerOrders:0,
-     error:String(e?.message||'DEMO_BATCH_ERROR').replace(/[^A-Za-z0-9_]/g,'').slice(0,90)};
+    const code=String(e?.message||'DEMO_BATCH_ERROR').replace(/[^A-Za-z0-9_]/g,'').slice(0,90);
+    if(!pending)return {state:'REJECTED',brokerOrders:0,error:code};
+    // El estado del SQLite prevalece sobre excepciones. Un BUY ya
+    // enviado no se debe declarar REJECTED ni reintentar.
+    let stored=null;
+    try{stored=trading.getOrderState?.(pending.id)??null;}catch{}
+    if(stored?.state==='SETTLED')return {state:'SETTLED',brokerOrders:1,
+     pnlCents:stored.pnlCents};
+    if(stored?.state==='OPEN')return {state:'OPEN',brokerOrders:1,
+     contractId:stored.contractId};
+    if(['PREPARING','SENDING','UNKNOWN'].includes(stored?.state)||!stored){
+     audit('DEMO_BURST_BUY_STATE_UNCERTAIN',pending.id+' '+(stored?.state||'NO_STATE')+' '+code);
+     return {state:'UNKNOWN',brokerOrders:null,error:code};
+    }
+    if(stored.state==='PENDING_APPROVAL'){
+     try{trading.cancel(pending.id);}catch{}
+    }
+    return {state:'REJECTED',brokerOrders:0,error:code};
    }
   };
   try{
@@ -377,6 +393,17 @@ export function createDemoBurst({db,trading,marketSnapshot,refreshAccount,getAcc
     audit('DEMO_BURST_PROGRESS',batch.id+' executed='+executed+
      ' settled='+settled+' safeRejects='+safeRejects);
     if(state!=='RUNNING')break;
+    // Modo exploratorio: cortar la tanda tras tres pérdidas verificadas
+    // consecutivas. No genera operaciones nuevas para recuperar el rojo.
+    // Olas simultaneas pueden contener mas de tres operaciones ya compradas.
+    if(isResearchMode(batch.mode)){
+     const breaker=researchLossBreak(batchSettlements.all(batch.id));
+     if(breaker.stop){
+      state='PAUSED';reason=breaker.reason;
+      audit('DEMO_RESEARCH_LOSS_BREAK',batch.id+' '+reason+' streak='+breaker.streak);
+      break;
+     }
+    }
     if(batch.profitTargetCents>0){
      // El cierre en verde se decide solo despues de la liquidacion oficial.
      // Concurrencia 1: no quedan compras paralelas que reduzcan lo ganado.
