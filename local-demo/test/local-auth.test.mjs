@@ -168,3 +168,22 @@ test('Auditoria comparativa offline nunca genera BUY, incluye UNKNOWN y tabla lo
  assert.match(page,/id="version-execution-audit-status"/);
  assert.match(page,/id="version-execution-audit-table"/);
 }));
+
+test('Formula explicativa SQLite local nunca permite BUY y maneja dataset vacio',async()=>boot(async({base})=>{
+ const r=await fetch(base+'/api/learning/math-explanation');
+ assert.equal(r.status,200);
+ const d=await r.json();
+ assert.equal(d.formula,'ECOPIENSA_EXPLICA_1');
+ assert.equal(d.mode,'EXPLAIN_RESULTS_ONLY');
+ assert.equal(d.readOnly,true);
+ assert.equal(d.realEnabled,false);
+ assert.equal(d.brokerOrdersSent,0);
+ assert.equal(d.mayRecommendBuy,false);
+ assert.equal(d.allTime.settled,0);
+ assert.equal(d.allTime.winRatePct,null);
+ assert.equal(d.operational.unresolvedNow,0);
+ assert.equal(d.recentSettlementsExplained.length,0);
+ const html=await (await fetch(base+'/')).text();
+ assert.match(html,/id="math-explanation-status"/);
+ assert.match(html,/id="math-explanation-trades"/);
+}));
