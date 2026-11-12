@@ -153,3 +153,18 @@ test('Informe integrado local no autoriza una compra; MCP rechaza peticiones sin
  assert.match(html,/id="decision-desk-candidates"/);
  assert.match(html,/id="decision-desk-shadow"/);
 }));
+
+test('Auditoria comparativa offline nunca genera BUY, incluye UNKNOWN y tabla local',async()=>boot(async({base})=>{
+ const r=await fetch(base+'/api/learning/version-execution-audit');
+ assert.equal(r.status,200);
+ const x=await r.json();
+ assert.equal(x.mode,'DEMO_VERSION_EXECUTION_AUDIT');
+ assert.equal(x.readOnly,true);
+ assert.equal(x.realEnabled,false);
+ assert.equal(x.brokerOrdersSent,0);
+ assert.equal(x.totals.unknownNow,0);
+ assert.equal(x.versions.length,0);
+ const page=await (await fetch(base+'/')).text();
+ assert.match(page,/id="version-execution-audit-status"/);
+ assert.match(page,/id="version-execution-audit-table"/);
+}));
