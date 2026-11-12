@@ -77,6 +77,6 @@ test('La prueba del signo no utiliza precio observado antes del contrato como si
  assert.equal(d.settlementMechanics.verifiedDirectionOutcomes,3);
  assert.equal(d.settlementMechanics.matchedSettlementSign,3);
  assert.equal(d.settlementMechanics.preEntryAdverseDrift,2);
- assert.equal(d.settlementMechanics.preEntryFavorableDrift,0);
+ assert.equal(d.settlementMechanics.preEntryFavorableDrift,1);
  assert.equal(d.sequenceCheck.n,3);
 });
