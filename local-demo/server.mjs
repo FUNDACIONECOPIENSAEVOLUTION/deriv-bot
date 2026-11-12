@@ -27,6 +27,7 @@ import {isExploratoryCandidate} from './tick-horizon-model.mjs';
 import {buildAdaptiveReport,adaptiveVerdict} from './adaptive-learning.mjs';
 import {recentMarketRiskVerdict} from './empirical-market-veto.mjs';
 import {buildTradeQualityReport} from './learning-quality.mjs';
+import {analyzeDemoVersions} from './version-execution-audit.mjs';
 import {buildProfitabilityResearch} from './learning-profitability.mjs';
 import {buildDemoDecisionDesk} from './demo-decision-desk.mjs';
 import {buildHorizonDeskReport} from './horizon-desk.mjs';
@@ -432,6 +433,10 @@ const qualityRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cent
  FROM demo_local_orders WHERE state IN ('SETTLED','REJECTED')
  ORDER BY created_at ASC`);
 // Incluye todos los estados; no fingir BUY si solo hubo intentos REJECTED.
+const versionAuditRows=db.prepare(`SELECT state,app_version,prediction_mode,
+ error_code,pnl_cents,stake_cents,buy_cents,bought_at_ms,created_at,
+ duration_ticks,prediction_policy,source,symbol,direction
+ FROM demo_local_orders ORDER BY created_at ASC,id ASC`);
 const horizonOrderRows=db.prepare(`SELECT state,symbol,direction,pnl_cents,stake_cents,
  duration_ticks,prediction_policy,bought_at_ms,settled_at_ms
  FROM demo_local_orders ORDER BY created_at ASC`);
@@ -649,7 +654,9 @@ server=http.createServer(async(req,res)=>{
     return answer(res,200,digitShadow.status());
    if(req.method==='GET'&&path==='/api/learning/quality')
    return answer(res,200,buildTradeQualityReport(qualityRows.all()));
-  if(req.method==='GET'&&path==='/api/learning/decision-desk')
+  if(req.method==='GET'&&path==='/api/learning/version-execution-audit')
+    return answer(res,200,analyzeDemoVersions(versionAuditRows.all()));
+   if(req.method==='GET'&&path==='/api/learning/decision-desk')
     return answer(res,200,decisionDesk());
    if(req.method==='GET'&&path==='/api/learning/profitability')
     return answer(res,200,buildProfitabilityResearch(qualityRows.all()));
