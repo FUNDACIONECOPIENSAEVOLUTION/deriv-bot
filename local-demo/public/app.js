@@ -205,6 +205,44 @@ async function showWalkForwardAudit(){
  }catch(e){$('walk-forward-status').textContent='Validación no disponible: '+e.message;}
 }
 // Solo lectura: comparar versiones con base en BUY liquidados y errores reales.
+// Fórmula ECOPIENSA-EXPLICA: SOLO lectura y revisión causal de resultados.
+async function showMathExplanation(){
+ const el=$('math-explanation-status'),val=$('math-explanation-validation'),
+  tbody=$('math-explanation-trades');
+ if(!el||!val||!tbody)return;
+ try{
+  const d=await get('/api/learning/math-explanation');
+  if(!d.readOnly||d.realEnabled||d.brokerOrdersSent!==0||d.mayRecommendBuy)
+   throw Error('MATH_EXPLANATION_REQUIRES_READONLY');
+  const a=d.allTime||{},m=d.settlementMechanics||{},o=d.operational||{};
+  el.textContent='Contratos liquidados: '+fmt(a.settled)+
+   ' · acierto '+(a.winRatePct===null?'N/D':fmt(a.winRatePct)+' %')+
+   ' · neto '+(a.netUsd===null?'N/D':signedCents(Math.round(a.netUsd*100)))+
+   ' · punto de equilibrio histórico '+(a.observedBreakEvenWinRatePct===null?'N/D':fmt(a.observedBreakEvenWinRatePct)+' %')+
+   ' · resultado direccional confirmado '+fmt(m.matchedSettlementSign)+' / '+fmt(m.verifiedDirectionOutcomes)+
+   ' · UNKNOWN/PREPARING/SENDING actualmente '+fmt(o.uncertainBuyNow)+
+   '. No se puede inferir un acierto futuro de las liquidaciones pasadas.';
+  const early=d.temporalValidation?.earlier?.high||{},
+    late=d.temporalValidation?.later?.high||{};
+  const money=x=>Number.isFinite(x)?signedCents(Math.round(x*100)):'N/D';
+  val.textContent='Señal fuerza >55: muestra anterior '+fmt(early.settled)+
+   ' contratos, '+(early.winRatePct===null?'N/D':fmt(early.winRatePct)+' %')+
+   ', neto '+money(early.netUsd)+
+   ' · muestra POSTERIOR '+fmt(late.settled)+' contratos, '+
+   (late.winRatePct===null?'N/D':fmt(late.winRatePct)+' %')+
+   ', neto '+money(late.netUsd)+
+   ' · límite inferior Wilson 95 % '+(late.winRateLower95Pct===null?'N/D':fmt(late.winRateLower95Pct)+' %')+
+   ' · evidencia económica '+escapeText(d.temporalValidation?.economicEvidence||'N/D');
+  tbody.innerHTML=(d.recentSettlementsExplained||[]).map(r=>
+   '<tr><td>'+escapeText(r.symbol)+'</td><td>'+fmt(r.durationTicks)+'</td>'+
+   '<td>'+escapeText(r.chosen)+'</td><td>'+escapeText(r.realizedMove)+'</td>'+
+   '<td>'+money(r.pnlUsd)+'</td><td>'+fmt(r.signalStrength)+'</td>'+
+   '<td>'+escapeText(r.explanation)+'</td></tr>').join('')||
+   '<tr><td colspan="7">Sin operaciones SETTLED para explicar.</td></tr>';
+ }catch(e){
+  el.textContent='Fórmula no disponible: '+String(e.message||e);
+ }
+}
 async function showVersionExecutionAudit(){
  const status=$('version-execution-audit-status');
  const body=$('version-execution-audit-table');
@@ -1113,6 +1151,7 @@ async function showDecisionDesk(){
  await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
  await showQualityAudit();setInterval(showQualityAudit,20000);
  await showVersionExecutionAudit();setInterval(showVersionExecutionAudit,30000);
+ await showMathExplanation();setInterval(showMathExplanation,30000);
  await showWalkForwardAudit();setInterval(showWalkForwardAudit,20000);
  await showCandlePatternAudit();setInterval(showCandlePatternAudit,20000);
  await showOpportunityShadow();setInterval(showOpportunityShadow,20000);
