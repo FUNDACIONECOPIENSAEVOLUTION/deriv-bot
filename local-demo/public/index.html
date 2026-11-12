@@ -82,6 +82,11 @@
  <p>Se analizan las liquidaciones oficiales, se deduplican compras sobre la misma vela y se valida en una muestra posterior. Las señales con pérdidas persistentes se vetan con evidencia suficiente; no se prometen aciertos ni se aumentan apuestas.</p>
  <p id="learning-status" class="msg">Analizando operaciones DEMO...</p>
  <div class="table-wrap"><table><thead><tr><th>Índice</th><th>CALL/PUT</th><th>Casos independientes</th><th>Prueba posterior</th><th>Neto prueba</th><th>Decisión</th></tr></thead><tbody id="learning-table"><tr><td colspan="6">Sin muestra suficiente</td></tr></tbody></table></div>
+ <h3>Auditoría de versiones · compras, errores e inciertos</h3>
+ <p>Comparación de todas las versiones que conservaron operaciones en SQLite. Las ganancias y pérdidas incluyen SOLO contratos SETTLED. REJECTED no es una compra perdida; UNKNOWN es una orden cuyo resultado aún requiere verificar. La base antigua no conserva todas las transiciones de estado, por lo que una orden conciliada no puede contarse retrospectivamente como UNKNOWN.</p>
+ <p id="version-execution-audit-status" class="msg">Revisando versión, pérdidas, rechazos y órdenes pendientes...</p>
+ <div class="table-wrap"><table><thead><tr><th>Versión</th><th>Contratos</th><th>Acierto</th><th>Resultado</th><th>ROI</th><th>Rechazos</th><th>UNKNOWN ahora</th><th>Neto segunda mitad</th><th>Error principal</th></tr></thead><tbody id="version-execution-audit-table"><tr><td colspan="9">Sin información disponible.</td></tr></tbody></table></div>
+ <p><small>La clasificación de BUY incierto ahora respeta el estado guardado por SQLite y no lo cuenta como rechazo seguro. Las tandas experimentales nuevas se detienen ante tres pérdidas liquidadas consecutivas, sin repetir órdenes. No cambia el motor de selección ni se habilita REAL.</small></p>
  <h3>Auditoría de resultados: ¿se está aprendiendo?</h3>
  <p>Comparación de compras realmente liquidadas por versión, análisis de latencias y un estimador secuencial en modo sombra. El estimador NO elige CALL/PUT ni activa compras.</p>
  <p id="quality-status" class="msg">Analizando contratos oficiales y proyecciones...</p>
