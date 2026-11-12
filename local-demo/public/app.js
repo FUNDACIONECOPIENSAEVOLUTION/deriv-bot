@@ -204,6 +204,37 @@ async function showWalkForwardAudit(){
   }
  }catch(e){$('walk-forward-status').textContent='Validación no disponible: '+e.message;}
 }
+// Solo lectura: comparar versiones con base en BUY liquidados y errores reales.
+async function showVersionExecutionAudit(){
+ const status=$('version-execution-audit-status');
+ const body=$('version-execution-audit-table');
+ if(!status||!body)return;
+ try{
+  const r=await get('/api/learning/version-execution-audit');
+  if(!r.readOnly||r.realEnabled||r.brokerOrdersSent!==0)throw Error('VERSION_AUDIT_UNSAFE');
+  const wins=r.bestObservedWinRate,net=r.bestObservedNet;
+  status.textContent='Versiones con historial: '+fmt(r.allVersionsWithRecordedOrders)+
+   ' · Mejor acierto (mín. 50 liquidadas): '+(wins?wins.version+' · '+fmt(wins.winRatePct)+' %':'N/D')+
+   ' · Mejor neto observado (mín. 50): '+(net?net.version+' · '+signedCents(Math.round(net.netUsd*100)):'N/D')+
+   ' · UNKNOWN pendientes ahora: '+fmt(r.totals?.unknownNow||0)+
+   ' · OPEN pendientes ahora: '+fmt(r.totals?.openNow||0)+
+   '. Las transiciones UNKNOWN pasadas ya conciliadas no se pueden reconstruir con el histórico existente.';
+  body.innerHTML=(r.versions||[]).slice().reverse().map(v=>{
+   const err=v.mostFrequentErrors?.[0];
+   return '<tr><td>'+escapeText(v.version)+'</td>'+
+    '<td>'+fmt(v.settled)+' ('+fmt(v.wins)+' / '+fmt(v.losses)+')</td>'+
+    '<td>'+(v.winRatePct===null?'N/D':fmt(v.winRatePct)+' %')+'</td>'+
+    '<td>'+signedCents(Math.round(v.netUsd*100))+'</td>'+
+    '<td>'+(v.roiPct===null?'N/D':fmt(v.roiPct)+' %')+'</td>'+
+    '<td>'+fmt(v.rejected)+'</td>'+
+    '<td>'+fmt(v.unknownNow)+'</td>'+
+    '<td>'+signedCents(Math.round((v.secondHalf?.netUsd||0)*100))+'</td>'+
+    '<td>'+escapeText(err?err.error+' ('+err.n+')':'SIN_DATOS')+'</td></tr>';
+  }).join('')||'<tr><td colspan="9">No hay operaciones en SQLite.</td></tr>';
+ }catch(e){
+  status.textContent='Auditoría de versiones no disponible: '+String(e.message||e);
+ }
+}
 async function showQualityAudit(){
  try{
   const q=await get('/api/learning/quality');
@@ -1081,6 +1112,7 @@ async function showDecisionDesk(){
  setInterval(poll,15000);setInterval(showDemoOrders,15000);setInterval(updateBurstPanel,4000);setInterval(updateDemoProgram,4000);
  await showAdaptiveLearning();setInterval(showAdaptiveLearning,12000);
  await showQualityAudit();setInterval(showQualityAudit,20000);
+ await showVersionExecutionAudit();setInterval(showVersionExecutionAudit,30000);
  await showWalkForwardAudit();setInterval(showWalkForwardAudit,20000);
  await showCandlePatternAudit();setInterval(showCandlePatternAudit,20000);
  await showOpportunityShadow();setInterval(showOpportunityShadow,20000);
