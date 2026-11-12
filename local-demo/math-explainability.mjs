@@ -98,6 +98,38 @@ function priceMath(rows){
   preEntryAdversePct:pct(adverse,entryPriceAvailable),
   qualification:'Explica una liquidación DESPUES del contrato. Una diferencia señal-entrada no demuestra por si sola que la latencia haya causado la pérdida ni predice los próximos ticks.'};
 }
+function recentExplanations(rows,max=12){
+ return rows.filter(r=>r.state==='SETTLED'&&getPnl(r)!==null)
+  .sort((a,b)=>(n(read(b,'bought_at_ms','boughtAtMs'))||0)-
+   (n(read(a,'bought_at_ms','boughtAtMs'))||0))
+  .slice(0,max).map(row=>{
+   const d=row.direction==='CALL'?1:row.direction==='PUT'?-1:0;
+   const entry=n(read(row,'entry_tick','entryTick')),
+    exit=n(read(row,'exit_tick','exitTick')),
+    signal=n(read(row,'signal_quote','signalQuote'));
+   const known=entry!==null&&exit!==null&&d!==0;
+   const change=known?exit-entry:null;
+   const margin=known?d*(exit-entry):null;
+   const move=known?(change>0?'CALL':change<0?'PUT':'SIN_CAMBIO'):'DESCONOCIDO';
+   const drift=known&&signal!==null?d*(entry-signal):null;
+   const expectedWin=known?margin>0:null;
+   return {symbol:String(row.symbol||'DESCONOCIDO'),
+    durationTicks:n(read(row,'duration_ticks','durationTicks')),
+    chosen:String(row.direction||'DESCONOCIDO'),realizedMove:move,
+    realizedBrokerWin:getPnl(row)>0,pnlUsd:mUsd(getPnl(row)),
+    signalStrength:getStrength(row),signalAgeMs:n(read(row,'signal_age_ms','signalAgeMs')),
+    normalizedSignedMargin:known?fixed(margin,6):null,
+    formulaMatchesBroker:expectedWin===null?null:expectedWin===(getPnl(row)>0),
+    entryDriftAligned:drift===null?'DESCONOCIDO':
+     drift>1e-10?'PRECIO_MOVIO_A_FAVOR_DE_LA_DIRECCION_ANTES_DE_ENTRAR':
+     drift< -1e-10?'PRECIO_MOVIO_EN_CONTRA_ANTES_DE_ENTRAR':'SIN_CAMBIO',
+    explanation:!known?'SPOTS_INSUFFICIENTES':
+     margin>0?'LA_DIRECCION_COMPRADA_COINCIDIO_CON_EL_MOVIMIENTO':
+     margin<0?'EL_MOVIMIENTO_REAL_FUE_CONTRARIO_A_LA_DIRECCION_COMPRADA':
+     'EMPATE_O_SIN_VARIACION'
+   };
+  });
+}
 function runTest(rows){
  const settled=rows.filter(r=>r?.state==='SETTLED'&&getPnl(r)!==null)
   .sort((a,b)=>(n(read(a,'bought_at_ms','boughtAtMs'))||0)-
@@ -145,7 +177,7 @@ export function buildMathExplanation(raw,{
    brier:'BS = sum((predictedProbability - realizedWin)^2)/n; menor es mejor; usar series futuras sin fuga',
    unresolved:'UNKNOWN = BUY posiblemente enviado sin confirmacion; cotejar statement / portfolio y contract_id antes de resolver; nunca reintentar por deduccion'},
   allTime:overall,operational:operational(rows),settlementMechanics:priceMath(settled),
-  sequenceCheck:runTest(settled),
+  sequenceCheck:runTest(settled),recentSettlementsExplained:recentExplanations(settled),
   temporalValidation:{
    selectedHypothesis:'signalStrength > 55; seleccionada en el primer CSV, NO ajustar en el holdout',
    threshold,priorCutoffMs:priorCreatedMs,
