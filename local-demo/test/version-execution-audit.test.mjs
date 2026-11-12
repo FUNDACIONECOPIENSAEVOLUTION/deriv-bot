@@ -14,7 +14,7 @@ const order=(version,id,state,pnl,{horizon=5,stake=100,code=null}={})=>({
 test('Ranking usa PnL y tasa solamente de contratos liquidados; rechazos y UNKNOWN no se cuentan como derrotas',()=>{
  const rows=[];
  for(let i=0;i<60;i++)rows.push(order('13.6','a'+i,'SETTLED',i<38?35:-50,{stake:50}));
- for(let i=0;i<165;i++)rows.push(order('15.9','b'+i,'SETTLED',i<91?80:-100));
+ for(let i=0;i<165;i++)rows.push(order('15.9','b'+i,'SETTLED',i<91?88:-100));
  for(let i=0;i<55;i++)rows.push(order('18.8','c'+i,'SETTLED',i<20?88:-100,{horizon:i%2?5:10}));
  rows.push(order('18.8','x7','REJECTED',null,{code:'DEMO_QUOTE_STALE'}));
  rows.push(order('18.8','x8','UNKNOWN',null,{code:'BROKER_ACK_LOST'}));
