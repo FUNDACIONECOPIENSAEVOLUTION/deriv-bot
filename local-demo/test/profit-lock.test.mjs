@@ -143,18 +143,18 @@ test('Un objetivo no permitido es rechazado antes de autorizar la tanda',()=>{
  db.close();
 });
 
-test('Diez pérdidas DEMO cierran la tanda en rojo sin repetir compras',async()=>{
+test('Tres pérdidas DEMO consecutivas cortan una tanda exploratoria antes de diez',async()=>{
  const {db,burst,orders}=setupBurst(Array(10).fill(-100));
  try{
   const started=burst.start(args);
   assert.equal(started.concurrent,1);
   const row=await wait(burst);
-  assert.equal(row.state,'COMPLETED');
-  assert.equal(row.stopReason,'TEN_BUYS_REACHED_WITHOUT_TARGET');
-  assert.equal(row.netCents,-1000);
-  assert.equal(row.settled,10);
-  assert.equal(row.executed,10);
-  assert.equal(orders(),10);
+  assert.equal(row.state,'PAUSED');
+  assert.equal(row.stopReason,'RESEARCH_CONSECUTIVE_SETTLED_LOSS_BREAK');
+  assert.equal(row.netCents,-300);
+  assert.equal(row.settled,3);
+  assert.equal(row.executed,3);
+  assert.equal(orders(),3);
  }finally{db.close();}
 });
 
@@ -258,7 +258,7 @@ test('Sin downshift la modalidad histórica conserva apuestas de US$1',async()=>
  }finally{db.close();}
 });
 
-test('Guardia de programa detiene quinta compra tras dos pérdidas US$1 y dos US$0.50',async()=>{
+test('Corte de tres pérdidas anticipa presupuesto global y respeta downshift',async()=>{
  const {db,burst,orders,stakes}=setupBurst([-100,-100,-50,-50,-50]);
  try{
   db.exec('CREATE TABLE demo_programs(id TEXT PRIMARY KEY,global_protection INTEGER NOT NULL)');
@@ -266,11 +266,11 @@ test('Guardia de programa detiene quinta compra tras dos pérdidas US$1 y dos US
   const row=await (burst.start({...args,downshiftAfterTwoLosses:true,
    globalProtection:true}),wait(burst));
   assert.equal(row.state,'PAUSED');
-  assert.equal(row.stopReason,'PROGRAM_LOSS_BUDGET_INSUFFICIENT');
-  assert.equal(row.settled,4);
-  assert.equal(row.netCents,-300);
-  assert.equal(orders(),4);
-  assert.deepEqual(stakes(),[100,100,50,50]);
+  assert.equal(row.stopReason,'RESEARCH_CONSECUTIVE_SETTLED_LOSS_BREAK');
+  assert.equal(row.settled,3);
+  assert.equal(row.netCents,-250);
+  assert.equal(orders(),3);
+  assert.deepEqual(stakes(),[100,100,50]);
  }finally{db.close();}
 });
 test('Protector de beneficio global impide nuevo BUY después de perder margen desde el pico',async()=>{
