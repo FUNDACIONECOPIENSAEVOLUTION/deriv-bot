@@ -569,7 +569,14 @@ export function createDemoTrading({db,getAccount,getCredentials,brokerHeaders,ac
    return headers.map(h=>escape(h==='diagnosisCode'?diagnoseTrade(row).code:row[h])).join(',');
   }).join('\r\n')+'\r\n';
  }
- return {getSummary,requestIntent,cancel,approve,reconcile,reconcileOpenOrders,
+ // Estado persistido, SOLO lectura interna para diferenciar excepción
+ // de transporte de rechazo seguro. Nunca autoriza un BUY adicional.
+ const getOrderState=id=>{
+  const row=one.get(id);
+  return row?{id:row.id,state:row.state,errorCode:row.error_code??null,
+   contractId:row.contract_id??null,pnlCents:row.state==='SETTLED'?row.pnl_cents:null}:null;
+ };
+ return {getSummary,getOrderState,requestIntent,cancel,approve,reconcile,reconcileOpenOrders,
   markBatch:(id,batchId)=>markBatch.run(batchId,id),exportCsv,
   getStrategyVersion:()=>STRATEGY_VERSION,getRiskStatus,canUpdate:()=>active.get().n===0};
 }
